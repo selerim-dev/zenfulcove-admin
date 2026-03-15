@@ -48,6 +48,9 @@ export default function Header() {
       <p className="text-white/70 text-xs tracking-[0.3em] uppercase mt-1">
         Texas Glamping Retreat
       </p>
+      <p className="text-white/50 text-[10px] tracking-widest uppercase mt-0.5">
+        Admin dashboard
+      </p>
     </header>
   );
 }
