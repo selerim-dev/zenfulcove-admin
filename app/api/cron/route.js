@@ -185,9 +185,9 @@ async function runVacancyEmails(automationConfig, dryRunOverride) {
   return logs;
 }
 
-// ─── Automation 2: Jotform Waiver Emails (1 original + 3 reminders) ───────────
-// All 4 emails use the same Jotform form. Sent only if guest hasn't submitted yet.
-// Runs daily at 8 AM CST — template IDs, jotformFormId editable from dashboard.
+// ─── Automation 2: Jotform Waiver Emails ─────────────────────────────────────
+// Uses the same Jotform form for all reminders. Sent only if guest hasn't submitted yet.
+// When it runs is controlled by the cron schedule; days and template IDs are set per waiver in the dashboard.
 
 async function runWaiverReminders(automationConfig, dryRunOverride) {
   const isDryRun = dryRunOverride !== undefined ? dryRunOverride : DRY_RUN_ENV;
@@ -222,9 +222,25 @@ async function runWaiverReminders(automationConfig, dryRunOverride) {
     return logs;
   }
 
-  const reminders = config.emails || config.reminders || [];
+  const rawReminders = config.emails || config.reminders || [];
+  // Use whatever days are configured per waiver; dedupe by daysBeforeCheckin so we don't send twice for same window
+  const reminders = rawReminders.filter(
+    (r, i, arr) =>
+      arr.findIndex((x) => x.daysBeforeCheckin === r.daysBeforeCheckin) === i
+  );
   const todayStr = today();
   const waiverUrl = `https://form.jotform.com/${jotformFormId}`;
+
+  if (reminders.length === 0) {
+    logs.push({
+      timestamp: new Date().toISOString(),
+      automation: "Jotform Waiver Emails",
+      property: "—",
+      action: "Skipped: no waiver reminder windows configured (emails/reminders empty)",
+      status: "skipped",
+    });
+    return logs;
+  }
 
   // Fetch Jotform submissions once (avoids ~140 API calls per run)
   let jotformSubmissions = [];
@@ -295,6 +311,15 @@ async function runWaiverReminders(automationConfig, dryRunOverride) {
           (b) => propertyIds.includes(String(b.property_id ?? b.propertyId ?? ""))
         );
       }
+
+      // Deduplicate by booking ID so we never send two waiver emails for the same booking in this run
+      const seenBookingIds = new Set();
+      bookings = bookings.filter((b) => {
+        const id = String(b.id);
+        if (seenBookingIds.has(id)) return false;
+        seenBookingIds.add(id);
+        return true;
+      });
 
       for (const booking of bookings) {
         const guestEmail = booking.guest?.email || booking.email;

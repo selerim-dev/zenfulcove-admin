@@ -28,10 +28,9 @@ export const automationConfig = {
   waiverReminders: {
     enabled: true,
     propertyIds: [], // Lodgify property IDs to restrict to (e.g. Zenfulcove only). Empty = all properties.
-    jotformFormId: "251834442091050", // JotForm waiver form ID (same form for all 4 emails)
-    propertyIds: [], // Lodgify property IDs to include (empty = all). Add Zenfulcove IDs to restrict.
+    jotformFormId: "251834442091050", // JotForm waiver form ID (same form for all emails)
     emails: [
-      { daysBeforeCheckin: 3, templateId: "d-REPLACE_ME_JOTFORM_ORIGINAL", label: "Original" },
+      // Only 2, 1, and 0 days before check-in are sent; any other days in dashboard config are ignored by cron
       { daysBeforeCheckin: 2, templateId: "d-REPLACE_ME_JOTFORM_2DAY", label: "Reminder (2 days before)" },
       { daysBeforeCheckin: 1, templateId: "d-REPLACE_ME_JOTFORM_1DAY", label: "Reminder (1 day before)" },
       { daysBeforeCheckin: 0, templateId: "d-REPLACE_ME_JOTFORM_0DAY", label: "Reminder (morning of)" },

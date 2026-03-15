@@ -3,7 +3,6 @@
 import Toggle from "./Toggle";
 
 const DEFAULT_EMAILS = [
-  { daysBeforeCheckin: 3, templateId: "", label: "Original" },
   { daysBeforeCheckin: 2, templateId: "", label: "Reminder (2 days before)" },
   { daysBeforeCheckin: 1, templateId: "", label: "Reminder (1 day before)" },
   { daysBeforeCheckin: 0, templateId: "", label: "Reminder (morning of)" },
@@ -48,7 +47,7 @@ export default function WaiverPanel({ config, onChange }) {
       </div>
 
       <p className="text-sm text-forest/70">
-        4 SendGrid templates — 1 original + 3 reminders. Same Jotform form in each. All editable below.
+        Waiver reminders are sent for each “days before check-in” you configure below. Same Jotform form for all. Send time is set by the cron schedule.
       </p>
 
       {/* Property filter — restrict to Zenfulcove properties only */}
@@ -71,7 +70,7 @@ export default function WaiverPanel({ config, onChange }) {
         />
         <p className="text-xs text-forest/40 mt-1">
           Restrict waiver emails to these Lodgify property IDs only. If empty, all
-          properties in your Lodgify account are included (can cause 100+ emails).
+          properties in your Lodgify account are included.
         </p>
       </div>
 
@@ -88,7 +87,7 @@ export default function WaiverPanel({ config, onChange }) {
           className="border border-sand rounded-lg px-3 py-2 text-sm w-full font-mono focus:outline-none focus:ring-2 focus:ring-grove/30"
         />
         <p className="text-xs text-forest/40 mt-1">
-          Same form used in all 4 emails. Editable from the dashboard.
+          Same form used for all waiver reminder emails. Editable from the dashboard.
         </p>
       </div>
 
