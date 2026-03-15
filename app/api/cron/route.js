@@ -15,10 +15,32 @@ function today() {
   return new Date().toISOString().split("T")[0];
 }
 
+/** Today's date in America/Chicago — use for waiver logic so "0 days before" matches the business day. */
+function todayCentral() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Chicago",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const y = parts.find((p) => p.type === "year").value;
+  const m = parts.find((p) => p.type === "month").value;
+  const d = parts.find((p) => p.type === "day").value;
+  return `${y}-${m}-${d}`;
+}
+
 function addDays(dateStr, days) {
-  const d = new Date(dateStr);
+  const d = new Date(dateStr + "T12:00:00");
   d.setDate(d.getDate() + days);
   return d.toISOString().split("T")[0];
+}
+
+/** Normalize any date-like value to YYYY-MM-DD for comparison. */
+function toDateOnly(val) {
+  if (val == null) return "";
+  if (typeof val === "string") return val.slice(0, 10);
+  const d = new Date(val);
+  return isNaN(d.getTime()) ? "" : d.toISOString().split("T")[0];
 }
 
 function daysBetween(dateA, dateB) {
@@ -228,7 +250,7 @@ async function runWaiverReminders(automationConfig, dryRunOverride) {
     (r, i, arr) =>
       arr.findIndex((x) => x.daysBeforeCheckin === r.daysBeforeCheckin) === i
   );
-  const todayStr = today();
+  const todayStr = todayCentral();
   const waiverUrl = `https://form.jotform.com/${jotformFormId}`;
 
   if (reminders.length === 0) {
@@ -300,8 +322,7 @@ async function runWaiverReminders(automationConfig, dryRunOverride) {
       const targetDateStr = targetDate;
       bookings = bookings.filter((b) => {
         const arrival = b.arrival || b.start_date || b.checkIn || b.checkin_date;
-        const arrivalStr = typeof arrival === "string" ? arrival.slice(0, 10) : "";
-        return arrivalStr === targetDateStr;
+        return toDateOnly(arrival) === targetDateStr;
       });
 
       // Optional: restrict to specific property IDs (e.g. Zenfulcove only)
@@ -336,6 +357,17 @@ async function runWaiverReminders(automationConfig, dryRunOverride) {
             action: isDryRun
               ? `[DRY RUN] SKIP booking ${bookingId} | no guest email`
               : `No email for booking ${bookingId} — skipped (${reminder.daysBeforeCheckin}-day)`,
+            status: "skipped",
+          });
+          continue;
+        }
+
+        if (!reminder.templateId || String(reminder.templateId).trim() === "") {
+          logs.push({
+            timestamp: new Date().toISOString(),
+            automation: "Jotform Waiver Emails",
+            property: propertyName,
+            action: `SKIP booking ${bookingId} — no SendGrid template ID for "${reminder.label || reminder.daysBeforeCheckin}-day"`,
             status: "skipped",
           });
           continue;
