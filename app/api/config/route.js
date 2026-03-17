@@ -58,6 +58,16 @@ export async function POST(request) {
       }
     }
 
+    if (updates.popupFollowups !== undefined) {
+      updated.popupFollowups = {
+        ...updated.popupFollowups,
+        ...updates.popupFollowups,
+      };
+      if (updates.popupFollowups.emails) {
+        updated.popupFollowups.emails = updates.popupFollowups.emails;
+      }
+    }
+
     await setConfig(updated);
 
     return NextResponse.json({ success: true, config: updated });

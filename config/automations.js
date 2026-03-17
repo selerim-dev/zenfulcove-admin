@@ -36,4 +36,15 @@ export const automationConfig = {
       { daysBeforeCheckin: 0, templateId: "d-REPLACE_ME_JOTFORM_0DAY", label: "Reminder (morning of)" },
     ],
   },
+  popupFollowups: {
+    enabled: false,
+    sendgridContactListId: "44b5b3f5-d03d-4552-997f-8715a906d5b8",
+    popupTriggeredFieldId: "e1_D",
+    popupSentTemplatesFieldId: "e2_T",
+    emails: [
+      { daysAfterTrigger: 2, templateId: "", label: "Follow-up (2 days after)" },
+      { daysAfterTrigger: 3, templateId: "", label: "Follow-up (3 days after)" },
+      { daysAfterTrigger: 6, templateId: "", label: "Follow-up (6 days after)" },
+    ],
+  },
 };

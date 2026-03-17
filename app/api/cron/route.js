@@ -3,7 +3,12 @@ import { CRON_SECRET } from "@/config/keys";
 import { getConfig } from "@/lib/kv";
 import { getProperties, getAvailability, getBookings } from "@/lib/lodgify";
 import { getFormSubmissions, bookingHasWaiver } from "@/lib/jotform";
-import { sendTemplateEmail, getContactsFromList } from "@/lib/sendgrid";
+import {
+  sendTemplateEmail,
+  getContactsFromList,
+  getContactsFromListDetailed,
+  updateContactCustomFields,
+} from "@/lib/sendgrid";
 import fs from "fs/promises";
 import path from "path";
 
@@ -47,6 +52,54 @@ function daysBetween(dateA, dateB) {
   const a = new Date(dateA);
   const b = new Date(dateB);
   return Math.round((b - a) / (1000 * 60 * 60 * 24));
+}
+
+function parseCentralDateField(value) {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    const millis = value > 1e12 ? value : value * 1000;
+    const parsed = new Date(millis);
+    if (isNaN(parsed.getTime())) return "";
+    return parsed.toISOString().split("T")[0];
+  }
+
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+
+  if (/^\d+$/.test(raw)) {
+    const numeric = Number(raw);
+    if (Number.isFinite(numeric)) {
+      const millis = raw.length > 10 ? numeric : numeric * 1000;
+      const parsed = new Date(millis);
+      if (!isNaN(parsed.getTime())) {
+        return parsed.toISOString().split("T")[0];
+      }
+    }
+  }
+
+  if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(raw)) {
+    const [month, day, year] = raw.split("/");
+    return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+  }
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    return raw;
+  }
+
+  const parsed = new Date(raw);
+  if (isNaN(parsed.getTime())) return "";
+  return parsed.toISOString().split("T")[0];
+}
+
+function parseSentTemplateIds(value) {
+  if (!value) return [];
+  return String(value)
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function stringifySentTemplateIds(templateIds) {
+  return Array.from(new Set(templateIds.map((id) => String(id || "").trim()).filter(Boolean))).join(",");
 }
 
 async function appendLogs(newEntries) {
@@ -439,6 +492,245 @@ async function runWaiverReminders(automationConfig, dryRunOverride) {
   return logs;
 }
 
+// ─── Automation 3: Popup Follow Ups ─────────────────────────────────────────
+
+async function runPopupFollowups(automationConfig, dryRunOverride) {
+  const isDryRun = dryRunOverride !== undefined ? dryRunOverride : DRY_RUN_ENV;
+  const logs = [];
+  const config = automationConfig.popupFollowups || {};
+  const from = {
+    email: automationConfig.sendgrid.fromEmail,
+    name: automationConfig.sendgrid.fromName,
+  };
+
+  if (!config.enabled) {
+    logs.push({
+      timestamp: new Date().toISOString(),
+      automation: "Popup Follow Ups",
+      property: "—",
+      action: "Skipped (disabled)",
+      status: "skipped",
+    });
+    return logs;
+  }
+
+  if (!config.sendgridContactListId) {
+    logs.push({
+      timestamp: new Date().toISOString(),
+      automation: "Popup Follow Ups",
+      property: "—",
+      action: "Skipped: no SendGrid contact list ID configured",
+      status: "skipped",
+    });
+    return logs;
+  }
+
+  if (!config.popupTriggeredFieldId || !config.popupSentTemplatesFieldId) {
+    logs.push({
+      timestamp: new Date().toISOString(),
+      automation: "Popup Follow Ups",
+      property: "—",
+      action: "Skipped: popup custom field IDs are incomplete",
+      status: "skipped",
+    });
+    return logs;
+  }
+
+  const configuredEmails = (config.emails || []).filter(Boolean);
+  if (configuredEmails.length === 0) {
+    logs.push({
+      timestamp: new Date().toISOString(),
+      automation: "Popup Follow Ups",
+      property: "—",
+      action: "Skipped: no popup follow-up windows configured",
+      status: "skipped",
+    });
+    return logs;
+  }
+
+  let contacts = [];
+  try {
+    contacts = await getContactsFromListDetailed(config.sendgridContactListId);
+  } catch (err) {
+    logs.push({
+      timestamp: new Date().toISOString(),
+      automation: "Popup Follow Ups",
+      property: "—",
+      action: `Failed to fetch popup contacts: ${err.message}`,
+      status: "failed",
+    });
+    return logs;
+  }
+
+  if (contacts.length === 0) {
+    logs.push({
+      timestamp: new Date().toISOString(),
+      automation: "Popup Follow Ups",
+      property: "—",
+      action: "No contacts in popup follow-up list — skipped",
+      status: "skipped",
+    });
+    return logs;
+  }
+
+  const todayStr = todayCentral();
+  if (isDryRun) {
+    logs.push({
+      timestamp: new Date().toISOString(),
+      automation: "Popup Follow Ups",
+      property: "—",
+      action: `═══ DRY RUN: Today is ${todayStr}. No popup follow-up emails will be sent. Validation: WHO would receive WHAT. ═══`,
+      status: "info",
+    });
+  }
+
+  logs.push({
+    timestamp: new Date().toISOString(),
+    automation: "Popup Follow Ups",
+    property: "—",
+    action: `Loaded ${contacts.length} popup contact(s) from SendGrid list`,
+    status: "info",
+  });
+
+  for (const contact of contacts) {
+    const email = String(contact?.email || "").trim().toLowerCase();
+    if (!email) {
+      logs.push({
+        timestamp: new Date().toISOString(),
+        automation: "Popup Follow Ups",
+        property: "—",
+        action: "Skipped contact with no email in popup list",
+        status: "skipped",
+      });
+      continue;
+    }
+
+    const customFields = contact?.custom_fields || {};
+    const rawTriggerDate = customFields[config.popupTriggeredFieldId];
+    const triggerDate = parseCentralDateField(rawTriggerDate);
+
+    if (!triggerDate) {
+      logs.push({
+        timestamp: new Date().toISOString(),
+        automation: "Popup Follow Ups",
+        property: "—",
+        action: `SKIP ${email} — missing or invalid popup trigger date`,
+        status: "skipped",
+      });
+      continue;
+    }
+
+    const daysSinceTriggered = daysBetween(triggerDate, todayStr);
+    if (daysSinceTriggered < 0) {
+      logs.push({
+        timestamp: new Date().toISOString(),
+        automation: "Popup Follow Ups",
+        property: "—",
+        action: `SKIP ${email} — popup trigger date ${triggerDate} is in the future`,
+        status: "skipped",
+      });
+      continue;
+    }
+
+    const sentTemplateIds = new Set(
+      parseSentTemplateIds(customFields[config.popupSentTemplatesFieldId])
+    );
+    const sentTemplatesLabel =
+      Array.from(sentTemplateIds).join(",") || "(none)";
+    const matchedEmails = configuredEmails.filter(
+      (item) => item.daysAfterTrigger === daysSinceTriggered
+    );
+
+    if (matchedEmails.length === 0) {
+      logs.push({
+        timestamp: new Date().toISOString(),
+        automation: "Popup Follow Ups",
+        property: "—",
+        action: `NO SEND ${email} | triggered ${triggerDate} | ${daysSinceTriggered} days since popup | no follow-up configured for today | sent: ${sentTemplatesLabel}`,
+        status: "info",
+      });
+      continue;
+    }
+
+    for (const followup of matchedEmails) {
+      const label = followup.label || `${followup.daysAfterTrigger}-day`;
+      const templateId = String(followup.templateId || "").trim();
+
+      if (!templateId) {
+        logs.push({
+          timestamp: new Date().toISOString(),
+          automation: "Popup Follow Ups",
+          property: "—",
+          action: `SKIP ${email} | triggered ${triggerDate} | ${daysSinceTriggered} days since popup | no template ID configured for "${label}" | sent: ${sentTemplatesLabel}`,
+          status: "skipped",
+        });
+        continue;
+      }
+
+      if (sentTemplateIds.has(templateId)) {
+        logs.push({
+          timestamp: new Date().toISOString(),
+          automation: "Popup Follow Ups",
+          property: "—",
+          action: `SKIP ${email} | triggered ${triggerDate} | ${daysSinceTriggered} days since popup | template already sent: ${templateId} | sent: ${sentTemplatesLabel}`,
+          status: "skipped",
+        });
+        continue;
+      }
+
+      try {
+        if (!isDryRun) {
+          await sendTemplateEmail({
+            to: email,
+            templateId,
+            from,
+            data: {
+              first_name: contact?.first_name || contact?.firstName || "",
+              last_name: contact?.last_name || contact?.lastName || "",
+              email,
+              popup_triggered_at: triggerDate,
+              days_since_trigger: followup.daysAfterTrigger,
+              followup_label: label,
+            },
+          });
+
+          sentTemplateIds.add(templateId);
+          await updateContactCustomFields({
+            email,
+            customFields: {
+              [config.popupTriggeredFieldId]: rawTriggerDate,
+              [config.popupSentTemplatesFieldId]: stringifySentTemplateIds(
+                Array.from(sentTemplateIds)
+              ),
+            },
+          });
+        }
+
+        logs.push({
+          timestamp: new Date().toISOString(),
+          automation: "Popup Follow Ups",
+          property: "—",
+          action: isDryRun
+            ? `[DRY RUN] Would send "${label}" to ${email} (${templateId}) | triggered ${triggerDate} | ${followup.daysAfterTrigger} days since popup | sent: ${sentTemplatesLabel}`
+            : `Sent "${label}" to ${email} (${templateId}) | triggered ${triggerDate} | sent before update: ${sentTemplatesLabel}`,
+          status: "success",
+        });
+      } catch (err) {
+        const detail = err.response?.body?.errors?.[0]?.message || err.message;
+        logs.push({
+          timestamp: new Date().toISOString(),
+          automation: "Popup Follow Ups",
+          property: "—",
+          action: `Failed "${label}" for ${email}: ${detail}`,
+          status: "failed",
+        });
+      }
+    }
+  }
+
+  return logs;
+}
+
 // ─── POST handler ───────────────────────────────────────────────────────────
 
 export async function POST(request) {
@@ -465,6 +757,9 @@ export async function POST(request) {
 
   const waiverLogs = await runWaiverReminders(automationConfig, isDryRun);
   allLogs.push(...waiverLogs);
+
+  const popupLogs = await runPopupFollowups(automationConfig, isDryRun);
+  allLogs.push(...popupLogs);
 
   await appendLogs(allLogs);
 

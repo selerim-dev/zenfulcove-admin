@@ -7,6 +7,7 @@ import Sidebar from "@/components/Sidebar";
 import SettingsPanel from "@/components/SettingsPanel";
 import VacancyPanel from "@/components/VacancyPanel";
 import WaiverPanel from "@/components/WaiverPanel";
+import PopupFollowupsPanel from "@/components/PopupFollowupsPanel";
 import ActivityLog from "@/components/ActivityLog";
 
 export default function Dashboard() {
@@ -175,6 +176,18 @@ export default function Dashboard() {
                     setConfig((prev) => ({
                       ...prev,
                       waiverReminders: updated,
+                    }))
+                  }
+                />
+              )}
+
+              {activeCategory === "popup" && (
+                <PopupFollowupsPanel
+                  config={config.popupFollowups}
+                  onChange={(updated) =>
+                    setConfig((prev) => ({
+                      ...prev,
+                      popupFollowups: updated,
                     }))
                   }
                 />
