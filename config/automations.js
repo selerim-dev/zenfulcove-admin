@@ -47,4 +47,9 @@ export const automationConfig = {
       { daysAfterTrigger: 6, templateId: "", label: "Follow-up (6 days after)" },
     ],
   },
+  jotformClientSync: {
+    enabled: false,
+    sendgridContactListId: "e46aa43e-3f91-4965-8bbb-fcae8f9c3124",
+    jotformFormIds: ["251834442091050"],
+  },
 };

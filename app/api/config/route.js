@@ -68,6 +68,18 @@ export async function POST(request) {
       }
     }
 
+    if (updates.jotformClientSync !== undefined) {
+      updated.jotformClientSync = {
+        ...updated.jotformClientSync,
+        ...updates.jotformClientSync,
+      };
+      if (updates.jotformClientSync.jotformFormIds !== undefined) {
+        updated.jotformClientSync.jotformFormIds = Array.isArray(updates.jotformClientSync.jotformFormIds)
+          ? updates.jotformClientSync.jotformFormIds
+          : [];
+      }
+    }
+
     await setConfig(updated);
 
     return NextResponse.json({ success: true, config: updated });

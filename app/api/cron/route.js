@@ -2,12 +2,13 @@ import { NextResponse } from "next/server";
 import { CRON_SECRET } from "@/config/keys";
 import { getConfig } from "@/lib/kv";
 import { getProperties, getAvailability, getBookings } from "@/lib/lodgify";
-import { getFormSubmissions, bookingHasWaiver } from "@/lib/jotform";
+import { getFormSubmissions, bookingHasWaiver, extractClientContact } from "@/lib/jotform";
 import {
   sendTemplateEmail,
   getContactsFromList,
   getContactsFromListDetailed,
   updateContactCustomFields,
+  upsertContactsToList,
 } from "@/lib/sendgrid";
 import fs from "fs/promises";
 import path from "path";
@@ -100,6 +101,50 @@ function parseSentTemplateIds(value) {
 
 function stringifySentTemplateIds(templateIds) {
   return Array.from(new Set(templateIds.map((id) => String(id || "").trim()).filter(Boolean))).join(",");
+}
+
+function mergeClientContact(existing, incoming) {
+  return {
+    email: incoming.email || existing.email,
+    firstName: existing.firstName || incoming.firstName || "",
+    lastName: existing.lastName || incoming.lastName || "",
+    phone: existing.phone || incoming.phone || "",
+    submissionIds: Array.from(new Set([...(existing.submissionIds || []), ...(incoming.submissionIds || [])])),
+    formIds: Array.from(new Set([...(existing.formIds || []), ...(incoming.formIds || [])])),
+  };
+}
+
+function parseSelectedAutomations(request) {
+  const raw =
+    request.headers.get("x-automation") ||
+    request.nextUrl?.searchParams?.get("automation") ||
+    "";
+
+  const items = String(raw)
+    .split(",")
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean);
+
+  const aliases = {
+    vacancy: "vacancy",
+    "vacancy-emails": "vacancy",
+    waiver: "waiver",
+    "waiver-reminders": "waiver",
+    popup: "popup",
+    "popup-followups": "popup",
+    "popup-follow-ups": "popup",
+    jotform: "jotform-sync",
+    "jotform-sync": "jotform-sync",
+    "jotform-client-sync": "jotform-sync",
+    clients: "jotform-sync",
+    "client-sync": "jotform-sync",
+  };
+
+  const normalized = items
+    .map((item) => aliases[item] || "")
+    .filter(Boolean);
+
+  return new Set(normalized);
 }
 
 async function appendLogs(newEntries) {
@@ -731,6 +776,174 @@ async function runPopupFollowups(automationConfig, dryRunOverride) {
   return logs;
 }
 
+async function runJotformClientSync(automationConfig, dryRunOverride) {
+  const isDryRun = dryRunOverride !== undefined ? dryRunOverride : DRY_RUN_ENV;
+  const logs = [];
+  const config = automationConfig.jotformClientSync || {};
+  const formIds = (config.jotformFormIds || []).map((id) => String(id || "").trim()).filter(Boolean);
+
+  if (!config.enabled) {
+    logs.push({
+      timestamp: new Date().toISOString(),
+      automation: "Jotform Client Sync",
+      property: "—",
+      action: "Skipped (disabled)",
+      status: "skipped",
+    });
+    return logs;
+  }
+
+  if (!config.sendgridContactListId) {
+    logs.push({
+      timestamp: new Date().toISOString(),
+      automation: "Jotform Client Sync",
+      property: "—",
+      action: "Skipped: no SendGrid master list ID configured",
+      status: "skipped",
+    });
+    return logs;
+  }
+
+  if (formIds.length === 0) {
+    logs.push({
+      timestamp: new Date().toISOString(),
+      automation: "Jotform Client Sync",
+      property: "—",
+      action: "Skipped: no Jotform form IDs configured",
+      status: "skipped",
+    });
+    return logs;
+  }
+
+  if (isDryRun) {
+    logs.push({
+      timestamp: new Date().toISOString(),
+      automation: "Jotform Client Sync",
+      property: "—",
+      action: "═══ DRY RUN: No SendGrid contacts will be written. Validation: WHICH client records would be synced. ═══",
+      status: "info",
+    });
+  }
+
+  const dedupedContacts = new Map();
+  let totalSubmissions = 0;
+  let missingEmailCount = 0;
+
+  for (const formId of formIds) {
+    let submissions = [];
+    try {
+      submissions = await getFormSubmissions(formId);
+      totalSubmissions += submissions.length;
+      logs.push({
+        timestamp: new Date().toISOString(),
+        automation: "Jotform Client Sync",
+        property: "—",
+        action: `Loaded ${submissions.length} submission(s) from Jotform form ${formId}`,
+        status: "info",
+      });
+    } catch (err) {
+      logs.push({
+        timestamp: new Date().toISOString(),
+        automation: "Jotform Client Sync",
+        property: "—",
+        action: `Failed to fetch Jotform form ${formId}: ${err.message}`,
+        status: "failed",
+      });
+      continue;
+    }
+
+    for (const submission of submissions) {
+      const contact = extractClientContact(submission);
+      if (!contact.email) {
+        missingEmailCount += 1;
+        continue;
+      }
+
+      const merged = mergeClientContact(
+        dedupedContacts.get(contact.email) || {
+          email: contact.email,
+          firstName: "",
+          lastName: "",
+          phone: "",
+          submissionIds: [],
+          formIds: [],
+        },
+        {
+          ...contact,
+          submissionIds: contact.submissionId ? [contact.submissionId] : [],
+          formIds: [formId],
+        }
+      );
+      dedupedContacts.set(contact.email, merged);
+    }
+  }
+
+  const contactsToSync = Array.from(dedupedContacts.values());
+  logs.push({
+    timestamp: new Date().toISOString(),
+    automation: "Jotform Client Sync",
+    property: "—",
+    action: `Prepared ${contactsToSync.length} unique contact(s) from ${totalSubmissions} Jotform submission(s); skipped ${missingEmailCount} submission(s) with no email`,
+    status: "info",
+  });
+
+  if (contactsToSync.length === 0) {
+    logs.push({
+      timestamp: new Date().toISOString(),
+      automation: "Jotform Client Sync",
+      property: "—",
+      action: "No eligible contacts found to sync",
+      status: "skipped",
+    });
+    return logs;
+  }
+
+  if (isDryRun) {
+    contactsToSync.forEach((contact) => {
+      logs.push({
+        timestamp: new Date().toISOString(),
+        automation: "Jotform Client Sync",
+        property: "—",
+        action: `[DRY RUN] Would sync ${contact.email} | first: ${contact.firstName || "(blank)"} | last: ${contact.lastName || "(blank)"} | phone: ${contact.phone || "(blank)"} | forms: ${contact.formIds.join(",")} | submissions: ${contact.submissionIds.join(",") || "(unknown)"}`,
+        status: "success",
+      });
+    });
+    return logs;
+  }
+
+  try {
+    const results = await upsertContactsToList({
+      listId: config.sendgridContactListId,
+      contacts: contactsToSync,
+    });
+    const requestedCount = results.reduce((sum, item) => sum + Number(item?.results?.requested_count || 0), 0);
+    const createdCount = results.reduce((sum, item) => sum + Number(item?.results?.created_count || 0), 0);
+    const updatedCount = results.reduce((sum, item) => sum + Number(item?.results?.updated_count || 0), 0);
+    const erroredCount = results.reduce((sum, item) => sum + Number(item?.results?.errored_count || 0), 0);
+    const pendingCount = results.filter((item) => item?.status === "pending_timeout").length;
+
+    logs.push({
+      timestamp: new Date().toISOString(),
+      automation: "Jotform Client Sync",
+      property: "—",
+      action: pendingCount > 0
+        ? `SendGrid accepted ${contactsToSync.length} contact(s) for sync to list ${config.sendgridContactListId}, but ${pendingCount} batch job(s) were still pending after the wait window | requested: ${requestedCount} | created: ${createdCount} | updated: ${updatedCount} | errored: ${erroredCount}`
+        : `Synced ${contactsToSync.length} contact(s) to SendGrid list ${config.sendgridContactListId} | requested: ${requestedCount} | created: ${createdCount} | updated: ${updatedCount} | errored: ${erroredCount}`,
+      status: erroredCount > 0 ? "failed" : pendingCount > 0 ? "info" : "success",
+    });
+  } catch (err) {
+    logs.push({
+      timestamp: new Date().toISOString(),
+      automation: "Jotform Client Sync",
+      property: "—",
+      action: `Failed to sync contacts to SendGrid: ${err.message}`,
+      status: "failed",
+    });
+  }
+
+  return logs;
+}
+
 // ─── POST handler ───────────────────────────────────────────────────────────
 
 export async function POST(request) {
@@ -744,6 +957,8 @@ export async function POST(request) {
 
   const forceDryRun = request.headers.get("x-dry-run") === "true";
   const isDryRun = DRY_RUN_ENV || forceDryRun;
+  const selectedAutomations = parseSelectedAutomations(request);
+  const runAllAutomations = selectedAutomations.size === 0;
 
   if (isDryRun) {
     const todayStr = today();
@@ -752,14 +967,25 @@ export async function POST(request) {
 
   const allLogs = [];
 
-  const vacancyLogs = await runVacancyEmails(automationConfig, isDryRun);
-  allLogs.push(...vacancyLogs);
+  if (runAllAutomations || selectedAutomations.has("vacancy")) {
+    const vacancyLogs = await runVacancyEmails(automationConfig, isDryRun);
+    allLogs.push(...vacancyLogs);
+  }
 
-  const waiverLogs = await runWaiverReminders(automationConfig, isDryRun);
-  allLogs.push(...waiverLogs);
+  if (runAllAutomations || selectedAutomations.has("waiver")) {
+    const waiverLogs = await runWaiverReminders(automationConfig, isDryRun);
+    allLogs.push(...waiverLogs);
+  }
 
-  const popupLogs = await runPopupFollowups(automationConfig, isDryRun);
-  allLogs.push(...popupLogs);
+  if (runAllAutomations || selectedAutomations.has("popup")) {
+    const popupLogs = await runPopupFollowups(automationConfig, isDryRun);
+    allLogs.push(...popupLogs);
+  }
+
+  if (runAllAutomations || selectedAutomations.has("jotform-sync")) {
+    const jotformSyncLogs = await runJotformClientSync(automationConfig, isDryRun);
+    allLogs.push(...jotformSyncLogs);
+  }
 
   await appendLogs(allLogs);
 
