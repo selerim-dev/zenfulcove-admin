@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { CRON_SECRET } from "@/config/keys";
+import { sendSms, validateTwilioConfig } from "@/lib/twilio";
 import { getConfig } from "@/lib/kv";
 import { getProperties, getAvailability, getBookings } from "@/lib/lodgify";
 import { getFormSubmissions, bookingHasWaiver, extractClientContact } from "@/lib/jotform";
@@ -145,6 +146,55 @@ function parseSelectedAutomations(request) {
     .filter(Boolean);
 
   return new Set(normalized);
+}
+
+function parsePopupChannelOverride(request) {
+  const raw =
+    request.headers.get("x-popup-channel") ||
+    request.nextUrl?.searchParams?.get("popupChannel") ||
+    request.nextUrl?.searchParams?.get("popup_channel") ||
+    "";
+
+  const value = String(raw || "").trim().toLowerCase();
+  if (["email", "sms", "both"].includes(value)) {
+    return value;
+  }
+
+  return "";
+}
+
+function normalizeChannelMode(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  return ["email", "sms", "both"].includes(normalized) ? normalized : "email";
+}
+
+function parseSentKeys(value) {
+  if (!value) return [];
+  return String(value)
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function stringifySentKeys(items) {
+  return Array.from(
+    new Set(items.map((item) => String(item || "").trim()).filter(Boolean))
+  ).join(",");
+}
+
+function formatSentKeysLabel(items) {
+  return items.length > 0 ? items.join(",") : "(none)";
+}
+
+function normalizePhoneNumber(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+
+  const cleaned = raw.replace(/[^\d+]/g, "");
+  if (!cleaned) return "";
+  if (cleaned.startsWith("+")) return cleaned;
+  if (cleaned.length === 10) return "+1" + cleaned;
+  return cleaned;
 }
 
 async function appendLogs(newEntries) {
@@ -539,7 +589,7 @@ async function runWaiverReminders(automationConfig, dryRunOverride) {
 
 // ─── Automation 3: Popup Follow Ups ─────────────────────────────────────────
 
-async function runPopupFollowups(automationConfig, dryRunOverride) {
+export async function runPopupFollowups(automationConfig, dryRunOverride, popupChannelOverride = "", options = {}) {
   const isDryRun = dryRunOverride !== undefined ? dryRunOverride : DRY_RUN_ENV;
   const logs = [];
   const config = automationConfig.popupFollowups || {};
@@ -547,6 +597,14 @@ async function runPopupFollowups(automationConfig, dryRunOverride) {
     email: automationConfig.sendgrid.fromEmail,
     name: automationConfig.sendgrid.fromName,
   };
+  const effectiveChannelMode = popupChannelOverride || normalizeChannelMode(config.channelMode);
+  const shouldRunEmail = effectiveChannelMode === "email" || effectiveChannelMode === "both";
+  const shouldRunSms = effectiveChannelMode === "sms" || effectiveChannelMode === "both";
+  const testDestination = String(options.testDestination || "").trim();
+  const isOneOffTest = Boolean(testDestination);
+  const shouldPersistState = options.persistState !== false && !isOneOffTest && !isDryRun;
+  const maxSends = Number.isFinite(options.maxSends) ? Number(options.maxSends) : Number.POSITIVE_INFINITY;
+  let sentCount = 0;
 
   if (!config.enabled) {
     logs.push({
@@ -570,19 +628,34 @@ async function runPopupFollowups(automationConfig, dryRunOverride) {
     return logs;
   }
 
-  if (!config.popupTriggeredFieldId || !config.popupSentTemplatesFieldId) {
+  if (!config.popupTriggeredFieldId || !config.popupSentTemplatesFieldId || !config.popupSentSmsFieldId) {
     logs.push({
       timestamp: new Date().toISOString(),
       automation: "Popup Follow Ups",
       property: "—",
-      action: "Skipped: popup custom field IDs are incomplete",
+      action: "Skipped: popup custom field keys are incomplete",
       status: "skipped",
     });
     return logs;
   }
 
-  const configuredEmails = (config.emails || []).filter(Boolean);
-  if (configuredEmails.length === 0) {
+  const configuredEmails = shouldRunEmail ? (config.emails || []).filter(Boolean) : [];
+  const configuredSms = shouldRunSms
+    ? (config.sms || []).filter((item) => item && item.enabled !== false)
+    : [];
+
+  if (!shouldRunEmail && !shouldRunSms) {
+    logs.push({
+      timestamp: new Date().toISOString(),
+      automation: "Popup Follow Ups",
+      property: "—",
+      action: "Skipped: popup channel mode is invalid",
+      status: "skipped",
+    });
+    return logs;
+  }
+
+  if (shouldRunEmail && configuredEmails.length === 0 && !shouldRunSms) {
     logs.push({
       timestamp: new Date().toISOString(),
       automation: "Popup Follow Ups",
@@ -591,6 +664,32 @@ async function runPopupFollowups(automationConfig, dryRunOverride) {
       status: "skipped",
     });
     return logs;
+  }
+
+  if (shouldRunSms && configuredSms.length === 0 && !shouldRunEmail) {
+    logs.push({
+      timestamp: new Date().toISOString(),
+      automation: "Popup Follow Ups",
+      property: "—",
+      action: "Skipped: no popup SMS follow-up windows configured",
+      status: "skipped",
+    });
+    return logs;
+  }
+
+  if (shouldRunSms) {
+    try {
+      validateTwilioConfig();
+    } catch (err) {
+      logs.push({
+        timestamp: new Date().toISOString(),
+        automation: "Popup Follow Ups",
+        property: "—",
+        action: `Skipped: ${err.message}`,
+        status: "skipped",
+      });
+      return logs;
+    }
   }
 
   let contacts = [];
@@ -620,11 +719,17 @@ async function runPopupFollowups(automationConfig, dryRunOverride) {
 
   const todayStr = todayCentral();
   if (isDryRun) {
+    const descriptor =
+      shouldRunEmail && shouldRunSms
+        ? "popup follow-up emails or SMS messages"
+        : shouldRunSms
+          ? "popup follow-up SMS messages"
+          : "popup follow-up emails";
     logs.push({
       timestamp: new Date().toISOString(),
       automation: "Popup Follow Ups",
       property: "—",
-      action: `═══ DRY RUN: Today is ${todayStr}. No popup follow-up emails will be sent. Validation: WHO would receive WHAT. ═══`,
+      action: `═══ DRY RUN: Today is ${todayStr}. No ${descriptor} will be sent. Validation: WHO would receive WHAT. ═══`,
       status: "info",
     });
   }
@@ -639,6 +744,11 @@ async function runPopupFollowups(automationConfig, dryRunOverride) {
 
   for (const contact of contacts) {
     const email = String(contact?.email || "").trim().toLowerCase();
+    const phone = normalizePhoneNumber(contact?.phone_number || contact?.phone || "");
+    const customFields = contact?.custom_fields || {};
+    const rawTriggerDate = customFields[config.popupTriggeredFieldId];
+    const triggerDate = parseCentralDateField(rawTriggerDate);
+
     if (!email) {
       logs.push({
         timestamp: new Date().toISOString(),
@@ -649,10 +759,6 @@ async function runPopupFollowups(automationConfig, dryRunOverride) {
       });
       continue;
     }
-
-    const customFields = contact?.custom_fields || {};
-    const rawTriggerDate = customFields[config.popupTriggeredFieldId];
-    const triggerDate = parseCentralDateField(rawTriggerDate);
 
     if (!triggerDate) {
       logs.push({
@@ -678,28 +784,44 @@ async function runPopupFollowups(automationConfig, dryRunOverride) {
     }
 
     const sentTemplateIds = new Set(
-      parseSentTemplateIds(customFields[config.popupSentTemplatesFieldId])
+      parseSentKeys(customFields[config.popupSentTemplatesFieldId])
     );
-    const sentTemplatesLabel =
-      Array.from(sentTemplateIds).join(",") || "(none)";
-    const matchedEmails = configuredEmails.filter(
-      (item) => item.daysAfterTrigger === daysSinceTriggered
+    const sentSmsKeys = new Set(
+      parseSentKeys(customFields[config.popupSentSmsFieldId])
     );
 
-    if (matchedEmails.length === 0) {
+    const matchedEmails = configuredEmails.filter(
+      (item) => Number(item.daysAfterTrigger) === daysSinceTriggered
+    );
+    const matchedSms = configuredSms.filter(
+      (item) => Number(item.daysAfterTrigger) === daysSinceTriggered
+    );
+
+    if (shouldRunEmail && matchedEmails.length === 0) {
       logs.push({
         timestamp: new Date().toISOString(),
         automation: "Popup Follow Ups",
         property: "—",
-        action: `NO SEND ${email} | triggered ${triggerDate} | ${daysSinceTriggered} days since popup | no follow-up configured for today | sent: ${sentTemplatesLabel}`,
+        action: `NO SEND ${email} | triggered ${triggerDate} | ${daysSinceTriggered} days since popup | no email follow-up configured for today | sent: ${formatSentKeysLabel(Array.from(sentTemplateIds))}`,
         status: "info",
       });
-      continue;
+    }
+
+    if (shouldRunSms && matchedSms.length === 0) {
+      logs.push({
+        timestamp: new Date().toISOString(),
+        automation: "Popup Follow Ups",
+        property: "—",
+        action: `NO SEND ${phone || email} | triggered ${triggerDate} | ${daysSinceTriggered} days since popup | no SMS follow-up configured for today | sent: ${formatSentKeysLabel(Array.from(sentSmsKeys))}`,
+        status: "info",
+      });
     }
 
     for (const followup of matchedEmails) {
       const label = followup.label || `${followup.daysAfterTrigger}-day`;
       const templateId = String(followup.templateId || "").trim();
+      const sentTemplatesLabel = formatSentKeysLabel(Array.from(sentTemplateIds));
+      const emailDestination = isOneOffTest ? testDestination : email;
 
       if (!templateId) {
         logs.push({
@@ -726,7 +848,7 @@ async function runPopupFollowups(automationConfig, dryRunOverride) {
       try {
         if (!isDryRun) {
           await sendTemplateEmail({
-            to: email,
+            to: emailDestination,
             templateId,
             from,
             data: {
@@ -739,16 +861,21 @@ async function runPopupFollowups(automationConfig, dryRunOverride) {
             },
           });
 
-          sentTemplateIds.add(templateId);
-          await updateContactCustomFields({
-            email,
-            customFields: {
-              [config.popupTriggeredFieldId]: rawTriggerDate,
-              [config.popupSentTemplatesFieldId]: stringifySentTemplateIds(
-                Array.from(sentTemplateIds)
-              ),
-            },
-          });
+          if (shouldPersistState) {
+            sentTemplateIds.add(templateId);
+            await updateContactCustomFields({
+              email,
+              customFields: {
+                [config.popupTriggeredFieldId]: rawTriggerDate,
+                [config.popupSentTemplatesFieldId]: stringifySentKeys(
+                  Array.from(sentTemplateIds)
+                ),
+                [config.popupSentSmsFieldId]: stringifySentKeys(
+                  Array.from(sentSmsKeys)
+                ),
+              },
+            });
+          }
         }
 
         logs.push({
@@ -757,9 +884,18 @@ async function runPopupFollowups(automationConfig, dryRunOverride) {
           property: "—",
           action: isDryRun
             ? `[DRY RUN] Would send "${label}" to ${email} (${templateId}) | triggered ${triggerDate} | ${followup.daysAfterTrigger} days since popup | sent: ${sentTemplatesLabel}`
-            : `Sent "${label}" to ${email} (${templateId}) | triggered ${triggerDate} | sent before update: ${sentTemplatesLabel}`,
+            : isOneOffTest
+              ? `[TEST SEND] Routed email "${label}" originally for ${email} to ${emailDestination} (${templateId})`
+              : `Sent "${label}" to ${email} (${templateId}) | triggered ${triggerDate} | sent before update: ${sentTemplatesLabel}`,
           status: "success",
         });
+
+        if (!isDryRun) {
+          sentCount += 1;
+          if (sentCount >= maxSends) {
+            return logs;
+          }
+        }
       } catch (err) {
         const detail = err.response?.body?.errors?.[0]?.message || err.message;
         logs.push({
@@ -767,6 +903,116 @@ async function runPopupFollowups(automationConfig, dryRunOverride) {
           automation: "Popup Follow Ups",
           property: "—",
           action: `Failed "${label}" for ${email}: ${detail}`,
+          status: "failed",
+        });
+      }
+    }
+
+    for (const smsFollowup of matchedSms) {
+      const label =
+        smsFollowup.label || `${smsFollowup.daysAfterTrigger}-day SMS`;
+      const messageKey = String(smsFollowup.messageKey || "").trim();
+      const messageBody = String(smsFollowup.messageBody || "").trim();
+      const sentSmsLabel = formatSentKeysLabel(Array.from(sentSmsKeys));
+      const sendTo = isOneOffTest ? normalizePhoneNumber(testDestination) : phone;
+      const isTestSend = !isDryRun && isOneOffTest;
+
+      if (!messageKey) {
+        logs.push({
+          timestamp: new Date().toISOString(),
+          automation: "Popup Follow Ups",
+          property: "—",
+          action: `SKIP ${phone || email} | triggered ${triggerDate} | ${daysSinceTriggered} days since popup | no SMS key configured for "${label}" | sent: ${sentSmsLabel}`,
+          status: "skipped",
+        });
+        continue;
+      }
+
+      if (!messageBody) {
+        logs.push({
+          timestamp: new Date().toISOString(),
+          automation: "Popup Follow Ups",
+          property: "—",
+          action: `SKIP ${phone || email} | triggered ${triggerDate} | ${daysSinceTriggered} days since popup | no message body configured for "${label}" | sent: ${sentSmsLabel}`,
+          status: "skipped",
+        });
+        continue;
+      }
+
+      if (!phone) {
+        logs.push({
+          timestamp: new Date().toISOString(),
+          automation: "Popup Follow Ups",
+          property: "—",
+          action: `SKIP ${email} | triggered ${triggerDate} | ${daysSinceTriggered} days since popup | no phone number | sent: ${sentSmsLabel}`,
+          status: "skipped",
+        });
+        continue;
+      }
+
+      if (sentSmsKeys.has(messageKey)) {
+        logs.push({
+          timestamp: new Date().toISOString(),
+          automation: "Popup Follow Ups",
+          property: "—",
+          action: `SKIP ${phone} | triggered ${triggerDate} | ${daysSinceTriggered} days since popup | SMS already sent: ${messageKey} | sent: ${sentSmsLabel}`,
+          status: "skipped",
+        });
+        continue;
+      }
+
+      try {
+        let smsResult = null;
+        if (!isDryRun) {
+          smsResult = await sendSms({
+            to: sendTo,
+            body: messageBody,
+                      });
+
+          if (shouldPersistState) {
+            sentSmsKeys.add(messageKey);
+            await updateContactCustomFields({
+              email,
+              customFields: {
+                [config.popupTriggeredFieldId]: rawTriggerDate,
+                [config.popupSentTemplatesFieldId]: stringifySentKeys(
+                  Array.from(sentTemplateIds)
+                ),
+                [config.popupSentSmsFieldId]: stringifySentKeys(
+                  Array.from(sentSmsKeys)
+                ),
+              },
+            });
+          }
+        }
+
+        const sidSuffix = smsResult?.sid ? ` | sid: ${smsResult.sid}` : "";
+        const action = isDryRun
+          ? `[DRY RUN] Would send SMS "${label}" to ${phone} (${messageKey}) | triggered ${triggerDate} | ${smsFollowup.daysAfterTrigger} days since popup | sent: ${sentSmsLabel}`
+          : isTestSend
+            ? `[TEST SEND] Routed SMS "${label}" originally for ${phone} to ${sendTo} (${messageKey})${sidSuffix}`
+            : `Sent SMS "${label}" to ${phone} (${messageKey})${sidSuffix}`;
+
+        logs.push({
+          timestamp: new Date().toISOString(),
+          automation: "Popup Follow Ups",
+          property: "—",
+          action,
+          status: "success",
+        });
+
+        if (!isDryRun) {
+          sentCount += 1;
+          if (sentCount >= maxSends) {
+            return logs;
+          }
+        }
+      } catch (err) {
+        logs.push({
+          timestamp: new Date().toISOString(),
+          automation: "Popup Follow Ups",
+          property: "—",
+          action: `Failed SMS "${label}" for ${phone}: ${err.message}`,
           status: "failed",
         });
       }
@@ -958,6 +1204,7 @@ export async function POST(request) {
   const forceDryRun = request.headers.get("x-dry-run") === "true";
   const isDryRun = DRY_RUN_ENV || forceDryRun;
   const selectedAutomations = parseSelectedAutomations(request);
+  const popupChannelOverride = parsePopupChannelOverride(request);
   const runAllAutomations = selectedAutomations.size === 0;
 
   if (isDryRun) {
@@ -978,7 +1225,7 @@ export async function POST(request) {
   }
 
   if (runAllAutomations || selectedAutomations.has("popup")) {
-    const popupLogs = await runPopupFollowups(automationConfig, isDryRun);
+    const popupLogs = await runPopupFollowups(automationConfig, isDryRun, popupChannelOverride);
     allLogs.push(...popupLogs);
   }
 

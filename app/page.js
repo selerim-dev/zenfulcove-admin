@@ -185,6 +185,7 @@ export default function Dashboard() {
               {activeCategory === "popup" && (
                 <PopupFollowupsPanel
                   config={config.popupFollowups}
+                  sendgridConfig={config.sendgrid}
                   onChange={(updated) =>
                     setConfig((prev) => ({
                       ...prev,

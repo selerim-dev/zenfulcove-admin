@@ -18,7 +18,6 @@ export async function POST(request) {
     const updates = await request.json();
     const current = await getConfig();
 
-    // Merge updates into current config
     const updated = { ...current };
 
     if (updates.sendgrid !== undefined) {
@@ -63,8 +62,20 @@ export async function POST(request) {
         ...updated.popupFollowups,
         ...updates.popupFollowups,
       };
+      if (updates.popupFollowups.testDestinations !== undefined) {
+        updated.popupFollowups.testDestinations = {
+          ...updated.popupFollowups.testDestinations,
+          ...updates.popupFollowups.testDestinations,
+        };
+      }
       if (updates.popupFollowups.emails) {
         updated.popupFollowups.emails = updates.popupFollowups.emails;
+      }
+      if (updates.popupFollowups.sms) {
+        updated.popupFollowups.sms = updates.popupFollowups.sms;
+      }
+      if (updated.popupFollowups.twilio !== undefined) {
+        delete updated.popupFollowups.twilio;
       }
     }
 

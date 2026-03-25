@@ -38,13 +38,24 @@ export const automationConfig = {
   },
   popupFollowups: {
     enabled: false,
+    channelMode: "email",
     sendgridContactListId: "44b5b3f5-d03d-4552-997f-8715a906d5b8",
-    popupTriggeredFieldId: "e1_D",
-    popupSentTemplatesFieldId: "e2_T",
+    popupTriggeredFieldId: "popup_triggered_at",
+    popupSentTemplatesFieldId: "popup_sent_templates",
+    popupSentSmsFieldId: "popup_sent_sms",
+    testDestinations: {
+      email: "",
+      sms: "",
+    },
     emails: [
       { daysAfterTrigger: 2, templateId: "", label: "Follow-up (2 days after)" },
       { daysAfterTrigger: 3, templateId: "", label: "Follow-up (3 days after)" },
       { daysAfterTrigger: 6, templateId: "", label: "Follow-up (6 days after)" },
+    ],
+    sms: [
+      { daysAfterTrigger: 2, messageKey: "sms_day_2", label: "SMS (2 days after)", messageBody: "", enabled: true },
+      { daysAfterTrigger: 3, messageKey: "sms_day_3", label: "SMS (3 days after)", messageBody: "", enabled: true },
+      { daysAfterTrigger: 6, messageKey: "sms_day_6", label: "SMS (6 days after)", messageBody: "", enabled: true },
     ],
   },
   jotformClientSync: {
