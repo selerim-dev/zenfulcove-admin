@@ -81,8 +81,8 @@ const CATEGORIES = [
     ),
   },
   {
-    id: "jotform-sync",
-    label: "Jotform Client Sync",
+    id: "syncs",
+    label: "Syncs",
     icon: (
       <svg
         width="20"

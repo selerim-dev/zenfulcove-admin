@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { CRON_SECRET } from "@/config/keys";
 import { sendSms, validateTwilioConfig } from "@/lib/twilio";
 import { getConfig } from "@/lib/kv";
-import { getProperties, getAvailability, getBookings } from "@/lib/lodgify";
+import { getProperties, getAvailability, getBookings, getAllBookings } from "@/lib/lodgify";
 import { getFormSubmissions, bookingHasWaiver, extractClientContact } from "@/lib/jotform";
 import {
   sendTemplateEmail,
@@ -112,7 +112,151 @@ function mergeClientContact(existing, incoming) {
     phone: existing.phone || incoming.phone || "",
     submissionIds: Array.from(new Set([...(existing.submissionIds || []), ...(incoming.submissionIds || [])])),
     formIds: Array.from(new Set([...(existing.formIds || []), ...(incoming.formIds || [])])),
+    bookingIds: Array.from(new Set([...(existing.bookingIds || []), ...(incoming.bookingIds || [])])),
+    bookingStatuses: Array.from(new Set([...(existing.bookingStatuses || []), ...(incoming.bookingStatuses || [])])),
+    propertyNames: Array.from(new Set([...(existing.propertyNames || []), ...(incoming.propertyNames || [])])),
   };
+}
+
+function normalizeEmail(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function splitName(fullName) {
+  const parts = String(fullName || "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+
+  if (parts.length === 0) {
+    return { firstName: "", lastName: "" };
+  }
+
+  if (parts.length === 1) {
+    return { firstName: parts[0], lastName: "" };
+  }
+
+  return {
+    firstName: parts[0],
+    lastName: parts.slice(1).join(" "),
+  };
+}
+
+function getFirstNonEmpty(values) {
+  for (const value of values) {
+    const normalized = String(value || "").trim();
+    if (normalized) return normalized;
+  }
+  return "";
+}
+
+function extractLodgifyContact(booking) {
+  const guest = booking?.guest || {};
+  const customer = booking?.customer || {};
+  const traveler = booking?.traveler || {};
+  const primaryPhoneObject = guest?.phone || customer?.phone || traveler?.phone || {};
+
+  const email = normalizeEmail(
+    getFirstNonEmpty([
+      guest?.email,
+      customer?.email,
+      traveler?.email,
+      booking?.guestEmail,
+      booking?.email,
+      booking?.customerEmail,
+    ])
+  );
+
+  const fullName = getFirstNonEmpty([
+    guest?.name,
+    booking?.guestName,
+    customer?.name,
+    traveler?.name,
+    `${guest?.firstName || guest?.first_name || ""} ${guest?.lastName || guest?.last_name || ""}`,
+    `${customer?.firstName || customer?.first_name || ""} ${customer?.lastName || customer?.last_name || ""}`,
+  ]);
+
+  const derivedNames = splitName(fullName);
+
+  const firstName = getFirstNonEmpty([
+    guest?.firstName,
+    guest?.first_name,
+    customer?.firstName,
+    customer?.first_name,
+    traveler?.firstName,
+    traveler?.first_name,
+    derivedNames.firstName,
+  ]);
+
+  const lastName = getFirstNonEmpty([
+    guest?.lastName,
+    guest?.last_name,
+    customer?.lastName,
+    customer?.last_name,
+    traveler?.lastName,
+    traveler?.last_name,
+    derivedNames.lastName,
+  ]);
+
+  const phone = normalizePhoneNumber(
+    getFirstNonEmpty([
+      typeof primaryPhoneObject === "string" ? primaryPhoneObject : "",
+      primaryPhoneObject?.fullNumber,
+      primaryPhoneObject?.phone,
+      primaryPhoneObject?.number,
+      primaryPhoneObject?.e164Phone,
+      guest?.phoneNumber,
+      guest?.mobilePhone,
+      customer?.phoneNumber,
+      customer?.mobilePhone,
+      traveler?.phoneNumber,
+      traveler?.mobilePhone,
+      booking?.phone,
+      booking?.phoneNumber,
+      booking?.guestPhone,
+    ])
+  );
+
+  const bookingId = String(
+    booking?.id ||
+      booking?.bookingId ||
+      booking?.reservationId ||
+      booking?.reservation_id ||
+      ""
+  ).trim();
+
+  const bookingStatus = String(
+    booking?.status ||
+      booking?.booking_status ||
+      booking?.reservationStatus ||
+      booking?.reservation_status ||
+      ""
+  ).trim();
+
+  const propertyName = getFirstNonEmpty([
+    booking?.property_name,
+    booking?.propertyName,
+    booking?.property?.name,
+  ]);
+
+  return {
+    email,
+    firstName,
+    lastName,
+    phone,
+    bookingId,
+    bookingStatus,
+    propertyName,
+  };
+}
+
+function isCancelledBooking(status) {
+  const normalized = String(status || "").trim().toLowerCase();
+  return (
+    normalized.includes("cancel") ||
+    normalized.includes("canceled") ||
+    normalized.includes("cancelled")
+  );
 }
 
 function parseSelectedAutomations(request) {
@@ -137,8 +281,12 @@ function parseSelectedAutomations(request) {
     jotform: "jotform-sync",
     "jotform-sync": "jotform-sync",
     "jotform-client-sync": "jotform-sync",
-    clients: "jotform-sync",
-    "client-sync": "jotform-sync",
+    lodgify: "lodgify-sync",
+    "lodgify-sync": "lodgify-sync",
+    "lodgify-client-sync": "lodgify-sync",
+    syncs: "syncs",
+    clients: "syncs",
+    "client-sync": "syncs",
   };
 
   const normalized = items
@@ -1190,6 +1338,184 @@ async function runJotformClientSync(automationConfig, dryRunOverride) {
   return logs;
 }
 
+async function runLodgifyClientSync(automationConfig, dryRunOverride) {
+  const isDryRun = dryRunOverride !== undefined ? dryRunOverride : DRY_RUN_ENV;
+  const logs = [];
+  const config = automationConfig.lodgifyClientSync || {};
+  const lookbackDays = Math.max(0, Number(config.stayDateLookbackDays) || 0);
+  const lookaheadDays = Math.max(0, Number(config.stayDateLookaheadDays) || 0);
+  const includeCancelledBookings = config.includeCancelledBookings !== false;
+  const startDate = addDays(todayCentral(), -lookbackDays);
+  const endDate = addDays(todayCentral(), lookaheadDays);
+
+  if (!config.enabled) {
+    logs.push({
+      timestamp: new Date().toISOString(),
+      automation: "Lodgify Client Sync",
+      property: "—",
+      action: "Skipped (disabled)",
+      status: "skipped",
+    });
+    return logs;
+  }
+
+  if (!config.sendgridContactListId) {
+    logs.push({
+      timestamp: new Date().toISOString(),
+      automation: "Lodgify Client Sync",
+      property: "—",
+      action: "Skipped: no SendGrid master list ID configured",
+      status: "skipped",
+    });
+    return logs;
+  }
+
+  if (isDryRun) {
+    logs.push({
+      timestamp: new Date().toISOString(),
+      automation: "Lodgify Client Sync",
+      property: "—",
+      action: `═══ DRY RUN: No SendGrid contacts will be written. Validation: WHICH Lodgify bookings would be synced for stay dates ${startDate} to ${endDate}. ═══`,
+      status: "info",
+    });
+  }
+
+  let bookings = [];
+  try {
+    bookings = await getAllBookings({
+      stayFrom: startDate,
+      stayTo: endDate,
+      page: 1,
+      size: 100,
+      includeCount: false,
+      includeTransactions: false,
+      includeExternal: true,
+      includeQuoteDetails: false,
+    });
+    logs.push({
+      timestamp: new Date().toISOString(),
+      automation: "Lodgify Client Sync",
+      property: "—",
+      action: `Loaded ${bookings.length} booking(s) from Lodgify for stay dates ${startDate} to ${endDate}`,
+      status: "info",
+    });
+  } catch (err) {
+    logs.push({
+      timestamp: new Date().toISOString(),
+      automation: "Lodgify Client Sync",
+      property: "—",
+      action: `Failed to fetch Lodgify bookings: ${err.message}`,
+      status: "failed",
+    });
+    return logs;
+  }
+
+  const dedupedContacts = new Map();
+  let skippedMissingEmailCount = 0;
+  let skippedCancelledCount = 0;
+
+  for (const booking of bookings) {
+    const contact = extractLodgifyContact(booking);
+
+    if (isCancelledBooking(contact.bookingStatus) && !includeCancelledBookings) {
+      skippedCancelledCount += 1;
+      continue;
+    }
+
+    if (!contact.email) {
+      skippedMissingEmailCount += 1;
+      continue;
+    }
+
+    const merged = mergeClientContact(
+      dedupedContacts.get(contact.email) || {
+        email: contact.email,
+        firstName: "",
+        lastName: "",
+        phone: "",
+        submissionIds: [],
+        formIds: [],
+        bookingIds: [],
+        bookingStatuses: [],
+        propertyNames: [],
+      },
+      {
+        ...contact,
+        bookingIds: contact.bookingId ? [contact.bookingId] : [],
+        bookingStatuses: contact.bookingStatus ? [contact.bookingStatus] : [],
+        propertyNames: contact.propertyName ? [contact.propertyName] : [],
+      }
+    );
+
+    dedupedContacts.set(contact.email, merged);
+  }
+
+  const contactsToSync = Array.from(dedupedContacts.values());
+  logs.push({
+    timestamp: new Date().toISOString(),
+    automation: "Lodgify Client Sync",
+    property: "—",
+    action: `Prepared ${contactsToSync.length} unique contact(s) from ${bookings.length} Lodgify booking(s); skipped ${skippedMissingEmailCount} booking(s) with no email${includeCancelledBookings ? "" : `; skipped ${skippedCancelledCount} cancelled booking(s)`}`,
+    status: "info",
+  });
+
+  if (contactsToSync.length === 0) {
+    logs.push({
+      timestamp: new Date().toISOString(),
+      automation: "Lodgify Client Sync",
+      property: "—",
+      action: "No eligible Lodgify contacts found to sync",
+      status: "skipped",
+    });
+    return logs;
+  }
+
+  if (isDryRun) {
+    contactsToSync.forEach((contact) => {
+      logs.push({
+        timestamp: new Date().toISOString(),
+        automation: "Lodgify Client Sync",
+        property: contact.propertyNames?.join(", ") || "—",
+        action: `[DRY RUN] Would sync ${contact.email} | first: ${contact.firstName || "(blank)"} | last: ${contact.lastName || "(blank)"} | phone: ${contact.phone || "(blank)"} | bookings: ${contact.bookingIds.join(",") || "(unknown)"} | statuses: ${contact.bookingStatuses.join(",") || "(unknown)"}`,
+        status: "success",
+      });
+    });
+    return logs;
+  }
+
+  try {
+    const results = await upsertContactsToList({
+      listId: config.sendgridContactListId,
+      contacts: contactsToSync,
+    });
+    const requestedCount = results.reduce((sum, item) => sum + Number(item?.results?.requested_count || 0), 0);
+    const createdCount = results.reduce((sum, item) => sum + Number(item?.results?.created_count || 0), 0);
+    const updatedCount = results.reduce((sum, item) => sum + Number(item?.results?.updated_count || 0), 0);
+    const erroredCount = results.reduce((sum, item) => sum + Number(item?.results?.errored_count || 0), 0);
+    const pendingCount = results.filter((item) => item?.status === "pending_timeout").length;
+
+    logs.push({
+      timestamp: new Date().toISOString(),
+      automation: "Lodgify Client Sync",
+      property: "—",
+      action: pendingCount > 0
+        ? `SendGrid accepted ${contactsToSync.length} Lodgify contact(s) for sync to list ${config.sendgridContactListId}, but ${pendingCount} batch job(s) were still pending after the wait window | requested: ${requestedCount} | created: ${createdCount} | updated: ${updatedCount} | errored: ${erroredCount}`
+        : `Synced ${contactsToSync.length} Lodgify contact(s) to SendGrid list ${config.sendgridContactListId} | requested: ${requestedCount} | created: ${createdCount} | updated: ${updatedCount} | errored: ${erroredCount}`,
+      status: erroredCount > 0 ? "failed" : pendingCount > 0 ? "info" : "success",
+    });
+  } catch (err) {
+    logs.push({
+      timestamp: new Date().toISOString(),
+      automation: "Lodgify Client Sync",
+      property: "—",
+      action: `Failed to sync Lodgify contacts to SendGrid: ${err.message}`,
+      status: "failed",
+    });
+  }
+
+  return logs;
+}
+
 // ─── POST handler ───────────────────────────────────────────────────────────
 
 export async function POST(request) {
@@ -1229,9 +1555,22 @@ export async function POST(request) {
     allLogs.push(...popupLogs);
   }
 
-  if (runAllAutomations || selectedAutomations.has("jotform-sync")) {
+  if (
+    runAllAutomations ||
+    selectedAutomations.has("jotform-sync") ||
+    selectedAutomations.has("syncs")
+  ) {
     const jotformSyncLogs = await runJotformClientSync(automationConfig, isDryRun);
     allLogs.push(...jotformSyncLogs);
+  }
+
+  if (
+    runAllAutomations ||
+    selectedAutomations.has("lodgify-sync") ||
+    selectedAutomations.has("syncs")
+  ) {
+    const lodgifySyncLogs = await runLodgifyClientSync(automationConfig, isDryRun);
+    allLogs.push(...lodgifySyncLogs);
   }
 
   await appendLogs(allLogs);

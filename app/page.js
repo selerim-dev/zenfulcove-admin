@@ -8,7 +8,7 @@ import SettingsPanel from "@/components/SettingsPanel";
 import VacancyPanel from "@/components/VacancyPanel";
 import WaiverPanel from "@/components/WaiverPanel";
 import PopupFollowupsPanel from "@/components/PopupFollowupsPanel";
-import JotformClientSyncPanel from "@/components/JotformClientSyncPanel";
+import SyncsPanel from "@/components/SyncsPanel";
 import ActivityLog from "@/components/ActivityLog";
 
 export default function Dashboard() {
@@ -195,13 +195,15 @@ export default function Dashboard() {
                 />
               )}
 
-              {activeCategory === "jotform-sync" && (
-                <JotformClientSyncPanel
-                  config={config.jotformClientSync}
+              {activeCategory === "syncs" && (
+                <SyncsPanel
+                  jotformConfig={config.jotformClientSync}
+                  lodgifyConfig={config.lodgifyClientSync}
                   onChange={(updated) =>
                     setConfig((prev) => ({
                       ...prev,
-                      jotformClientSync: updated,
+                      jotformClientSync: updated.jotformClientSync,
+                      lodgifyClientSync: updated.lodgifyClientSync,
                     }))
                   }
                 />

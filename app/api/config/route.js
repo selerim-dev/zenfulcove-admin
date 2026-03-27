@@ -91,6 +91,13 @@ export async function POST(request) {
       }
     }
 
+    if (updates.lodgifyClientSync !== undefined) {
+      updated.lodgifyClientSync = {
+        ...updated.lodgifyClientSync,
+        ...updates.lodgifyClientSync,
+      };
+    }
+
     await setConfig(updated);
 
     return NextResponse.json({ success: true, config: updated });

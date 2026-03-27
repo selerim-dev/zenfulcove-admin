@@ -63,4 +63,11 @@ export const automationConfig = {
     sendgridContactListId: "e46aa43e-3f91-4965-8bbb-fcae8f9c3124",
     jotformFormIds: ["251834442091050"],
   },
+  lodgifyClientSync: {
+    enabled: false,
+    sendgridContactListId: "e46aa43e-3f91-4965-8bbb-fcae8f9c3124",
+    stayDateLookbackDays: 30,
+    stayDateLookaheadDays: 365,
+    includeCancelledBookings: true,
+  },
 };
