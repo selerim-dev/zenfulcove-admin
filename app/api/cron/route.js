@@ -8,6 +8,7 @@ import {
   sendTemplateEmail,
   getContactsFromList,
   getContactsFromListDetailed,
+  getContactByEmailDetailed,
   updateContactCustomFields,
   upsertContactsToList,
 } from "@/lib/sendgrid";
@@ -866,6 +867,27 @@ export async function runPopupFollowups(automationConfig, dryRunOverride, popupC
   }
 
   const todayStr = todayCentral();
+  const maxConfiguredDay = Math.max(
+    0,
+    ...(shouldRunEmail ? configuredEmails.map((item) => Number(item.daysAfterTrigger) || 0) : []),
+    ...(shouldRunSms ? configuredSms.map((item) => Number(item.daysAfterTrigger) || 0) : [])
+  );
+  const contactsWithinWindow = contacts
+    .map((contact) => {
+      const customFields = contact?.custom_fields || {};
+      const triggerDate = parseCentralDateField(customFields[config.popupTriggeredFieldId]);
+      return {
+        ...contact,
+        _popupTriggerDate: triggerDate,
+      };
+    })
+    .filter((contact) => {
+      if (!contact._popupTriggerDate) return false;
+      const daysSinceTriggered = daysBetween(contact._popupTriggerDate, todayStr);
+      return daysSinceTriggered >= 0 && daysSinceTriggered <= maxConfiguredDay;
+    })
+    .sort((a, b) => String(b._popupTriggerDate).localeCompare(String(a._popupTriggerDate)));
+
   if (isDryRun) {
     const descriptor =
       shouldRunEmail && shouldRunSms
@@ -886,16 +908,50 @@ export async function runPopupFollowups(automationConfig, dryRunOverride, popupC
     timestamp: new Date().toISOString(),
     automation: "Popup Follow Ups",
     property: "—",
-    action: `Loaded ${contacts.length} popup contact(s) from SendGrid list`,
+    action: `Using SendGrid popup list: ${config.sendgridContactListId}`,
     status: "info",
   });
 
-  for (const contact of contacts) {
+  const contactsWithPhone = contacts.filter((contact) =>
+    Boolean(normalizePhoneNumber(contact?.phone_number || contact?.phone || ""))
+  ).length;
+  const contactsWithoutPhone = contacts.length - contactsWithPhone;
+
+  logs.push({
+    timestamp: new Date().toISOString(),
+    automation: "Popup Follow Ups",
+    property: "—",
+    action: `Popup list phone coverage: ${contactsWithPhone} with phone, ${contactsWithoutPhone} without phone`,
+    status: "info",
+  });
+
+  logs.push({
+    timestamp: new Date().toISOString(),
+    automation: "Popup Follow Ups",
+    property: "—",
+    action: `Loaded ${contacts.length} popup contact(s); ${contactsWithinWindow.length} in active ${maxConfiguredDay}-day follow-up window (newest first)`,
+    status: "info",
+  });
+
+  if (contactsWithinWindow.length === 0) {
+    logs.push({
+      timestamp: new Date().toISOString(),
+      automation: "Popup Follow Ups",
+      property: "—",
+      action: "No popup contacts currently fall inside the active follow-up day window",
+      status: "info",
+    });
+    return logs;
+  }
+
+  const contactHydrationCache = new Map();
+
+  for (const contact of contactsWithinWindow) {
     const email = String(contact?.email || "").trim().toLowerCase();
-    const phone = normalizePhoneNumber(contact?.phone_number || contact?.phone || "");
+    let phone = normalizePhoneNumber(contact?.phone_number || contact?.phone || "");
     const customFields = contact?.custom_fields || {};
     const rawTriggerDate = customFields[config.popupTriggeredFieldId];
-    const triggerDate = parseCentralDateField(rawTriggerDate);
+    const triggerDate = contact._popupTriggerDate || parseCentralDateField(rawTriggerDate);
 
     if (!email) {
       logs.push({
@@ -944,6 +1000,38 @@ export async function runPopupFollowups(automationConfig, dryRunOverride, popupC
     const matchedSms = configuredSms.filter(
       (item) => Number(item.daysAfterTrigger) === daysSinceTriggered
     );
+
+    if (shouldRunSms && !phone && matchedSms.length > 0 && email) {
+      try {
+        let hydrated = contactHydrationCache.get(email);
+        if (hydrated === undefined) {
+          hydrated = await getContactByEmailDetailed(email);
+          contactHydrationCache.set(email, hydrated || null);
+        }
+
+        const hydratedPhone = normalizePhoneNumber(
+          hydrated?.phone_number || hydrated?.phone || ""
+        );
+        if (hydratedPhone) {
+          phone = hydratedPhone;
+          logs.push({
+            timestamp: new Date().toISOString(),
+            automation: "Popup Follow Ups",
+            property: "—",
+            action: `Hydrated missing phone for ${email} via direct SendGrid contact lookup`,
+            status: "info",
+          });
+        }
+      } catch (err) {
+        logs.push({
+          timestamp: new Date().toISOString(),
+          automation: "Popup Follow Ups",
+          property: "—",
+          action: `Failed to hydrate phone for ${email}: ${err.message}`,
+          status: "failed",
+        });
+      }
+    }
 
     if (shouldRunEmail && matchedEmails.length === 0) {
       logs.push({
