@@ -21,6 +21,26 @@ const CATEGORIES = [
     ),
   },
   {
+    id: "promotions",
+    label: "One-Off Promotions",
+    icon: (
+      <svg
+        width="20"
+        height="20"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M4 11v2a4 4 0 0 0 4 4h1l4 4v-4h3a4 4 0 0 0 4-4v-2" />
+        <path d="M8 9h8" />
+        <path d="M9 5h6" />
+      </svg>
+    ),
+  },
+  {
     id: "vacancy",
     label: "Vacancy Promo Emails",
     icon: (

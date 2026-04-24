@@ -11,6 +11,7 @@
     "test:jotform-sync": "node --env-file=.env.local scripts/test-jotform-sync.js",
     "run:jotform-sync": "node --env-file=.env.local scripts/run-jotform-sync-live.js",
     "test:popup-sms": "node --env-file=.env.local scripts/test-popup-sms.js",
+    "test:promotion": "node --env-file=.env.local scripts/test-promotion.js",
     "run:popup-sms": "node --env-file=.env.local scripts/run-popup-sms-live.js"
   },
   "dependencies": {

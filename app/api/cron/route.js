@@ -4,6 +4,7 @@ import { sendSms, validateTwilioConfig } from "@/lib/twilio";
 import { getConfig } from "@/lib/kv";
 import { getProperties, getAvailability, getBookings, getAllBookings } from "@/lib/lodgify";
 import { getFormSubmissions, bookingHasWaiver, extractClientContact } from "@/lib/jotform";
+import { appendLogs, writeLastRunStatus } from "@/lib/activity-log";
 import {
   sendTemplateEmail,
   getContactsFromList,
@@ -12,11 +13,7 @@ import {
   updateContactCustomFields,
   upsertContactsToList,
 } from "@/lib/sendgrid";
-import fs from "fs/promises";
-import path from "path";
 
-const LOGS_PATH = path.join(process.cwd(), "logs", "activity.json");
-const LAST_RUN_PATH = path.join(process.cwd(), "logs", "last-run.json");
 const DRY_RUN_ENV = process.env.CRON_DRY_RUN === "true";
 
 function today() {
@@ -344,18 +341,6 @@ function normalizePhoneNumber(value) {
   if (cleaned.startsWith("+")) return cleaned;
   if (cleaned.length === 10) return "+1" + cleaned;
   return cleaned;
-}
-
-async function appendLogs(newEntries) {
-  let existing = [];
-  try {
-    const raw = await fs.readFile(LOGS_PATH, "utf-8");
-    existing = JSON.parse(raw);
-  } catch {
-    // File doesn't exist or is invalid — start fresh
-  }
-  existing.push(...newEntries);
-  await fs.writeFile(LOGS_PATH, JSON.stringify(existing, null, 2));
 }
 
 // ─── Automation 1: Vacancy Promo Emails ─────────────────────────────────────
@@ -1664,13 +1649,7 @@ export async function POST(request) {
   await appendLogs(allLogs);
 
   const hasFailed = allLogs.some((log) => log.status === "failed");
-  await fs.writeFile(
-    LAST_RUN_PATH,
-    JSON.stringify({
-      timestamp: new Date().toISOString(),
-      status: hasFailed ? "FAILED" : "SUCCESS",
-    })
-  );
+  await writeLastRunStatus(hasFailed ? "FAILED" : "SUCCESS");
 
   // Log to terminal for quick debugging (dev server stdout)
   const icon = (s) => (s === "success" ? "✓" : s === "failed" ? "✗" : s === "info" ? "→" : "○");

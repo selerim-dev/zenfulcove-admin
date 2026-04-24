@@ -9,6 +9,7 @@ import VacancyPanel from "@/components/VacancyPanel";
 import WaiverPanel from "@/components/WaiverPanel";
 import PopupFollowupsPanel from "@/components/PopupFollowupsPanel";
 import SyncsPanel from "@/components/SyncsPanel";
+import OneOffPromotionsPanel from "@/components/OneOffPromotionsPanel";
 import ActivityLog from "@/components/ActivityLog";
 
 export default function Dashboard() {
@@ -170,6 +171,10 @@ export default function Dashboard() {
                 />
               )}
 
+              {activeCategory === "promotions" && (
+                <OneOffPromotionsPanel onComplete={fetchData} />
+              )}
+
               {activeCategory === "waiver" && (
                 <WaiverPanel
                   config={config.waiverReminders}
@@ -210,15 +215,17 @@ export default function Dashboard() {
               )}
 
               {/* Save Button */}
-              <div className="flex justify-end">
-                <button
-                  onClick={handleSave}
-                  disabled={saving}
-                  className="bg-grove hover:bg-forest text-white font-sans font-medium px-6 py-3 rounded-full tracking-wide transition-colors duration-200 disabled:opacity-50"
-                >
-                  {saving ? "Saving..." : "Save Settings"}
-                </button>
-              </div>
+              {activeCategory !== "promotions" && (
+                <div className="flex justify-end">
+                  <button
+                    onClick={handleSave}
+                    disabled={saving}
+                    className="bg-grove hover:bg-forest text-white font-sans font-medium px-6 py-3 rounded-full tracking-wide transition-colors duration-200 disabled:opacity-50"
+                  >
+                    {saving ? "Saving..." : "Save Settings"}
+                  </button>
+                </div>
+              )}
             </>
           )}
 
