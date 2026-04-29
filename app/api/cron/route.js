@@ -1,10 +1,17 @@
 import { NextResponse } from "next/server";
 import { CRON_SECRET } from "@/config/keys";
 import { sendSms, validateTwilioConfig } from "@/lib/twilio";
-import { getConfig } from "@/lib/kv";
+import {
+  getConfig,
+  getEventPopupContactState,
+  setEventPopupContactState,
+  getEventPopupSmsSent,
+  setEventPopupSmsSent,
+} from "@/lib/kv";
 import { getProperties, getAvailability, getBookings, getAllBookings } from "@/lib/lodgify";
 import { getFormSubmissions, bookingHasWaiver, extractClientContact } from "@/lib/jotform";
 import { appendLogs, writeLastRunStatus } from "@/lib/activity-log";
+import { createSalesmateContact, validateSalesmateConfig } from "@/lib/salesmate";
 import {
   sendTemplateEmail,
   getContactsFromList,
@@ -276,6 +283,10 @@ function parseSelectedAutomations(request) {
     popup: "popup",
     "popup-followups": "popup",
     "popup-follow-ups": "popup",
+    "event-popup": "event-popup",
+    "event-popup-sms": "event-popup",
+    "salesmate-popup": "event-popup",
+    "salesmate-popup-sms": "event-popup",
     jotform: "jotform-sync",
     "jotform-sync": "jotform-sync",
     "jotform-client-sync": "jotform-sync",
@@ -1243,6 +1254,398 @@ export async function runPopupFollowups(automationConfig, dryRunOverride, popupC
   return logs;
 }
 
+// ─── Automation 4: Event Popup Salesmate + SMS ─────────────────────────────
+
+function getSendGridCreatedDate(contact) {
+  return parseCentralDateField(
+    contact?.created_at ||
+      contact?.createdAt ||
+      contact?.created ||
+      contact?.createdAtTimestamp ||
+      ""
+  );
+}
+
+function maxDateString(...dates) {
+  return dates
+    .map((date) => parseCentralDateField(date))
+    .filter(Boolean)
+    .sort()
+    .at(-1) || "";
+}
+
+function eventPopupContactKey(contact, phone) {
+  const email = normalizeEmail(contact?.email);
+  if (email) return `email:${email}`;
+  const normalizedPhone = normalizePhoneNumber(phone || contact?.phone_number || contact?.phone || "");
+  if (normalizedPhone) return `phone:${normalizedPhone}`;
+  return "";
+}
+
+function getEventPopupFollowupId(followup, index) {
+  const explicitId = String(followup?.id || "").trim();
+  if (explicitId) return explicitId;
+  const days = Number(followup?.daysAfterTrigger) || 0;
+  return `event_popup_sms_${index + 1}_day_${days}`;
+}
+
+export async function runEventPopupSalesmateSms(automationConfig, dryRunOverride, options = {}) {
+  const isDryRun = dryRunOverride !== undefined ? dryRunOverride : DRY_RUN_ENV;
+  const logs = [];
+  const config = automationConfig.eventPopupSalesmateSms || {};
+  const todayStr = todayCentral();
+  const testDestination = normalizePhoneNumber(options.testDestination || "");
+  const isOneOffTest = Boolean(testDestination);
+  const shouldPersistState = options.persistState !== false && !isOneOffTest && !isDryRun;
+  const maxSends = Number.isFinite(options.maxSends) ? Number(options.maxSends) : Number.POSITIVE_INFINITY;
+  let sentCount = 0;
+  const smsFollowups = (config.sms || [])
+    .map((followup, index) => ({
+      ...followup,
+      id: getEventPopupFollowupId(followup, index),
+      daysAfterTrigger: Number(followup?.daysAfterTrigger) || 0,
+    }))
+    .filter((followup) => followup && followup.enabled !== false);
+  const syncToSalesmate = config.syncToSalesmate !== false && !isOneOffTest;
+  const fromNumber = String(config.twilioFromNumber || "").trim();
+
+  if (!config.enabled) {
+    logs.push({
+      timestamp: new Date().toISOString(),
+      automation: "Event Popup Salesmate SMS",
+      property: "—",
+      action: "Skipped (disabled)",
+      status: "skipped",
+    });
+    return logs;
+  }
+
+  if (!config.sendgridContactListId) {
+    logs.push({
+      timestamp: new Date().toISOString(),
+      automation: "Event Popup Salesmate SMS",
+      property: "—",
+      action: "Skipped: no SendGrid event popup contact list ID configured",
+      status: "skipped",
+    });
+    return logs;
+  }
+
+  if (smsFollowups.length === 0) {
+    logs.push({
+      timestamp: new Date().toISOString(),
+      automation: "Event Popup Salesmate SMS",
+      property: "—",
+      action: "Skipped: no enabled event popup SMS follow-ups configured",
+      status: "skipped",
+    });
+    return logs;
+  }
+
+  try {
+    validateTwilioConfig(fromNumber || undefined);
+  } catch (err) {
+    logs.push({
+      timestamp: new Date().toISOString(),
+      automation: "Event Popup Salesmate SMS",
+      property: "—",
+      action: `Skipped: ${err.message}`,
+      status: "skipped",
+    });
+    return logs;
+  }
+
+  let salesmateReady = false;
+  if (syncToSalesmate) {
+    try {
+      validateSalesmateConfig();
+      salesmateReady = true;
+    } catch (err) {
+      logs.push({
+        timestamp: new Date().toISOString(),
+        automation: "Event Popup Salesmate SMS",
+        property: "—",
+        action: `Salesmate sync disabled for this run: ${err.message}`,
+        status: "skipped",
+      });
+    }
+  }
+
+  let contacts = [];
+  try {
+    contacts = await getContactsFromListDetailed(config.sendgridContactListId);
+  } catch (err) {
+    logs.push({
+      timestamp: new Date().toISOString(),
+      automation: "Event Popup Salesmate SMS",
+      property: "—",
+      action: `Failed to fetch event popup contacts: ${err.message}`,
+      status: "failed",
+    });
+    return logs;
+  }
+
+  if (isDryRun) {
+    logs.push({
+      timestamp: new Date().toISOString(),
+      automation: "Event Popup Salesmate SMS",
+      property: "—",
+      action: `═══ DRY RUN: Today is ${todayStr}. No Salesmate contacts or SMS messages will be created. ═══`,
+      status: "info",
+    });
+  }
+
+  logs.push({
+    timestamp: new Date().toISOString(),
+    automation: "Event Popup Salesmate SMS",
+    property: "—",
+    action: `Using SendGrid event popup list: ${config.sendgridContactListId}; loaded ${contacts.length} contact(s)`,
+    status: "info",
+  });
+
+  if (contacts.length === 0) {
+    logs.push({
+      timestamp: new Date().toISOString(),
+      automation: "Event Popup Salesmate SMS",
+      property: "—",
+      action: "No contacts in event popup list — skipped",
+      status: "skipped",
+    });
+    return logs;
+  }
+
+  const contactHydrationCache = new Map();
+  const maxConfiguredDay = Math.max(0, ...smsFollowups.map((item) => item.daysAfterTrigger));
+  let eligibleCount = 0;
+
+  for (const contact of contacts) {
+    const email = normalizeEmail(contact?.email);
+    let phone = normalizePhoneNumber(contact?.phone_number || contact?.phone || "");
+
+    if (!phone && email) {
+      try {
+        let hydrated = contactHydrationCache.get(email);
+        if (hydrated === undefined) {
+          hydrated = await getContactByEmailDetailed(email);
+          contactHydrationCache.set(email, hydrated || null);
+        }
+        phone = normalizePhoneNumber(hydrated?.phone_number || hydrated?.phone || "");
+        if (phone) {
+          logs.push({
+            timestamp: new Date().toISOString(),
+            automation: "Event Popup Salesmate SMS",
+            property: "—",
+            action: `Hydrated missing phone for ${email} via direct SendGrid contact lookup`,
+            status: "info",
+          });
+        }
+      } catch (err) {
+        logs.push({
+          timestamp: new Date().toISOString(),
+          automation: "Event Popup Salesmate SMS",
+          property: "—",
+          action: `Failed to hydrate phone for ${email}: ${err.message}`,
+          status: "failed",
+        });
+      }
+    }
+
+    const contactKey = eventPopupContactKey(contact, phone);
+    if (!contactKey) {
+      logs.push({
+        timestamp: new Date().toISOString(),
+        automation: "Event Popup Salesmate SMS",
+        property: "—",
+        action: "Skipped contact with no email or phone in event popup list",
+        status: "skipped",
+      });
+      continue;
+    }
+
+    const existingState = isDryRun ? null : await getEventPopupContactState(contactKey);
+    const firstSeenDate = existingState?.firstSeenDate || todayStr;
+    const sendGridCreatedDate = getSendGridCreatedDate(contact);
+    const triggerDate = maxDateString(sendGridCreatedDate, firstSeenDate, todayStr === firstSeenDate ? todayStr : "");
+    const daysSinceTriggered = daysBetween(triggerDate, todayStr);
+
+    if (shouldPersistState && !existingState) {
+      await setEventPopupContactState(contactKey, {
+        firstSeenDate,
+        sendGridCreatedDate,
+        salesmateContactId: "",
+        lastSeenAt: new Date().toISOString(),
+      });
+    }
+
+    let salesmateContactId = existingState?.salesmateContactId || "";
+    const alreadySyncedToSalesmate = Boolean(existingState?.salesmateSynced || salesmateContactId);
+    if (syncToSalesmate && salesmateReady && !alreadySyncedToSalesmate) {
+      try {
+        if (!isDryRun) {
+          const result = await createSalesmateContact({
+            contact: {
+              ...contact,
+              email,
+              phone,
+            },
+            leadSource: config.salesmateLeadSource || "Website",
+            tags: config.salesmateTags || [],
+          });
+          salesmateContactId = result.id || "";
+          if (shouldPersistState) {
+            await setEventPopupContactState(contactKey, {
+              ...(existingState || {}),
+              firstSeenDate,
+              sendGridCreatedDate,
+              salesmateContactId,
+              salesmateSynced: true,
+              lastSyncedToSalesmateAt: new Date().toISOString(),
+              lastSeenAt: new Date().toISOString(),
+            });
+          }
+        }
+
+        logs.push({
+          timestamp: new Date().toISOString(),
+          automation: "Event Popup Salesmate SMS",
+          property: "—",
+          action: isDryRun
+            ? `[DRY RUN] Would create Salesmate contact for ${email || phone} with tags ${(config.salesmateTags || []).join(", ")}`
+            : `Created Salesmate contact for ${email || phone}${salesmateContactId ? ` | id: ${salesmateContactId}` : ""}`,
+          status: "success",
+        });
+      } catch (err) {
+        logs.push({
+          timestamp: new Date().toISOString(),
+          automation: "Event Popup Salesmate SMS",
+          property: "—",
+          action: `Failed to create Salesmate contact for ${email || phone}: ${err.message}`,
+          status: "failed",
+        });
+      }
+    }
+
+    if (daysSinceTriggered < 0 || daysSinceTriggered > maxConfiguredDay) {
+      continue;
+    }
+
+    eligibleCount += 1;
+
+    const matchedSms = smsFollowups.filter(
+      (item) => item.daysAfterTrigger === daysSinceTriggered
+    );
+
+    if (matchedSms.length === 0) {
+      logs.push({
+        timestamp: new Date().toISOString(),
+        automation: "Event Popup Salesmate SMS",
+        property: "—",
+        action: `NO SEND ${phone || email} | triggered ${triggerDate} | ${daysSinceTriggered} days since event popup | no SMS configured for today`,
+        status: "info",
+      });
+      continue;
+    }
+
+    for (const smsFollowup of matchedSms) {
+      const messageBody = String(smsFollowup.messageBody || "").trim();
+      const label = `${smsFollowup.daysAfterTrigger}-day event popup SMS`;
+      const alreadySent = isDryRun || isOneOffTest ? null : await getEventPopupSmsSent(contactKey, smsFollowup.id);
+      const sendTo = isOneOffTest ? testDestination : phone;
+
+      if (!messageBody) {
+        logs.push({
+          timestamp: new Date().toISOString(),
+          automation: "Event Popup Salesmate SMS",
+          property: "—",
+          action: `SKIP ${phone || email} | triggered ${triggerDate} | ${daysSinceTriggered} days since event popup | no message body configured for ${label}`,
+          status: "skipped",
+        });
+        continue;
+      }
+
+      if (!phone) {
+        logs.push({
+          timestamp: new Date().toISOString(),
+          automation: "Event Popup Salesmate SMS",
+          property: "—",
+          action: `SKIP ${email || contactKey} | triggered ${triggerDate} | ${daysSinceTriggered} days since event popup | no phone number`,
+          status: "skipped",
+        });
+        continue;
+      }
+
+      if (alreadySent) {
+        logs.push({
+          timestamp: new Date().toISOString(),
+          automation: "Event Popup Salesmate SMS",
+          property: "—",
+          action: `SKIP ${phone} | ${label} already sent at ${alreadySent.sentAt || "(unknown)"}`,
+          status: "skipped",
+        });
+        continue;
+      }
+
+      try {
+        let smsResult = null;
+        if (!isDryRun) {
+          smsResult = await sendSms({
+            to: sendTo,
+            body: messageBody,
+            from: fromNumber || undefined,
+          });
+          if (shouldPersistState) {
+            await setEventPopupSmsSent(contactKey, smsFollowup.id, {
+              sentAt: new Date().toISOString(),
+              to: phone,
+              from: fromNumber || "",
+              followupId: smsFollowup.id,
+              daysAfterTrigger: smsFollowup.daysAfterTrigger,
+              twilioSid: smsResult?.sid || "",
+            });
+          }
+        }
+
+        const sidSuffix = smsResult?.sid ? ` | sid: ${smsResult.sid}` : "";
+        logs.push({
+          timestamp: new Date().toISOString(),
+          automation: "Event Popup Salesmate SMS",
+          property: "—",
+          action: isDryRun
+            ? `[DRY RUN] Would send ${label} to ${phone} | triggered ${triggerDate}`
+            : isOneOffTest
+              ? `[TEST SEND] Routed ${label} originally for ${phone} to ${sendTo}${sidSuffix}`
+              : `Sent ${label} to ${phone}${sidSuffix}`,
+          status: "success",
+        });
+        if (!isDryRun) {
+          sentCount += 1;
+          if (sentCount >= maxSends) {
+            return logs;
+          }
+        }
+      } catch (err) {
+        logs.push({
+          timestamp: new Date().toISOString(),
+          automation: "Event Popup Salesmate SMS",
+          property: "—",
+          action: `Failed ${label} for ${phone}: ${err.message}`,
+          status: "failed",
+        });
+      }
+    }
+  }
+
+  logs.push({
+    timestamp: new Date().toISOString(),
+    automation: "Event Popup Salesmate SMS",
+    property: "—",
+    action: `Evaluated ${contacts.length} contact(s); ${eligibleCount} inside active ${maxConfiguredDay}-day SMS window`,
+    status: "info",
+  });
+
+  return logs;
+}
+
 async function runJotformClientSync(automationConfig, dryRunOverride) {
   const isDryRun = dryRunOverride !== undefined ? dryRunOverride : DRY_RUN_ENV;
   const logs = [];
@@ -1626,6 +2029,11 @@ export async function POST(request) {
   if (runAllAutomations || selectedAutomations.has("popup")) {
     const popupLogs = await runPopupFollowups(automationConfig, isDryRun, popupChannelOverride);
     allLogs.push(...popupLogs);
+  }
+
+  if (runAllAutomations || selectedAutomations.has("event-popup")) {
+    const eventPopupLogs = await runEventPopupSalesmateSms(automationConfig, isDryRun);
+    allLogs.push(...eventPopupLogs);
   }
 
   if (

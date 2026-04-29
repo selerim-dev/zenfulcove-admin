@@ -58,6 +58,26 @@ export const automationConfig = {
       { daysAfterTrigger: 6, messageKey: "sms_day_6", label: "SMS (6 days after)", messageBody: "", enabled: true },
     ],
   },
+  eventPopupSalesmateSms: {
+    enabled: false,
+    syncToSalesmate: true,
+    sendgridContactListId: "dc7aeb0a-c70c-4c6e-a1cd-b0c8c2b93cb8",
+    triggerDateFieldId: "",
+    twilioFromNumber: "",
+    salesmateLeadSource: "Website",
+    salesmateTags: ["admin portal", "event popup"],
+    testDestinations: {
+      sms: "",
+    },
+    sms: [
+      {
+        id: "event_popup_sms_day_0",
+        daysAfterTrigger: 0,
+        messageBody: "",
+        enabled: true,
+      },
+    ],
+  },
   jotformClientSync: {
     enabled: false,
     sendgridContactListId: "e46aa43e-3f91-4965-8bbb-fcae8f9c3124",

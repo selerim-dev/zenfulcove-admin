@@ -8,6 +8,7 @@ import SettingsPanel from "@/components/SettingsPanel";
 import VacancyPanel from "@/components/VacancyPanel";
 import WaiverPanel from "@/components/WaiverPanel";
 import PopupFollowupsPanel from "@/components/PopupFollowupsPanel";
+import EventPopupSalesmateSmsPanel from "@/components/EventPopupSalesmateSmsPanel";
 import SyncsPanel from "@/components/SyncsPanel";
 import OneOffPromotionsPanel from "@/components/OneOffPromotionsPanel";
 import ActivityLog from "@/components/ActivityLog";
@@ -195,6 +196,18 @@ export default function Dashboard() {
                     setConfig((prev) => ({
                       ...prev,
                       popupFollowups: updated,
+                    }))
+                  }
+                />
+              )}
+
+              {activeCategory === "event-popup" && (
+                <EventPopupSalesmateSmsPanel
+                  config={config.eventPopupSalesmateSms}
+                  onChange={(updated) =>
+                    setConfig((prev) => ({
+                      ...prev,
+                      eventPopupSalesmateSms: updated,
                     }))
                   }
                 />

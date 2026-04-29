@@ -8,3 +8,7 @@ export const CRON_SECRET = process.env.CRON_SECRET;
 export const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID;
 export const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
 export const TWILIO_FROM_NUMBER = process.env.TWILIO_FROM_NUMBER;
+export const SALESMATE_DOMAIN = process.env.SALESMATE_DOMAIN;
+export const SALESMATE_LINK_NAME = process.env.SALESMATE_LINK_NAME;
+export const SALESMATE_SESSION_KEY = process.env.SALESMATE_SESSION_KEY;
+export const SALESMATE_OWNER_ID = process.env.SALESMATE_OWNER_ID;

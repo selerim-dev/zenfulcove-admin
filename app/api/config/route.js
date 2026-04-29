@@ -79,6 +79,27 @@ export async function POST(request) {
       }
     }
 
+    if (updates.eventPopupSalesmateSms !== undefined) {
+      updated.eventPopupSalesmateSms = {
+        ...updated.eventPopupSalesmateSms,
+        ...updates.eventPopupSalesmateSms,
+      };
+      if (updates.eventPopupSalesmateSms.testDestinations !== undefined) {
+        updated.eventPopupSalesmateSms.testDestinations = {
+          ...updated.eventPopupSalesmateSms.testDestinations,
+          ...updates.eventPopupSalesmateSms.testDestinations,
+        };
+      }
+      if (updates.eventPopupSalesmateSms.sms) {
+        updated.eventPopupSalesmateSms.sms = updates.eventPopupSalesmateSms.sms;
+      }
+      if (updates.eventPopupSalesmateSms.salesmateTags !== undefined) {
+        updated.eventPopupSalesmateSms.salesmateTags = Array.isArray(updates.eventPopupSalesmateSms.salesmateTags)
+          ? updates.eventPopupSalesmateSms.salesmateTags
+          : [];
+      }
+    }
+
     if (updates.jotformClientSync !== undefined) {
       updated.jotformClientSync = {
         ...updated.jotformClientSync,
