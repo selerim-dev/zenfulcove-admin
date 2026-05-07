@@ -119,6 +119,13 @@ export async function POST(request) {
       };
     }
 
+    if (updates.salesmateFormSync !== undefined) {
+      updated.salesmateFormSync = {
+        ...updated.salesmateFormSync,
+        ...updates.salesmateFormSync,
+      };
+    }
+
     await setConfig(updated);
 
     return NextResponse.json({ success: true, config: updated });

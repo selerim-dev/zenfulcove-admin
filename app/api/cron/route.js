@@ -7,6 +7,8 @@ import {
   setEventPopupContactState,
   getEventPopupSmsSent,
   setEventPopupSmsSent,
+  getSalesmateFormSyncState,
+  setSalesmateFormSyncState,
 } from "@/lib/kv";
 import { getProperties, getAvailability, getBookings, getAllBookings } from "@/lib/lodgify";
 import { getFormSubmissions, bookingHasWaiver, extractClientContact } from "@/lib/jotform";
@@ -19,6 +21,7 @@ import {
   getContactByEmailDetailed,
   updateContactCustomFields,
   upsertContactsToList,
+  listAllContactLists,
 } from "@/lib/sendgrid";
 
 const DRY_RUN_ENV = process.env.CRON_DRY_RUN === "true";
@@ -296,6 +299,8 @@ function parseSelectedAutomations(request) {
     syncs: "syncs",
     clients: "syncs",
     "client-sync": "syncs",
+    "salesmate-sync": "salesmate-sync",
+    "salesmate-form-sync": "salesmate-sync",
   };
 
   const normalized = items
@@ -1992,6 +1997,223 @@ async function runLodgifyClientSync(automationConfig, dryRunOverride) {
   return logs;
 }
 
+// ─── Automation: Salesmate Form Sync ────────────────────────────────────────
+// Always-on. Mirrors a SINGLE master SendGrid list into Salesmate. For each
+// contact in that source list, derives Salesmate tags from the *other*
+// SendGrid lists the contact also belongs to (using `contact.list_ids`).
+// One Salesmate write per contact carries every form-source tag at once.
+// Re-syncs only when the derived tag set changes for a given contact.
+
+function salesmateSyncContactKey(contact) {
+  const email = normalizeEmail(contact?.email);
+  if (email) return `email:${email}`;
+  const phone = normalizePhoneNumber(contact?.phone_number || contact?.phone || "");
+  if (phone) return `phone:${phone}`;
+  return "";
+}
+
+function tagsSignature(tags) {
+  return [...new Set((tags || []).map((tag) => String(tag || "").trim()).filter(Boolean))]
+    .sort()
+    .join("|");
+}
+
+export async function runSalesmateFormSync(automationConfig, dryRunOverride) {
+  const isDryRun = dryRunOverride !== undefined ? dryRunOverride : DRY_RUN_ENV;
+  const logs = [];
+  const config = automationConfig.salesmateFormSync || {};
+  const automation = "Salesmate Form Sync";
+
+  if (!config.enabled) {
+    logs.push({
+      timestamp: new Date().toISOString(),
+      automation,
+      property: "—",
+      action: "Skipped (disabled)",
+      status: "skipped",
+    });
+    return logs;
+  }
+
+  try {
+    validateSalesmateConfig();
+  } catch (err) {
+    logs.push({
+      timestamp: new Date().toISOString(),
+      automation,
+      property: "—",
+      action: `Skipped: ${err.message}`,
+      status: "skipped",
+    });
+    return logs;
+  }
+
+  const sourceListId = String(config.sourceListId || "").trim();
+  if (!sourceListId) {
+    logs.push({
+      timestamp: new Date().toISOString(),
+      automation,
+      property: "—",
+      action: "Skipped: no source SendGrid list configured (set sourceListId)",
+      status: "skipped",
+    });
+    return logs;
+  }
+
+  const leadSource = String(config.leadSource || "Website").trim();
+
+  let allLists = [];
+  try {
+    allLists = await listAllContactLists();
+  } catch (err) {
+    logs.push({
+      timestamp: new Date().toISOString(),
+      automation,
+      property: "—",
+      action: `Failed to fetch SendGrid lists: ${err.message}`,
+      status: "failed",
+    });
+    return logs;
+  }
+
+  const listIndex = new Map(allLists.map((list) => [list.id, list]));
+  const sourceList = listIndex.get(sourceListId);
+
+  if (!sourceList) {
+    logs.push({
+      timestamp: new Date().toISOString(),
+      automation,
+      property: sourceListId,
+      action: `Skipped: source list ${sourceListId} not found in SendGrid`,
+      status: "failed",
+    });
+    return logs;
+  }
+
+  let contacts = [];
+  try {
+    contacts = await getContactsFromListDetailed(sourceListId);
+  } catch (err) {
+    logs.push({
+      timestamp: new Date().toISOString(),
+      automation,
+      property: sourceList.name || sourceListId,
+      action: `Failed to load contacts for source list: ${err.message}`,
+      status: "failed",
+    });
+    return logs;
+  }
+
+  logs.push({
+    timestamp: new Date().toISOString(),
+    automation,
+    property: sourceList.name || sourceListId,
+    action: `Source list ${sourceListId} (${sourceList.name}) — ${contacts.length} contact(s)${isDryRun ? " | DRY RUN" : ""}`,
+    status: "info",
+  });
+
+  let created = 0;
+  let updated = 0;
+  let unchanged = 0;
+  let failed = 0;
+  let skippedNoIdentity = 0;
+  let skippedNoTags = 0;
+
+  for (const contact of contacts) {
+    const contactKey = salesmateSyncContactKey(contact);
+    if (!contactKey) {
+      skippedNoIdentity += 1;
+      continue;
+    }
+
+    const memberListIds = Array.isArray(contact?.list_ids) ? contact.list_ids : [];
+    const tags = memberListIds
+      .filter((id) => id && id !== sourceListId)
+      .map((id) => String(listIndex.get(id)?.name || "").trim())
+      .filter(Boolean);
+
+    const uniqueTags = [...new Set(tags)];
+    const signature = tagsSignature(uniqueTags);
+
+    if (uniqueTags.length === 0) {
+      skippedNoTags += 1;
+      continue;
+    }
+
+    const email = normalizeEmail(contact?.email);
+    const phone = normalizePhoneNumber(contact?.phone_number || contact?.phone || "");
+
+    const existing = isDryRun ? null : await getSalesmateFormSyncState(sourceListId, contactKey);
+    if (existing?.salesmateSynced && existing?.tagsSignature === signature) {
+      unchanged += 1;
+      continue;
+    }
+
+    const isUpdate = Boolean(existing?.salesmateSynced);
+
+    if (isDryRun) {
+      logs.push({
+        timestamp: new Date().toISOString(),
+        automation,
+        property: email || phone || contactKey,
+        action: `[DRY RUN] Would ${isUpdate ? "update" : "create"} Salesmate contact for ${email || phone} | tags: ${uniqueTags.join(", ")}`,
+        status: "success",
+      });
+      if (isUpdate) updated += 1;
+      else created += 1;
+      continue;
+    }
+
+    try {
+      const result = await createSalesmateContact({
+        contact: {
+          email,
+          phone,
+          firstName: contact?.first_name || contact?.firstName || "",
+          lastName: contact?.last_name || contact?.lastName || "",
+        },
+        leadSource,
+        tags: uniqueTags,
+      });
+      await setSalesmateFormSyncState(sourceListId, contactKey, {
+        salesmateContactId: result.id || existing?.salesmateContactId || "",
+        salesmateSynced: true,
+        tags: uniqueTags,
+        tagsSignature: signature,
+        syncedAt: new Date().toISOString(),
+      });
+      if (isUpdate) updated += 1;
+      else created += 1;
+      logs.push({
+        timestamp: new Date().toISOString(),
+        automation,
+        property: email || phone || contactKey,
+        action: `${isUpdate ? "Updated" : "Created"} Salesmate contact for ${email || phone} | tags: ${uniqueTags.join(", ")}${result.id ? ` | id: ${result.id}` : ""}`,
+        status: "success",
+      });
+    } catch (err) {
+      failed += 1;
+      logs.push({
+        timestamp: new Date().toISOString(),
+        automation,
+        property: email || phone || contactKey,
+        action: `Failed Salesmate sync for ${email || phone}: ${err.message}`,
+        status: "failed",
+      });
+    }
+  }
+
+  logs.push({
+    timestamp: new Date().toISOString(),
+    automation,
+    property: "—",
+    action: `Done | created: ${created} | updated: ${updated} | unchanged: ${unchanged} | no-tags: ${skippedNoTags} | no-identity: ${skippedNoIdentity} | failed: ${failed}`,
+    status: failed > 0 ? "failed" : "info",
+  });
+
+  return logs;
+}
+
 // ─── POST handler ───────────────────────────────────────────────────────────
 
 export async function POST(request) {
@@ -2052,6 +2274,15 @@ export async function POST(request) {
   ) {
     const lodgifySyncLogs = await runLodgifyClientSync(automationConfig, isDryRun);
     allLogs.push(...lodgifySyncLogs);
+  }
+
+  if (
+    runAllAutomations ||
+    selectedAutomations.has("salesmate-sync") ||
+    selectedAutomations.has("syncs")
+  ) {
+    const salesmateSyncLogs = await runSalesmateFormSync(automationConfig, isDryRun);
+    allLogs.push(...salesmateSyncLogs);
   }
 
   await appendLogs(allLogs);

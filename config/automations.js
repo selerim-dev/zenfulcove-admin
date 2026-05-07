@@ -90,4 +90,17 @@ export const automationConfig = {
     stayDateLookaheadDays: 365,
     includeCancelledBookings: true,
   },
+  // Always-on daily sweep that mirrors a SINGLE master SendGrid list into
+  // Salesmate. For each contact in `sourceListId`, tags are derived from every
+  // *other* SendGrid list the contact also belongs to (using SendGrid's
+  // `list_ids` field on each contact), so a single Salesmate write per contact
+  // captures every form they came from. Re-syncs only when the derived tag set
+  // changes for that contact.
+  salesmateFormSync: {
+    enabled: true,
+    leadSource: "Website",
+    // The master list (default = "All Clients"). Every contact in this list is
+    // mirrored into Salesmate.
+    sourceListId: "e46aa43e-3f91-4965-8bbb-fcae8f9c3124",
+  },
 };
