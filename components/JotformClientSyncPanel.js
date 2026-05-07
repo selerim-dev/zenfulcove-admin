@@ -1,5 +1,6 @@
 "use client";
 
+import SendGridListPicker from "./SendGridListPicker";
 import Toggle from "./Toggle";
 
 export default function JotformClientSyncPanel({ config, onChange }) {
@@ -26,21 +27,12 @@ export default function JotformClientSyncPanel({ config, onChange }) {
       </p>
 
       <div className="bg-white rounded-xl shadow-sm border border-sand p-5 space-y-4">
-        <div>
-          <label className="block text-xs text-forest/60 uppercase tracking-wider mb-1">
-            SendGrid Master List ID
-          </label>
-          <input
-            type="text"
-            value={safeConfig.sendgridContactListId || ""}
-            onChange={(e) => updateField("sendgridContactListId", e.target.value)}
-            placeholder="e.g. e46aa43e-3f91-4965-8bbb-fcae8f9c3124"
-            className="border border-sand rounded-lg px-3 py-2 text-sm w-full font-mono focus:outline-none focus:ring-2 focus:ring-grove/30"
-          />
-          <p className="text-xs text-forest/40 mt-1">
-            Contacts from the configured Jotform submissions are upserted into this list.
-          </p>
-        </div>
+        <SendGridListPicker
+          label="SendGrid Master List"
+          value={safeConfig.sendgridContactListId || ""}
+          onChange={(value) => updateField("sendgridContactListId", value)}
+          helperText="Contacts from the configured Jotform submissions are upserted into this list."
+        />
 
         <div>
           <label className="block text-xs text-forest/60 uppercase tracking-wider mb-1">

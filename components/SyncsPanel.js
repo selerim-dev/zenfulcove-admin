@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import SendGridListPicker from "./SendGridListPicker";
 import Toggle from "./Toggle";
 
 function SyncCard({ title, description, enabled, onToggle, action, children }) {
@@ -46,36 +47,11 @@ function SalesmateSyncCard({ config, onChange }) {
   const safeConfig = config || {};
   const sourceListId = String(safeConfig.sourceListId || "").trim();
 
-  const [lists, setLists] = useState([]);
-  const [listsLoading, setListsLoading] = useState(false);
-  const [listsError, setListsError] = useState("");
   const [testModalOpen, setTestModalOpen] = useState(false);
   const [testRunning, setTestRunning] = useState(false);
   const [testLive, setTestLive] = useState(false);
   const [testResult, setTestResult] = useState(null);
   const [testError, setTestError] = useState("");
-
-  async function loadLists() {
-    setListsLoading(true);
-    setListsError("");
-    try {
-      const res = await fetch("/api/sendgrid-lists");
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || "Failed to load SendGrid lists");
-      const sorted = [...(data.lists || [])].sort((a, b) =>
-        String(a.name || "").localeCompare(String(b.name || ""))
-      );
-      setLists(sorted);
-    } catch (err) {
-      setListsError(err.message || "Failed to load SendGrid lists");
-    } finally {
-      setListsLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    loadLists();
-  }, []);
 
   function setSourceListId(value) {
     onChange({ ...safeConfig, sourceListId: value });
@@ -115,8 +91,6 @@ function SalesmateSyncCard({ config, onChange }) {
     }
   }
 
-  const sourceList = lists.find((list) => list.id === sourceListId);
-
   return (
     <SyncCard
       title="Salesmate Form Sync"
@@ -134,42 +108,12 @@ function SalesmateSyncCard({ config, onChange }) {
       }
     >
       <div className="grid gap-4 md:grid-cols-2">
-        <div>
-          <div className="flex items-center justify-between mb-1">
-            <FieldLabel>Source SendGrid List</FieldLabel>
-            <button
-              type="button"
-              onClick={loadLists}
-              disabled={listsLoading}
-              className="text-xs font-medium text-forest/50 hover:text-forest disabled:opacity-50"
-            >
-              {listsLoading ? "Loading…" : "Refresh"}
-            </button>
-          </div>
-          <select
-            value={sourceListId}
-            onChange={(e) => setSourceListId(e.target.value)}
-            disabled={listsLoading || lists.length === 0}
-            className="border border-sand rounded-lg px-3 py-2 text-sm w-full focus:outline-none focus:ring-2 focus:ring-grove/30 disabled:opacity-50"
-          >
-            {sourceListId && !sourceList ? (
-              <option value={sourceListId}>{`(unknown list — ${sourceListId})`}</option>
-            ) : null}
-            {lists.map((list) => (
-              <option key={list.id} value={list.id}>
-                {list.name} — {Number(list.contactCount || 0).toLocaleString()} contacts
-              </option>
-            ))}
-          </select>
-          {listsError ? (
-            <p className="text-xs text-red-600 mt-1">{listsError}</p>
-          ) : (
-            <p className="text-xs text-forest/40 mt-1">
-              Tags come from every <em>other</em> list each contact also belongs to.
-              No per-list configuration needed.
-            </p>
-          )}
-        </div>
+        <SendGridListPicker
+          label="Source SendGrid List"
+          value={sourceListId}
+          onChange={setSourceListId}
+          helperText="Tags come from every other list each contact also belongs to. No per-list configuration needed."
+        />
         <div>
           <FieldLabel>Salesmate Lead Source</FieldLabel>
           <input
@@ -315,16 +259,11 @@ export default function SyncsPanel({
         enabled={safeJotformConfig.enabled}
         onToggle={(enabled) => updateJotform("enabled", enabled)}
       >
-        <div>
-          <FieldLabel>SendGrid Master List ID</FieldLabel>
-          <input
-            type="text"
-            value={safeJotformConfig.sendgridContactListId || ""}
-            onChange={(e) => updateJotform("sendgridContactListId", e.target.value)}
-            placeholder="e.g. e46aa43e-3f91-4965-8bbb-fcae8f9c3124"
-            className="border border-sand rounded-lg px-3 py-2 text-sm w-full font-mono focus:outline-none focus:ring-2 focus:ring-grove/30"
-          />
-        </div>
+        <SendGridListPicker
+          label="SendGrid Master List"
+          value={safeJotformConfig.sendgridContactListId || ""}
+          onChange={(value) => updateJotform("sendgridContactListId", value)}
+        />
 
         <div>
           <FieldLabel>Jotform Form IDs</FieldLabel>
@@ -353,19 +292,12 @@ export default function SyncsPanel({
         enabled={safeLodgifyConfig.enabled}
         onToggle={(enabled) => updateLodgify("enabled", enabled)}
       >
-        <div>
-          <FieldLabel>SendGrid Master List ID</FieldLabel>
-          <input
-            type="text"
-            value={safeLodgifyConfig.sendgridContactListId || ""}
-            onChange={(e) => updateLodgify("sendgridContactListId", e.target.value)}
-            placeholder="e.g. e46aa43e-3f91-4965-8bbb-fcae8f9c3124"
-            className="border border-sand rounded-lg px-3 py-2 text-sm w-full font-mono focus:outline-none focus:ring-2 focus:ring-grove/30"
-          />
-          <p className="text-xs text-forest/40 mt-1">
-            Usually this should be the same master client list used by the Jotform sync.
-          </p>
-        </div>
+        <SendGridListPicker
+          label="SendGrid Master List"
+          value={safeLodgifyConfig.sendgridContactListId || ""}
+          onChange={(value) => updateLodgify("sendgridContactListId", value)}
+          helperText="Usually this should be the same master client list used by the Jotform sync."
+        />
 
         <div className="grid gap-4 md:grid-cols-2">
           <div>

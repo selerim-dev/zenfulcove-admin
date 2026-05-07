@@ -14,8 +14,7 @@ export async function POST(request) {
       segments: body?.segments,
       lists: body?.lists,
       channel: body?.channel,
-      subject: body?.subject,
-      emailBody: body?.emailBody,
+      templateId: body?.templateId,
       smsBody: body?.smsBody,
       testDestinations: body?.testDestinations,
     });

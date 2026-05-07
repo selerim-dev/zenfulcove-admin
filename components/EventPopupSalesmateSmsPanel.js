@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import SendGridListPicker from "./SendGridListPicker";
 import Toggle from "./Toggle";
 
 const DEFAULT_SMS = [
@@ -182,18 +183,11 @@ export default function EventPopupSalesmateSmsPanel({ config, onChange }) {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-xs text-forest/60 uppercase tracking-wider mb-1">
-              SendGrid Event Popup List ID
-            </label>
-            <input
-              type="text"
-              value={safeConfig.sendgridContactListId || ""}
-              onChange={(e) => updateField("sendgridContactListId", e.target.value)}
-              placeholder="dc7aeb0a-c70c-4c6e-a1cd-b0c8c2b93cb8"
-              className="border border-sand rounded-lg px-3 py-2 text-sm w-full font-mono focus:outline-none focus:ring-2 focus:ring-grove/30"
-            />
-          </div>
+          <SendGridListPicker
+            label="SendGrid Event Popup List"
+            value={safeConfig.sendgridContactListId || ""}
+            onChange={(value) => updateField("sendgridContactListId", value)}
+          />
           <div>
             <label className="block text-xs text-forest/60 uppercase tracking-wider mb-1">
               SMS Sender Number

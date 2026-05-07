@@ -1,7 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import SendGridListPicker from "./SendGridListPicker";
 import { PROMOTION_CONTACT_LISTS } from "@/lib/promotion-lists";
+
+const DEFAULT_LIST_ID =
+  PROMOTION_CONTACT_LISTS.find((list) => list.key === "all-clients")?.listId ||
+  PROMOTION_CONTACT_LISTS[0]?.listId ||
+  "";
 
 const CHANNELS = [
   { value: "email", label: "Email" },
@@ -9,25 +15,45 @@ const CHANNELS = [
   { value: "both", label: "Both" },
 ];
 
-function ListOption({ checked, title, subtitle, onChange }) {
+const TEMPLATE_VARIABLES = [
+  { token: "{{first_name}}", description: "Recipient's first name" },
+  { token: "{{last_name}}", description: "Recipient's last name" },
+  { token: "{{full_name}}", description: "Recipient's full name (first + last)" },
+  { token: "{{email}}", description: "Recipient's email address" },
+];
+
+function TemplateVariablesInfo() {
+  const [open, setOpen] = useState(false);
   return (
-    <label
-      className={`flex items-start gap-3 rounded-lg border px-4 py-3 ${
-        checked ? "border-grove bg-cream" : "border-sand bg-white"
-      }`}
-    >
-      <input
-        type="radio"
-        name="promotion-list"
-        checked={checked}
-        onChange={onChange}
-        className="mt-1 h-4 w-4 accent-grove"
-      />
-      <span className="min-w-0">
-        <span className="block text-sm font-medium text-forest">{title}</span>
-        <span className="mt-1 block break-all text-xs text-forest/50">{subtitle}</span>
-      </span>
-    </label>
+    <span className="relative inline-flex">
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        aria-label="Supported template variables"
+        className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-forest/30 text-[10px] font-semibold text-forest/60 hover:border-forest hover:text-forest"
+      >
+        i
+      </button>
+      {open ? (
+        <div className="absolute left-6 top-0 z-20 w-72 rounded-xl border border-sand bg-white p-3 shadow-lg">
+          <p className="text-xs font-medium text-forest mb-2">
+            Supported template variables
+          </p>
+          <p className="text-[11px] text-forest/60 mb-2">
+            Reference these inside your SendGrid dynamic template.
+          </p>
+          <ul className="space-y-1.5">
+            {TEMPLATE_VARIABLES.map((item) => (
+              <li key={item.token} className="text-[11px] text-forest/80">
+                <code className="font-mono text-forest">{item.token}</code>
+                <span className="text-forest/50"> — {item.description}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+    </span>
   );
 }
 
@@ -59,10 +85,10 @@ function ResultLog({ result }) {
 }
 
 export default function OneOffPromotionsPanel({ onComplete }) {
-  const [selectedList, setSelectedList] = useState("all-clients");
+  const [selectedListId, setSelectedListId] = useState(DEFAULT_LIST_ID);
+  const [selectedListName, setSelectedListName] = useState("");
   const [channel, setChannel] = useState("sms");
-  const [subject, setSubject] = useState("");
-  const [emailBody, setEmailBody] = useState("");
+  const [templateId, setTemplateId] = useState("");
   const [smsBody, setSmsBody] = useState("");
   const [testEmail, setTestEmail] = useState("");
   const [testSms, setTestSms] = useState("");
@@ -76,15 +102,16 @@ export default function OneOffPromotionsPanel({ onComplete }) {
   const emailSelected = channel === "email" || channel === "both";
   const smsSelected = channel === "sms" || channel === "both";
   const canSubmit =
-    Boolean(selectedList) &&
-    (!emailSelected || (subject.trim() && emailBody.trim())) &&
+    Boolean(selectedListId) &&
+    (!emailSelected || templateId.trim()) &&
     (!smsSelected || smsBody.trim());
 
   async function runPromotion(mode) {
     if (mode === "send") {
-      const selectedLabel =
-        PROMOTION_CONTACT_LISTS.find((list) => list.key === selectedList)?.label ||
-        selectedList;
+      const fallbackLabel =
+        PROMOTION_CONTACT_LISTS.find((list) => list.listId === selectedListId)?.label ||
+        selectedListId;
+      const selectedLabel = selectedListName || fallbackLabel;
       const confirmed = window.confirm(
         `Send this ${channel} promotion to ${selectedLabel} now?`
       );
@@ -101,10 +128,9 @@ export default function OneOffPromotionsPanel({ onComplete }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           mode,
-          lists: [selectedList],
+          lists: [selectedListId],
           channel,
-          subject,
-          emailBody,
+          templateId,
           smsBody,
           testDestinations: {
             email: testEmail,
@@ -152,18 +178,16 @@ export default function OneOffPromotionsPanel({ onComplete }) {
 
       <section className="bg-white rounded-xl shadow-sm border border-sand p-5 space-y-5">
         <div>
-          <h3 className="text-lg font-medium text-forest">Audience Lists</h3>
-          <div className="mt-3 grid grid-cols-1 gap-3">
-            {PROMOTION_CONTACT_LISTS.map((list) => (
-              <ListOption
-                key={list.key}
-                title={list.label}
-                subtitle={list.listId}
-                checked={selectedList === list.key}
-                onChange={() => setSelectedList(list.key)}
-              />
-            ))}
-          </div>
+          <h3 className="text-lg font-medium text-forest mb-3">Audience List</h3>
+          <SendGridListPicker
+            label="SendGrid Contact List"
+            value={selectedListId}
+            onChange={(id, list) => {
+              setSelectedListId(id);
+              setSelectedListName(list?.name || "");
+            }}
+            helperText="Pick any SendGrid contact list as the audience for this promotion."
+          />
         </div>
 
         <div>
@@ -187,25 +211,21 @@ export default function OneOffPromotionsPanel({ onComplete }) {
         </div>
 
         {emailSelected ? (
-          <div className="space-y-4">
-            <div>
-              <FieldLabel>Email Subject</FieldLabel>
-              <input
-                type="text"
-                value={subject}
-                onChange={(e) => setSubject(e.target.value)}
-                className="border border-sand rounded-lg px-3 py-2 text-sm w-full focus:outline-none focus:ring-2 focus:ring-grove/30"
-              />
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <FieldLabel>SendGrid Template ID</FieldLabel>
+              <TemplateVariablesInfo />
             </div>
-            <div>
-              <FieldLabel>Email Message</FieldLabel>
-              <textarea
-                rows={7}
-                value={emailBody}
-                onChange={(e) => setEmailBody(e.target.value)}
-                className="border border-sand rounded-lg px-3 py-2 text-sm w-full focus:outline-none focus:ring-2 focus:ring-grove/30"
-              />
-            </div>
+            <input
+              type="text"
+              value={templateId}
+              onChange={(e) => setTemplateId(e.target.value)}
+              placeholder="d-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+              className="border border-sand rounded-lg px-3 py-2 text-sm w-full font-mono focus:outline-none focus:ring-2 focus:ring-grove/30"
+            />
+            <p className="text-xs text-forest/40 mt-1">
+              Subject and body are defined inside the SendGrid dynamic template. Click the info icon to see the supported variables.
+            </p>
           </div>
         ) : null}
 

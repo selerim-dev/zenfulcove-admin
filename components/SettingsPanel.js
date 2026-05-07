@@ -1,5 +1,7 @@
 "use client";
 
+import SendGridListPicker from "./SendGridListPicker";
+
 export default function SettingsPanel({ config, onChange }) {
   const sg = config || {};
 
@@ -39,21 +41,12 @@ export default function SettingsPanel({ config, onChange }) {
             className="border border-sand rounded-lg px-3 py-2 text-sm w-full focus:outline-none focus:ring-2 focus:ring-grove/30"
           />
         </div>
-        <div>
-          <label className="block text-xs text-forest/60 uppercase tracking-wider mb-1">
-            SendGrid Contact List ID
-          </label>
-          <input
-            type="text"
-            value={sg.sendgridContactListId || ""}
-            onChange={(e) => update("sendgridContactListId", e.target.value)}
-            placeholder="e.g. a1b2c3d4-..."
-            className="border border-sand rounded-lg px-3 py-2 text-sm w-full font-mono focus:outline-none focus:ring-2 focus:ring-grove/30"
-          />
-          <p className="text-xs text-forest/40 mt-1">
-            Shared contact list used by vacancy promo emails and other automations.
-          </p>
-        </div>
+        <SendGridListPicker
+          label="SendGrid Contact List"
+          value={sg.sendgridContactListId || ""}
+          onChange={(value) => update("sendgridContactListId", value)}
+          helperText="Shared contact list used by vacancy promo emails and other automations."
+        />
       </div>
     </div>
   );
