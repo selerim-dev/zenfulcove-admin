@@ -361,6 +361,14 @@ function normalizePhoneNumber(value) {
 
 // ─── Automation 1: Vacancy Promo Emails ─────────────────────────────────────
 
+function formatPropertyList(items) {
+  const list = items.filter(Boolean);
+  if (list.length === 0) return "";
+  if (list.length === 1) return list[0];
+  if (list.length === 2) return `${list[0]} and ${list[1]}`;
+  return `${list.slice(0, -1).join(", ")}, and ${list[list.length - 1]}`;
+}
+
 async function runVacancyEmails(automationConfig, dryRunOverride) {
   const isDryRun = dryRunOverride !== undefined ? dryRunOverride : DRY_RUN_ENV;
   const logs = [];
@@ -397,7 +405,7 @@ async function runVacancyEmails(automationConfig, dryRunOverride) {
       });
       return logs;
     }
-    recipients = await getContactsFromList(contactListId);
+    recipients = await getContactsFromListDetailed(contactListId);
     if (recipients.length === 0) {
       logs.push({
         timestamp: new Date().toISOString(),
@@ -424,6 +432,9 @@ async function runVacancyEmails(automationConfig, dryRunOverride) {
     const todayStr = today();
     const endDate = addDays(todayStr, 30);
 
+    // Phase 1: Collect vacant properties grouped by (window, startDate)
+    const vacanciesByWindow = new Map();
+
     for (const property of properties) {
       try {
         const availability = await getAvailability(
@@ -444,40 +455,17 @@ async function runVacancyEmails(automationConfig, dryRunOverride) {
 
           for (const window of config.windows) {
             if (daysUntil === window.daysBeforeCheckin) {
-              // Send to every contact in the SendGrid list
-              for (const email of recipients) {
-                try {
-                  if (!isDryRun) {
-                  await sendTemplateEmail({
-                    to: email,
-                    templateId: window.templateId,
-                    from,
-                    data: {
-                      propertyName: property.name,
-                      checkinDate: startDate,
-                      daysUntilAvailable: window.daysBeforeCheckin,
-                    },
-                  });
-
-                  }
-                  logs.push({
-                    timestamp: new Date().toISOString(),
-                    automation: "Vacancy Promo Emails",
-                    property: property.name,
-                    action: isDryRun
-                      ? `[DRY RUN] Would have sent ${window.daysBeforeCheckin}-day promo to ${email}`
-                      : `Sent ${window.daysBeforeCheckin}-day promo to ${email} (${window.templateId})`,
-                    status: "success",
-                  });
-                } catch (err) {
-                  logs.push({
-                    timestamp: new Date().toISOString(),
-                    automation: "Vacancy Promo Emails",
-                    property: property.name,
-                    action: `Failed ${window.daysBeforeCheckin}-day promo to ${email}: ${err.message}`,
-                    status: "failed",
-                  });
-                }
+              const key = `${window.daysBeforeCheckin}|${window.templateId}|${startDate}`;
+              if (!vacanciesByWindow.has(key)) {
+                vacanciesByWindow.set(key, {
+                  window,
+                  startDate,
+                  propertyNames: [],
+                });
+              }
+              const entry = vacanciesByWindow.get(key);
+              if (!entry.propertyNames.includes(property.name)) {
+                entry.propertyNames.push(property.name);
               }
             }
           }
@@ -490,6 +478,61 @@ async function runVacancyEmails(automationConfig, dryRunOverride) {
           action: `Failed to fetch availability: ${err.message}`,
           status: "failed",
         });
+      }
+    }
+
+    // Phase 2: One email per recipient per group, listing all vacant properties
+    for (const entry of vacanciesByWindow.values()) {
+      const { window, startDate, propertyNames } = entry;
+      propertyNames.sort();
+      const propertyNamesList = formatPropertyList(propertyNames);
+
+      for (const contact of recipients) {
+        const email = String(contact?.email || "").trim();
+        if (!email) continue;
+        const firstName = contact?.first_name || contact?.firstName || "";
+        const lastName = contact?.last_name || contact?.lastName || "";
+        const greetingName = firstName || "there";
+
+        try {
+          if (!isDryRun) {
+            await sendTemplateEmail({
+              to: email,
+              templateId: window.templateId,
+              from,
+              data: {
+                first_name: firstName,
+                last_name: lastName,
+                email,
+                greetingName,
+                propertyNames,
+                propertyNamesList,
+                propertyCount: propertyNames.length,
+                checkinDate: startDate,
+                daysUntilAvailable: window.daysBeforeCheckin,
+              },
+            });
+          }
+          const propertyLabel =
+            propertyNames.length === 1 ? "property" : "properties";
+          logs.push({
+            timestamp: new Date().toISOString(),
+            automation: "Vacancy Promo Emails",
+            property: propertyNamesList,
+            action: isDryRun
+              ? `[DRY RUN] Would have sent ${window.daysBeforeCheckin}-day promo to ${email} for ${propertyNames.length} ${propertyLabel}`
+              : `Sent ${window.daysBeforeCheckin}-day promo to ${email} (${window.templateId}) for ${propertyNames.length} ${propertyLabel}`,
+            status: "success",
+          });
+        } catch (err) {
+          logs.push({
+            timestamp: new Date().toISOString(),
+            automation: "Vacancy Promo Emails",
+            property: propertyNamesList,
+            action: `Failed ${window.daysBeforeCheckin}-day promo to ${email}: ${err.message}`,
+            status: "failed",
+          });
+        }
       }
     }
   } catch (err) {
