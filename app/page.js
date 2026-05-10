@@ -11,6 +11,7 @@ import PopupFollowupsPanel from "@/components/PopupFollowupsPanel";
 import EventPopupSalesmateSmsPanel from "@/components/EventPopupSalesmateSmsPanel";
 import SyncsPanel from "@/components/SyncsPanel";
 import OneOffPromotionsPanel from "@/components/OneOffPromotionsPanel";
+import MessagesPanel from "@/components/MessagesPanel";
 import ActivityLog from "@/components/ActivityLog";
 
 export default function Dashboard() {
@@ -149,8 +150,13 @@ export default function Dashboard() {
         </div>
 
         {/* Content */}
-        <main className="flex-1 max-w-4xl mx-auto px-6 py-10 space-y-8 w-full">
-          {config && (
+        <main
+          className={`flex-1 ${
+            activeCategory === "messages" ? "max-w-6xl" : "max-w-4xl"
+          } mx-auto px-6 py-10 space-y-8 w-full`}
+        >
+          {activeCategory === "messages" && <MessagesPanel />}
+          {config && activeCategory !== "messages" && (
             <>
               {activeCategory === "settings" && (
                 <SettingsPanel
@@ -230,7 +236,7 @@ export default function Dashboard() {
               )}
 
               {/* Save Button */}
-              {activeCategory !== "promotions" && (
+              {activeCategory !== "promotions" && activeCategory !== "messages" && (
                 <div className="flex justify-end">
                   <button
                     onClick={handleSave}
@@ -244,15 +250,17 @@ export default function Dashboard() {
             </>
           )}
 
-          {/* Activity Log — always visible */}
-          <ActivityLog
-            logs={logs}
-            page={logsPage}
-            totalPages={logsTotalPages}
-            total={logsTotal}
-            onPageChange={fetchLogsPage}
-            onRefresh={fetchData}
-          />
+          {/* Activity Log — hidden on messages page */}
+          {activeCategory !== "messages" && (
+            <ActivityLog
+              logs={logs}
+              page={logsPage}
+              totalPages={logsTotalPages}
+              total={logsTotal}
+              onPageChange={fetchLogsPage}
+              onRefresh={fetchData}
+            />
+          )}
         </main>
       </div>
     </div>
