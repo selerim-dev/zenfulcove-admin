@@ -103,4 +103,16 @@ export const automationConfig = {
     // mirrored into Salesmate.
     sourceListId: "e46aa43e-3f91-4965-8bbb-fcae8f9c3124",
   },
+  // Real-time email alert when an inbound SMS is received at any Twilio
+  // number. Fires from the Twilio inbound webhook, so latency is whatever
+  // SendGrid takes (typically <1s). Recipients can be one or many.
+  messageNotifications: {
+    enabled: true,
+    recipients: ["contact@zenfulcove.com"],
+    subjectPrefix: "[Zenfulcove SMS]",
+    // Base URL of the admin dashboard. Used to deep-link the alert email
+    // straight to the messages tab + thread. Falls back to
+    // NEXT_PUBLIC_DASHBOARD_URL env var if blank.
+    dashboardUrl: "",
+  },
 };

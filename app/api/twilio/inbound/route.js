@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { validateTwilioSignature, normalizePhone } from "@/lib/twilio";
-import { appendSmsMessage } from "@/lib/kv";
+import { appendSmsMessage, getConfig } from "@/lib/kv";
+import { sendPlainEmail } from "@/lib/sendgrid";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -61,5 +62,73 @@ export async function POST(request) {
     },
   });
 
+  try {
+    await notifyInboundMessage({ twilioNumber, contactPhone, body });
+  } catch (err) {
+    console.error("Inbound SMS notification failed:", err);
+  }
+
   return twimlEmpty();
+}
+
+async function notifyInboundMessage({ twilioNumber, contactPhone, body }) {
+  const config = await getConfig();
+  const notif = config?.messageNotifications;
+  if (!notif?.enabled) return;
+
+  const recipients = Array.isArray(notif.recipients)
+    ? notif.recipients.map((r) => String(r || "").trim()).filter(Boolean)
+    : [];
+  if (recipients.length === 0) return;
+
+  const from = {
+    email: config?.sendgrid?.fromEmail,
+    name: config?.sendgrid?.fromName,
+  };
+  if (!from.email) return;
+
+  const prefix = String(notif.subjectPrefix || "[Zenfulcove SMS]").trim();
+  const preview = String(body || "").slice(0, 120).replace(/\s+/g, " ").trim();
+  const subject = `${prefix} New message from ${contactPhone}${preview ? ` — ${preview}` : ""}`;
+
+  const deepLink = buildDashboardDeepLink({
+    base: notif.dashboardUrl,
+    twilioNumber,
+    contactPhone,
+  });
+
+  const lines = [
+    `You received a new SMS at ${twilioNumber} from ${contactPhone}.`,
+    "",
+    "Message:",
+    body || "(empty message)",
+    "",
+    `Received: ${new Date().toISOString()}`,
+    "",
+  ];
+  if (deepLink) {
+    lines.push(`Open this conversation: ${deepLink}`);
+  } else {
+    lines.push("Open the Zenfulcove admin dashboard to reply or manage this conversation.");
+  }
+  const text = lines.join("\n");
+
+  await Promise.all(
+    recipients.map((to) => sendPlainEmail({ to, subject, text, from }))
+  );
+}
+
+function buildDashboardDeepLink({ base, twilioNumber, contactPhone }) {
+  const rawBase =
+    String(base || "").trim() || "https://zenfulcove-admin.vercel.app/";
+  if (!rawBase) return "";
+  try {
+    const url = new URL(rawBase);
+    url.searchParams.set("tab", "messages");
+    if (twilioNumber) url.searchParams.set("number", twilioNumber);
+    if (contactPhone) url.searchParams.set("contact", contactPhone);
+    return url.toString();
+  } catch {
+    return "";
+  }
 }

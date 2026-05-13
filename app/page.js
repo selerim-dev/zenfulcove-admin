@@ -27,11 +27,28 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [activeCategory, setActiveCategory] = useState("settings");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [messagesInitial, setMessagesInitial] = useState(null);
 
   // Check auth on mount
   useEffect(() => {
     if (sessionStorage.getItem("zc_admin_auth") === "true") {
       setAuthenticated(true);
+    }
+  }, []);
+
+  // Honor deep links from notification emails: ?tab=messages&number=...&contact=...
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const tab = params.get("tab");
+    if (tab) setActiveCategory(tab);
+    const number = params.get("number");
+    const contact = params.get("contact");
+    if (tab === "messages" && (number || contact)) {
+      setMessagesInitial({
+        twilioNumber: number || "",
+        contactPhone: contact || "",
+      });
     }
   }, []);
 
@@ -155,7 +172,9 @@ export default function Dashboard() {
             activeCategory === "messages" ? "max-w-6xl" : "max-w-4xl"
           } mx-auto px-6 py-10 space-y-8 w-full`}
         >
-          {activeCategory === "messages" && <MessagesPanel />}
+          {activeCategory === "messages" && (
+            <MessagesPanel initialSelection={messagesInitial} />
+          )}
           {config && activeCategory !== "messages" && (
             <>
               {activeCategory === "settings" && (
@@ -163,6 +182,13 @@ export default function Dashboard() {
                   config={config.sendgrid}
                   onChange={(updated) =>
                     setConfig((prev) => ({ ...prev, sendgrid: updated }))
+                  }
+                  messageNotifications={config.messageNotifications}
+                  onMessageNotificationsChange={(updated) =>
+                    setConfig((prev) => ({
+                      ...prev,
+                      messageNotifications: updated,
+                    }))
                   }
                 />
               )}

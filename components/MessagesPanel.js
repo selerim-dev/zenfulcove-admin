@@ -35,11 +35,15 @@ function formatTime(ts) {
   });
 }
 
-export default function MessagesPanel() {
+export default function MessagesPanel({ initialSelection } = {}) {
   const [numbers, setNumbers] = useState([]);
-  const [activeNumber, setActiveNumber] = useState("");
+  const [activeNumber, setActiveNumber] = useState(
+    initialSelection?.twilioNumber || ""
+  );
   const [threads, setThreads] = useState([]);
-  const [activeContact, setActiveContact] = useState("");
+  const [activeContact, setActiveContact] = useState(
+    initialSelection?.contactPhone || ""
+  );
   const [messages, setMessages] = useState([]);
   const [composer, setComposer] = useState("");
   const [sending, setSending] = useState(false);

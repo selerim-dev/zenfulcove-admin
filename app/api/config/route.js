@@ -126,6 +126,20 @@ export async function POST(request) {
       };
     }
 
+    if (updates.messageNotifications !== undefined) {
+      updated.messageNotifications = {
+        ...updated.messageNotifications,
+        ...updates.messageNotifications,
+      };
+      if (updates.messageNotifications.recipients !== undefined) {
+        updated.messageNotifications.recipients = Array.isArray(
+          updates.messageNotifications.recipients
+        )
+          ? updates.messageNotifications.recipients
+          : [];
+      }
+    }
+
     await setConfig(updated);
 
     return NextResponse.json({ success: true, config: updated });
