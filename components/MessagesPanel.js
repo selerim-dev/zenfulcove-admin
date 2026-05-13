@@ -54,6 +54,7 @@ export default function MessagesPanel({ initialSelection } = {}) {
   const [syncing, setSyncing] = useState(false);
   const [syncSummary, setSyncSummary] = useState(null);
   const messagesEndRef = useRef(null);
+  const autoSyncedRef = useRef(false);
 
   const fetchThreads = useCallback(async (twilioNumber) => {
     setLoadingThreads(true);
@@ -94,7 +95,72 @@ export default function MessagesPanel({ initialSelection } = {}) {
     }
   }, []);
 
+  const runSync = useCallback(
+    async ({ silent = false, reset = false, twilioNumber = "" } = {}) => {
+      if (syncing) return;
+      if (reset) {
+        const ok = window.confirm(
+          twilioNumber
+            ? "Wipe stored messages for this number and re-fetch from Twilio?"
+            : "Wipe ALL stored messages across all numbers and re-fetch from Twilio?"
+        );
+        if (!ok) return;
+      }
+      setSyncing(true);
+      if (!silent) {
+        setError("");
+        setSyncSummary(null);
+      }
+      try {
+        if (reset) {
+          const clearRes = await fetch("/api/messages/clear", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ twilioNumber: twilioNumber || undefined }),
+          });
+          const clearData = await clearRes.json();
+          if (!clearRes.ok) throw new Error(clearData?.error || "Clear failed.");
+          setActiveContact("");
+          setMessages([]);
+        }
+
+        const res = await fetch("/api/messages/sync", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ twilioNumber: twilioNumber || undefined }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data?.error || "Sync failed.");
+        if (!silent) setSyncSummary(data.summary || []);
+      } catch (err) {
+        if (!silent) setError(err.message || "Sync failed.");
+      } finally {
+        setSyncing(false);
+      }
+    },
+    [syncing]
+  );
+
+  // Initial load: pull threads from KV (fast) then auto-sync from Twilio in
+  // the background to pull anything we missed (e.g., if the webhook wasn't
+  // configured for some inbounds).
   useEffect(() => {
+    if (autoSyncedRef.current) return;
+    autoSyncedRef.current = true;
+    (async () => {
+      await fetchThreads(activeNumber);
+      await runSync({ silent: true, twilioNumber: activeNumber });
+      await fetchThreads(activeNumber);
+      if (activeContact && activeNumber) {
+        await fetchMessages(activeNumber, activeContact);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Re-fetch threads when the active number filter changes (after initial mount).
+  useEffect(() => {
+    if (!autoSyncedRef.current) return;
     fetchThreads(activeNumber);
   }, [activeNumber, fetchThreads]);
 
@@ -104,7 +170,7 @@ export default function MessagesPanel({ initialSelection } = {}) {
     }
   }, [activeContact, activeNumber, fetchMessages]);
 
-  // Poll for new messages every 15s.
+  // Poll every 15s for new messages.
   useEffect(() => {
     const id = setInterval(() => {
       fetchThreads(activeNumber);
@@ -173,100 +239,19 @@ export default function MessagesPanel({ initialSelection } = {}) {
     if (!activeNumber) setActiveNumber(thread.twilioNumber);
   }
 
-  async function handleSync({ reset = false } = {}) {
-    if (syncing) return;
-    if (reset) {
-      const ok = window.confirm(
-        activeNumber
-          ? "Wipe stored messages for this number and re-fetch from Twilio?"
-          : "Wipe ALL stored messages across all numbers and re-fetch from Twilio?"
-      );
-      if (!ok) return;
-    }
-    setSyncing(true);
-    setError("");
-    setSyncSummary(null);
-    try {
-      if (reset) {
-        const clearRes = await fetch("/api/messages/clear", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ twilioNumber: activeNumber || undefined }),
-        });
-        const clearData = await clearRes.json();
-        if (!clearRes.ok) throw new Error(clearData?.error || "Clear failed.");
-        setActiveContact("");
-        setMessages([]);
-      }
-
-      const res = await fetch("/api/messages/sync", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ twilioNumber: activeNumber || undefined }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || "Sync failed.");
-      setSyncSummary(data.summary || []);
-      await fetchThreads(activeNumber);
-      if (activeContact && activeNumber) await fetchMessages(activeNumber, activeContact);
-    } catch (err) {
-      setError(err.message || "Sync failed.");
-    } finally {
-      setSyncing(false);
-    }
-  }
-
   return (
-    <div className="space-y-4">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h2 className="font-serif text-2xl text-forest">Messages</h2>
-          <p className="text-sm text-forest/60 mt-1">
-            Two-way SMS conversations across your Twilio numbers.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => handleSync({ reset: true })}
-            disabled={syncing}
-            title="Wipe stored messages and re-fetch fresh from Twilio."
-            className="rounded-full border border-red-200 px-4 py-2 text-sm font-medium text-red-600 hover:border-red-400 hover:text-red-700 transition-colors disabled:opacity-50"
-          >
-            Reset & re-sync
-          </button>
-          <button
-            type="button"
-            onClick={() => handleSync()}
-            disabled={syncing}
-            title="Pull the last 365 days of SMS history from Twilio (only conversations with replies)."
-            className="rounded-full border border-grove/30 px-4 py-2 text-sm font-medium text-grove hover:border-grove hover:text-forest transition-colors disabled:opacity-50"
-          >
-            {syncing ? "Syncing..." : "Sync from Twilio"}
-          </button>
-        </div>
-      </div>
+    <div className="flex flex-col h-full min-h-0">
+      {/* Compact toolbar */}
+      <div className="flex flex-wrap items-center gap-2 px-4 py-2 border-b border-sand bg-white">
+        <h2 className="font-serif text-lg text-forest mr-2">Messages</h2>
 
-      {syncSummary ? (
-        <div className="rounded-lg bg-cream border border-sand px-4 py-3 text-sm text-forest/80 space-y-1">
-          <div className="font-medium">Sync complete.</div>
-          {syncSummary.map((s) => (
-            <div key={s.twilioNumber} className="text-xs">
-              {s.label} ({formatPhone(s.twilioNumber)}): {s.threads} thread{s.threads === 1 ? "" : "s"} with replies, {s.importedInbound} inbound + {s.importedOutbound} outbound messages imported.
-            </div>
-          ))}
-        </div>
-      ) : null}
-
-      {/* Number filter chips */}
-      <div className="flex flex-wrap items-center gap-2">
         <button
           type="button"
           onClick={() => {
             setActiveNumber("");
             setActiveContact("");
           }}
-          className={`rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
+          className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
             !activeNumber
               ? "bg-grove text-white"
               : "bg-white border border-sand text-forest/70 hover:text-forest"
@@ -284,7 +269,7 @@ export default function MessagesPanel({ initialSelection } = {}) {
               setActiveContact("");
             }}
             title={n.comingSoon ? "Coming Soon" : n.number}
-            className={`rounded-full px-4 py-1.5 text-sm font-medium transition-colors flex items-center gap-2 ${
+            className={`rounded-full px-3 py-1 text-xs font-medium transition-colors flex items-center gap-1.5 ${
               activeNumber === n.number && n.enabled
                 ? "bg-grove text-white"
                 : n.enabled
@@ -294,32 +279,70 @@ export default function MessagesPanel({ initialSelection } = {}) {
           >
             <span>{n.label}</span>
             {n.enabled ? (
-              <span className="text-xs opacity-70 font-mono">{formatPhone(n.number)}</span>
+              <span className="text-[10px] opacity-70 font-mono">{formatPhone(n.number)}</span>
             ) : (
-              <span className="text-[10px] uppercase tracking-wider rounded-full px-2 py-0.5 bg-forest/10 text-forest/50">
-                Coming Soon
+              <span className="text-[9px] uppercase tracking-wider rounded-full px-1.5 py-0.5 bg-forest/10 text-forest/50">
+                Soon
               </span>
             )}
           </button>
         ))}
+
+        <div className="ml-auto flex items-center gap-2">
+          {syncing ? (
+            <span className="text-[11px] text-forest/50 italic">Syncing…</span>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => runSync({ twilioNumber: activeNumber })}
+            disabled={syncing}
+            title="Pull the last 365 days of SMS history from Twilio."
+            className="rounded-full border border-grove/30 px-3 py-1 text-xs font-medium text-grove hover:border-grove hover:text-forest transition-colors disabled:opacity-50"
+          >
+            Sync
+          </button>
+          <button
+            type="button"
+            onClick={() => runSync({ reset: true, twilioNumber: activeNumber })}
+            disabled={syncing}
+            title="Wipe stored messages and re-fetch fresh from Twilio."
+            className="rounded-full border border-red-200 px-3 py-1 text-xs font-medium text-red-600 hover:border-red-400 hover:text-red-700 transition-colors disabled:opacity-50"
+          >
+            Reset & re-sync
+          </button>
+        </div>
       </div>
 
+      {syncSummary ? (
+        <div className="mx-4 mt-2 rounded-lg bg-cream border border-sand px-3 py-2 text-xs text-forest/80 space-y-0.5">
+          <div className="font-medium">Sync complete.</div>
+          {syncSummary.map((s) => (
+            <div key={s.twilioNumber}>
+              {s.label} ({formatPhone(s.twilioNumber)}): {s.threads} thread
+              {s.threads === 1 ? "" : "s"}, {s.importedInbound} inbound +{" "}
+              {s.importedOutbound} outbound imported.
+            </div>
+          ))}
+        </div>
+      ) : null}
+
       {error ? (
-        <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+        <div className="mx-4 mt-2 rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-700">
           {error}
         </div>
       ) : null}
 
-      <div className="bg-white rounded-xl shadow-sm border border-sand overflow-hidden grid grid-cols-1 md:grid-cols-[320px_1fr]" style={{ height: "calc(100vh - 320px)", minHeight: 480 }}>
+      {/* Split pane: threads + conversation */}
+      <div className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-[340px_1fr] bg-white border-t border-sand">
         {/* Threads list */}
         <aside className="border-r border-sand flex flex-col min-h-0">
-          <div className="px-4 py-3 border-b border-sand">
+          <div className="px-3 py-2 border-b border-sand">
             <input
               type="search"
               placeholder="Search conversations..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full text-sm rounded-lg border border-sand px-3 py-2 focus:outline-none focus:ring-2 focus:ring-grove/30"
+              className="w-full text-sm rounded-lg border border-sand px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-grove/30"
             />
           </div>
           <div className="flex-1 overflow-y-auto">
@@ -332,13 +355,15 @@ export default function MessagesPanel({ initialSelection } = {}) {
             ) : (
               <ul>
                 {filteredThreads.map((t) => {
-                  const isActive = t.contactPhone === activeContact && t.twilioNumber === (activeNumber || t.twilioNumber);
+                  const isActive =
+                    t.contactPhone === activeContact &&
+                    t.twilioNumber === (activeNumber || t.twilioNumber);
                   return (
                     <li key={`${t.twilioNumber}:${t.contactPhone}`}>
                       <button
                         type="button"
                         onClick={() => selectThread(t)}
-                        className={`w-full text-left px-4 py-3 border-b border-sand/60 transition-colors ${
+                        className={`w-full text-left px-3 py-2 border-b border-sand/60 transition-colors ${
                           isActive ? "bg-cream" : "hover:bg-cream/50"
                         }`}
                       >
@@ -346,11 +371,11 @@ export default function MessagesPanel({ initialSelection } = {}) {
                           <span className="font-medium text-forest text-sm truncate">
                             {formatPhone(t.contactPhone)}
                           </span>
-                          <span className="text-[11px] text-forest/40 shrink-0">
+                          <span className="text-[10px] text-forest/40 shrink-0">
                             {formatRelative(t.lastMessageAt)}
                           </span>
                         </div>
-                        <div className="flex items-center justify-between gap-2 mt-1">
+                        <div className="flex items-center justify-between gap-2 mt-0.5">
                           <span className="text-xs text-forest/60 truncate">
                             {t.lastMessageDirection === "out" ? "You: " : ""}
                             {t.lastMessagePreview || "—"}
@@ -362,7 +387,7 @@ export default function MessagesPanel({ initialSelection } = {}) {
                           ) : null}
                         </div>
                         {!activeNumber && (
-                          <div className="text-[10px] uppercase tracking-wider text-forest/40 mt-1 font-mono">
+                          <div className="text-[10px] uppercase tracking-wider text-forest/40 mt-0.5 font-mono">
                             via {formatPhone(t.twilioNumber)}
                           </div>
                         )}
@@ -383,10 +408,12 @@ export default function MessagesPanel({ initialSelection } = {}) {
             </div>
           ) : (
             <>
-              <header className="px-5 py-3 border-b border-sand bg-white flex items-center justify-between">
+              <header className="px-5 py-2 border-b border-sand bg-white flex items-center justify-between">
                 <div>
-                  <div className="font-medium text-forest">{formatPhone(activeContact)}</div>
-                  <div className="text-xs text-forest/50 font-mono">
+                  <div className="font-medium text-forest text-sm">
+                    {formatPhone(activeContact)}
+                  </div>
+                  <div className="text-[11px] text-forest/50 font-mono">
                     via {formatPhone(composerNumber)}
                     {activeNumberMeta?.label ? ` · ${activeNumberMeta.label}` : ""}
                   </div>

@@ -136,7 +136,7 @@ export default function Dashboard() {
   // ─── Dashboard ────────────────────────────────────────────────────────────
 
   return (
-    <div className="flex min-h-screen bg-cream">
+    <div className="flex h-screen bg-cream overflow-hidden">
       {/* Sidebar */}
       <Sidebar
         activeCategory={activeCategory}
@@ -146,18 +146,18 @@ export default function Dashboard() {
       />
 
       {/* Main area */}
-      <div className="flex-1 flex flex-col min-h-screen">
+      <div className="flex-1 flex flex-col min-h-0">
         <Header />
 
-        {/* Status Bar */}
-        <div className="bg-sand/50 border-b border-sand px-8 py-3 flex items-center justify-between text-sm">
-          <span className="text-forest/70">
+        {/* Status Bar — thinner */}
+        <div className="bg-sand/50 border-b border-sand px-6 py-1 flex items-center justify-between text-xs">
+          <span className="text-forest/60">
             Last cron run:{" "}
             {lastRun ? new Date(lastRun).toLocaleString() : "Never"}
           </span>
           {lastRunStatus && (
             <span
-              className={`rounded-full px-3 py-1 text-xs font-medium text-white ${
+              className={`rounded-full px-2 py-0.5 text-[10px] font-medium text-white ${
                 lastRunStatus === "SUCCESS" ? "bg-grove" : "bg-red-500"
               }`}
             >
@@ -167,14 +167,12 @@ export default function Dashboard() {
         </div>
 
         {/* Content */}
-        <main
-          className={`flex-1 ${
-            activeCategory === "messages" ? "max-w-6xl" : "max-w-4xl"
-          } mx-auto px-6 py-10 space-y-8 w-full`}
-        >
-          {activeCategory === "messages" && (
+        {activeCategory === "messages" ? (
+          <main className="flex-1 min-h-0 flex flex-col w-full">
             <MessagesPanel initialSelection={messagesInitial} />
-          )}
+          </main>
+        ) : (
+          <main className="flex-1 overflow-y-auto"><div className="max-w-4xl mx-auto px-6 py-10 space-y-8 w-full">
           {config && activeCategory !== "messages" && (
             <>
               {activeCategory === "settings" && (
@@ -276,8 +274,6 @@ export default function Dashboard() {
             </>
           )}
 
-          {/* Activity Log — hidden on messages page */}
-          {activeCategory !== "messages" && (
             <ActivityLog
               logs={logs}
               page={logsPage}
@@ -286,8 +282,9 @@ export default function Dashboard() {
               onPageChange={fetchLogsPage}
               onRefresh={fetchData}
             />
-          )}
-        </main>
+            </div>
+          </main>
+        )}
       </div>
     </div>
   );
