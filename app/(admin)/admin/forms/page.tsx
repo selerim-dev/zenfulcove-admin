@@ -1,15 +1,22 @@
 import AdminRouteShell from "@/components/AdminRouteShell";
+import { signLocalFormUpload } from "@/lib/local-forms";
 import { createSupabaseAdminClient } from "@/lib/supabaseAdmin";
 import { hasSupabaseAdminEnv } from "@/lib/supabaseEnv";
 import FormsManager, {
   type LocalFormRow,
+  type LocalFormSubmissionRow,
   type LocalFormStats,
 } from "./FormsManager";
 
 export const dynamic = "force-dynamic";
 
 type SubmissionRow = {
+  id?: string;
   form_slug: string | null;
+  email?: string | null;
+  first_name?: string | null;
+  last_name?: string | null;
+  payload?: Record<string, unknown> | null;
   sendgrid_synced_at: string | null;
   submitted_at: string | null;
 };
@@ -42,15 +49,52 @@ function buildStats(rows: SubmissionRow[] | null) {
   return stats;
 }
 
+async function signSubmissionFiles(row: SubmissionRow) {
+  const payload =
+    row.payload && typeof row.payload === "object" ? row.payload : {};
+  const rawFiles = Array.isArray(
+    (payload as { __files?: unknown }).__files
+  )
+    ? ((payload as { __files: Record<string, unknown>[] }).__files || [])
+    : [];
+  const signedFiles = await Promise.all(
+    rawFiles.map((file) => signLocalFormUpload(file))
+  );
+
+  return {
+    id: String(row.id || ""),
+    form_slug: String(row.form_slug || ""),
+    email: row.email || null,
+    first_name: row.first_name || null,
+    last_name: row.last_name || null,
+    submitted_at: row.submitted_at || "",
+    payload: {
+      ...payload,
+      __files: signedFiles,
+    },
+  } as LocalFormSubmissionRow;
+}
+
+function groupSubmissions(rows: LocalFormSubmissionRow[]) {
+  const grouped: Record<string, LocalFormSubmissionRow[]> = {};
+  for (const row of rows) {
+    if (!row.form_slug) continue;
+    if (!grouped[row.form_slug]) grouped[row.form_slug] = [];
+    grouped[row.form_slug].push(row);
+  }
+  return grouped;
+}
+
 export default async function AdminFormsPage() {
   const isSupabaseConfigured = hasSupabaseAdminEnv();
   let forms: LocalFormRow[] = [];
   let stats: Record<string, LocalFormStats> = {};
+  let submissionsBySlug: Record<string, LocalFormSubmissionRow[]> = {};
   let errorMessage = "";
 
   if (isSupabaseConfigured) {
     const supabase = createSupabaseAdminClient();
-    const [formsResp, submissionsResp] = await Promise.all([
+    const [formsResp, statsResp, recentResp] = await Promise.all([
       supabase
         .from("local_forms")
         .select(
@@ -60,16 +104,30 @@ export default async function AdminFormsPage() {
       supabase
         .from("local_form_submissions")
         .select("form_slug, sendgrid_synced_at, submitted_at"),
+      supabase
+        .from("local_form_submissions")
+        .select(
+          "id, form_slug, email, first_name, last_name, payload, sendgrid_synced_at, submitted_at"
+        )
+        .order("submitted_at", { ascending: false })
+        .limit(50),
     ]);
 
     if (formsResp.error) {
       errorMessage = formsResp.error.message;
-    } else if (submissionsResp.error) {
-      errorMessage = submissionsResp.error.message;
+    } else if (statsResp.error) {
+      errorMessage = statsResp.error.message;
+      forms = (formsResp.data ?? []) as LocalFormRow[];
+    } else if (recentResp.error) {
+      errorMessage = recentResp.error.message;
       forms = (formsResp.data ?? []) as LocalFormRow[];
     } else {
       forms = (formsResp.data ?? []) as LocalFormRow[];
-      stats = buildStats((submissionsResp.data ?? []) as SubmissionRow[]);
+      stats = buildStats((statsResp.data ?? []) as SubmissionRow[]);
+      const submissionRows = (recentResp.data ?? []) as SubmissionRow[];
+      submissionsBySlug = groupSubmissions(
+        await Promise.all(submissionRows.map((row) => signSubmissionFiles(row)))
+      );
     }
   }
 
@@ -109,7 +167,11 @@ export default async function AdminFormsPage() {
           <p className="mt-2 font-mono text-xs">{errorMessage}</p>
         </div>
       ) : (
-        <FormsManager forms={forms} stats={stats} />
+        <FormsManager
+          forms={forms}
+          stats={stats}
+          submissionsBySlug={submissionsBySlug}
+        />
       )}
     </AdminRouteShell>
   );

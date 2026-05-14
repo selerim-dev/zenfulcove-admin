@@ -4,7 +4,19 @@ import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { createSupabaseAdminClient } from "@/lib/supabaseAdmin";
 
-const FIELD_TYPES = new Set(["text", "email", "tel", "number", "date"]);
+const FIELD_TYPES = new Set([
+  "text",
+  "email",
+  "tel",
+  "number",
+  "date",
+  "textarea",
+  "select",
+  "checkbox",
+  "image",
+  "file",
+  "signature",
+]);
 
 async function requireAdminCookie() {
   const cookieStore = await cookies();
@@ -49,7 +61,16 @@ function parseFields(formData: FormData) {
       label: label || name,
       type,
       required: formData.get(`field_required_${index}`) === "on",
+      multiple: formData.get(`field_multiple_${index}`) === "on",
       ...(placeholder ? { placeholder } : {}),
+      ...(type === "select"
+        ? {
+            options: String(formData.get(`field_options_${index}`) || "")
+              .split(/\r?\n|,/)
+              .map((option) => option.trim())
+              .filter(Boolean),
+          }
+        : {}),
     });
   }
 

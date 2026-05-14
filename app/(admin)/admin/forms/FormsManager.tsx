@@ -11,6 +11,8 @@ type LocalFormField = {
   type?: string;
   required?: boolean;
   placeholder?: string;
+  options?: string[];
+  multiple?: boolean;
 };
 
 type LocalFormSchema = {
@@ -36,6 +38,28 @@ export type LocalFormStats = {
   lastSubmittedAt: string | null;
 };
 
+export type LocalFormSubmissionFile = {
+  fieldName: string;
+  kind: string;
+  fileName: string;
+  path?: string;
+  contentType?: string;
+  size?: number;
+  signedUrl?: string;
+};
+
+export type LocalFormSubmissionRow = {
+  id: string;
+  form_slug: string;
+  email: string | null;
+  first_name: string | null;
+  last_name: string | null;
+  submitted_at: string;
+  payload: Record<string, unknown> & {
+    __files?: LocalFormSubmissionFile[];
+  };
+};
+
 type EditorState =
   | { mode: "closed" }
   | { mode: "create" }
@@ -47,6 +71,19 @@ const DEFAULT_FIELDS: LocalFormField[] = [
   { name: "email", label: "Email", type: "email", required: true },
   { name: "phone", label: "Phone", type: "tel", required: false },
   { name: "bookingCode", label: "Booking Code", type: "text", required: false },
+  {
+    name: "photoUpload",
+    label: "Image Upload",
+    type: "image",
+    required: false,
+    multiple: true,
+  },
+  {
+    name: "signature",
+    label: "Signature",
+    type: "signature",
+    required: true,
+  },
 ];
 
 function formatDate(value: string | null) {
@@ -70,15 +107,21 @@ function fieldsFrom(form?: LocalFormRow) {
     type: String(field.type || "text"),
     required: Boolean(field.required),
     placeholder: String(field.placeholder || ""),
+    options: Array.isArray(field.options)
+      ? field.options.map((option) => String(option))
+      : [],
+    multiple: field.multiple !== false,
   }));
 }
 
 export default function FormsManager({
   forms,
   stats,
+  submissionsBySlug,
 }: {
   forms: LocalFormRow[];
   stats: Record<string, LocalFormStats>;
+  submissionsBySlug: Record<string, LocalFormSubmissionRow[]>;
 }) {
   const [editor, setEditor] = useState<EditorState>({ mode: "closed" });
 
@@ -118,6 +161,7 @@ export default function FormsManager({
               unsynced: 0,
               lastSubmittedAt: null,
             };
+            const recentSubmissions = submissionsBySlug[form.slug] || [];
             return (
               <article
                 key={form.id}
@@ -177,6 +221,22 @@ export default function FormsManager({
                     Open
                   </Link>
                 </div>
+
+                {recentSubmissions.length > 0 ? (
+                  <div className="mt-5 border-t border-[var(--color-border)] pt-4">
+                    <p className="mb-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--color-ink-muted)]">
+                      Recent Submissions
+                    </p>
+                    <div className="space-y-3">
+                      {recentSubmissions.slice(0, 3).map((submission) => (
+                        <SubmissionPreview
+                          key={submission.id}
+                          submission={submission}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
               </article>
             );
           })}
@@ -189,6 +249,58 @@ export default function FormsManager({
           form={editor.mode === "edit" ? editor.form : undefined}
           onClose={() => setEditor({ mode: "closed" })}
         />
+      ) : null}
+    </div>
+  );
+}
+
+function SubmissionPreview({
+  submission,
+}: {
+  submission: LocalFormSubmissionRow;
+}) {
+  const name = [submission.first_name, submission.last_name]
+    .map((part) => String(part || "").trim())
+    .filter(Boolean)
+    .join(" ");
+  const files = Array.isArray(submission.payload?.__files)
+    ? submission.payload.__files
+    : [];
+
+  return (
+    <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate text-sm font-semibold text-[var(--color-ink)]">
+            {name || submission.email || "Submission"}
+          </p>
+          <p className="mt-0.5 text-xs text-[var(--color-ink-muted)]">
+            {formatDate(submission.submitted_at)}
+          </p>
+        </div>
+        {submission.email ? (
+          <a
+            href={`mailto:${submission.email}`}
+            className="truncate text-xs font-medium text-[var(--color-accent)]"
+          >
+            {submission.email}
+          </a>
+        ) : null}
+      </div>
+      {files.length > 0 ? (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {files.map((file, index) => (
+            <a
+              key={`${file.path || file.fileName}-${index}`}
+              href={file.signedUrl || "#"}
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-full border border-[var(--color-border)] bg-white px-3 py-1 text-xs font-medium text-[var(--color-ink)] transition hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]"
+            >
+              {file.kind === "signature" ? "Signature" : file.fileName}
+            </a>
+          ))}
+        </div>
       ) : null}
     </div>
   );
@@ -246,7 +358,15 @@ function FormEditor({
   function addField() {
     setFields((current) => [
       ...current,
-      { name: "", label: "", type: "text", required: false, placeholder: "" },
+      {
+        name: "",
+        label: "",
+        type: "text",
+        required: false,
+        placeholder: "",
+        options: [],
+        multiple: true,
+      },
     ]);
   }
 
@@ -427,6 +547,12 @@ function FormEditor({
                     <option value="tel">Phone</option>
                     <option value="number">Number</option>
                     <option value="date">Date</option>
+                    <option value="textarea">Long Text</option>
+                    <option value="select">Select</option>
+                    <option value="checkbox">Checkbox</option>
+                    <option value="image">Image Upload</option>
+                    <option value="file">File Upload</option>
+                    <option value="signature">Signature</option>
                   </select>
                 </Field>
                 <div className="flex items-end gap-2">
@@ -442,6 +568,22 @@ function FormEditor({
                     />
                     Required
                   </label>
+                  {(field.type === "image" || field.type === "file") && (
+                    <label className="flex min-h-10 items-center gap-2 rounded-lg border border-[var(--color-border)] bg-white px-3 text-xs font-medium">
+                      <input
+                        name={`field_multiple_${index}`}
+                        type="checkbox"
+                        checked={field.multiple !== false}
+                        onChange={(event) =>
+                          updateField(index, {
+                            multiple: event.target.checked,
+                          })
+                        }
+                        className="h-4 w-4 rounded border-[var(--color-border)] accent-[var(--color-accent)]"
+                      />
+                      Multiple
+                    </label>
+                  )}
                   <button
                     type="button"
                     onClick={() => removeField(index)}
@@ -463,6 +605,25 @@ function FormEditor({
                     className="form-input bg-white"
                   />
                 </Field>
+                {field.type === "select" && (
+                  <Field label="Options" full>
+                    <textarea
+                      name={`field_options_${index}`}
+                      value={(field.options || []).join("\n")}
+                      onChange={(event) =>
+                        updateField(index, {
+                          options: event.target.value
+                            .split(/\r?\n|,/)
+                            .map((option) => option.trim())
+                            .filter(Boolean),
+                        })
+                      }
+                      rows={3}
+                      placeholder={"One option per line"}
+                      className="form-input resize-y bg-white"
+                    />
+                  </Field>
+                )}
               </div>
             ))}
           </div>

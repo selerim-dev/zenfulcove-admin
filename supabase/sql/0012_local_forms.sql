@@ -76,7 +76,9 @@ values (
       { "name": "lastName", "label": "Last Name", "type": "text", "required": true },
       { "name": "email", "label": "Email", "type": "email", "required": true },
       { "name": "phone", "label": "Phone", "type": "tel", "required": false },
-      { "name": "bookingCode", "label": "Booking Code", "type": "text", "required": false }
+      { "name": "bookingCode", "label": "Booking Code", "type": "text", "required": false },
+      { "name": "photoUpload", "label": "Image Upload", "type": "image", "required": false, "multiple": true },
+      { "name": "signature", "label": "Signature", "type": "signature", "required": true }
     ]
   }'::jsonb,
   true
