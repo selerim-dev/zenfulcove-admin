@@ -1,3 +1,4 @@
+import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import LocalForm from "@/components/customer/LocalForm";
 import { hasSupabaseAdminEnv } from "@/lib/supabaseEnv";
@@ -19,10 +20,13 @@ type LocalFormSchema = {
 
 export default async function LocalFormPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ slug: string }>;
+  searchParams: Promise<{ preview?: string }>;
 }) {
   const { slug } = await params;
+  const query = await searchParams;
 
   if (!hasSupabaseAdminEnv()) {
     return (
@@ -40,7 +44,11 @@ export default async function LocalFormPage({
   }
 
   const form = await getLocalFormBySlug(slug);
-  if (!form || form.is_active === false) notFound();
+  const cookieStore = await cookies();
+  const isAdminPreview =
+    query?.preview === "1" && cookieStore.get("zc_admin_auth")?.value === "true";
+
+  if (!form || (form.is_active === false && !isAdminPreview)) notFound();
   const description = String(form.description || "").includes("Jotform")
     ? "Share the details needed for your stay."
     : form.description;
@@ -48,6 +56,11 @@ export default async function LocalFormPage({
   return (
     <div className="mx-auto max-w-xl space-y-6">
       <header>
+        {isAdminPreview && form.is_active === false ? (
+          <p className="mb-4 rounded-full border border-amber-200 bg-amber-50 px-4 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-amber-800">
+            Staff Preview - hidden from customers
+          </p>
+        ) : null}
         <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[var(--color-accent)]">
           Zenfulcove
         </p>

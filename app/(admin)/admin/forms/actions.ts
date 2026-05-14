@@ -39,7 +39,15 @@ function readString(formData: FormData, key: string) {
 
 function parseFields(formData: FormData) {
   const count = Number(formData.get("field_count")) || 0;
-  const fields = [];
+  const fields: {
+    name: string;
+    label: string;
+    type: string;
+    required: boolean;
+    placeholder?: string;
+    multiple?: boolean;
+    options?: string[];
+  }[] = [];
 
   for (let index = 0; index < count; index += 1) {
     const name = readString(formData, `field_name_${index}`);
@@ -56,22 +64,34 @@ function parseFields(formData: FormData) {
       );
     }
 
-    fields.push({
+    const field: {
+      name: string;
+      label: string;
+      type: string;
+      required: boolean;
+      placeholder?: string;
+      multiple?: boolean;
+      options?: string[];
+    } = {
       name,
       label: label || name,
       type,
       required: formData.get(`field_required_${index}`) === "on",
-      multiple: formData.get(`field_multiple_${index}`) === "on",
       ...(placeholder ? { placeholder } : {}),
-      ...(type === "select"
-        ? {
-            options: String(formData.get(`field_options_${index}`) || "")
-              .split(/\r?\n|,/)
-              .map((option) => option.trim())
-              .filter(Boolean),
-          }
-        : {}),
-    });
+    };
+
+    if (type === "image" || type === "file") {
+      field.multiple = formData.get(`field_multiple_${index}`) === "on";
+    }
+
+    if (type === "select") {
+      field.options = String(formData.get(`field_options_${index}`) || "")
+        .split(/\r?\n|,/)
+        .map((option) => option.trim())
+        .filter(Boolean);
+    }
+
+    fields.push(field);
   }
 
   if (fields.length === 0) {

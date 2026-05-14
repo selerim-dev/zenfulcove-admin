@@ -65,6 +65,13 @@ type EditorState =
   | { mode: "create" }
   | { mode: "edit"; form: LocalFormRow };
 
+type FieldTemplate = LocalFormField & {
+  id: string;
+  title: string;
+  description: string;
+  unique?: boolean;
+};
+
 const DEFAULT_FIELDS: LocalFormField[] = [
   { name: "firstName", label: "First Name", type: "text", required: true },
   { name: "lastName", label: "Last Name", type: "text", required: true },
@@ -83,6 +90,160 @@ const DEFAULT_FIELDS: LocalFormField[] = [
     label: "Signature",
     type: "signature",
     required: true,
+  },
+];
+
+const FIELD_LIBRARY_GROUPS: {
+  title: string;
+  description: string;
+  fields: FieldTemplate[];
+}[] = [
+  {
+    title: "Guest Details",
+    description: "Common contact and reservation fields.",
+    fields: [
+      {
+        id: "firstName",
+        title: "First Name",
+        description: "Guest first name.",
+        name: "firstName",
+        label: "First Name",
+        type: "text",
+        required: true,
+        unique: true,
+      },
+      {
+        id: "lastName",
+        title: "Last Name",
+        description: "Guest last name.",
+        name: "lastName",
+        label: "Last Name",
+        type: "text",
+        required: true,
+        unique: true,
+      },
+      {
+        id: "email",
+        title: "Email",
+        description: "Required for SendGrid sync.",
+        name: "email",
+        label: "Email",
+        type: "email",
+        required: true,
+        unique: true,
+      },
+      {
+        id: "phone",
+        title: "Phone",
+        description: "Guest mobile or contact number.",
+        name: "phone",
+        label: "Phone",
+        type: "tel",
+        required: false,
+        unique: true,
+      },
+      {
+        id: "bookingCode",
+        title: "Booking Code",
+        description: "Code used to connect a guest to their reservation.",
+        name: "bookingCode",
+        label: "Booking Code",
+        type: "text",
+        required: false,
+        unique: true,
+      },
+    ],
+  },
+  {
+    title: "Fields",
+    description: "Questions and structured responses.",
+    fields: [
+      {
+        id: "shortAnswer",
+        title: "Short Answer",
+        description: "One-line text response.",
+        name: "shortAnswer",
+        label: "Short Answer",
+        type: "text",
+        placeholder: "Type your answer",
+      },
+      {
+        id: "longAnswer",
+        title: "Long Answer",
+        description: "Multi-line response.",
+        name: "longAnswer",
+        label: "Long Answer",
+        type: "textarea",
+        placeholder: "Add details",
+      },
+      {
+        id: "select",
+        title: "Dropdown",
+        description: "Single choice from options.",
+        name: "choice",
+        label: "Choice",
+        type: "select",
+        options: ["Option 1", "Option 2"],
+      },
+      {
+        id: "checkbox",
+        title: "Checkbox",
+        description: "Agreement or yes/no acknowledgement.",
+        name: "confirmation",
+        label: "I confirm this information is accurate.",
+        type: "checkbox",
+      },
+      {
+        id: "date",
+        title: "Date",
+        description: "Calendar date response.",
+        name: "date",
+        label: "Date",
+        type: "date",
+      },
+      {
+        id: "number",
+        title: "Number",
+        description: "Numeric response.",
+        name: "quantity",
+        label: "Quantity",
+        type: "number",
+      },
+    ],
+  },
+  {
+    title: "Uploads & Consent",
+    description: "Documents, images, and signed acknowledgements.",
+    fields: [
+      {
+        id: "imageUpload",
+        title: "Image Upload",
+        description: "Photo or image attachment.",
+        name: "photoUpload",
+        label: "Image Upload",
+        type: "image",
+        multiple: true,
+      },
+      {
+        id: "fileUpload",
+        title: "File Upload",
+        description: "PDF, document, spreadsheet, or image.",
+        name: "fileUpload",
+        label: "File Upload",
+        type: "file",
+        multiple: true,
+      },
+      {
+        id: "signature",
+        title: "Signature",
+        description: "Canvas signature capture.",
+        name: "signature",
+        label: "Signature",
+        type: "signature",
+        required: true,
+        unique: true,
+      },
+    ],
   },
 ];
 
@@ -110,8 +271,60 @@ function fieldsFrom(form?: LocalFormRow) {
     options: Array.isArray(field.options)
       ? field.options.map((option) => String(option))
       : [],
-    multiple: field.multiple !== false,
+    multiple:
+      field.type === "image" || field.type === "file"
+        ? field.multiple !== false
+        : undefined,
   }));
+}
+
+function fieldLabel(field: LocalFormField) {
+  return String(field.label || field.name || "Untitled Field");
+}
+
+function fieldType(field: LocalFormField) {
+  return String(field.type || "text").toLowerCase();
+}
+
+function makeUniqueName(baseName: string, fields: LocalFormField[]) {
+  const normalizedBase = baseName.replace(/[^A-Za-z0-9_]/g, "") || "field";
+  const used = new Set(fields.map((field) => String(field.name || "")));
+  if (!used.has(normalizedBase)) return normalizedBase;
+
+  for (let index = 2; index < 100; index += 1) {
+    const candidate = `${normalizedBase}${index}`;
+    if (!used.has(candidate)) return candidate;
+  }
+
+  return `${normalizedBase}${Date.now()}`;
+}
+
+function fieldFromTemplate(template: FieldTemplate, fields: LocalFormField[]) {
+  const field = {
+    name: template.name,
+    label: template.label,
+    type: template.type,
+    required: template.required,
+    placeholder: template.placeholder,
+    options: template.options,
+    multiple: template.multiple,
+  };
+  const name = template.unique ? field.name : makeUniqueName(field.name, fields);
+  const suffix = name === field.name ? "" : ` ${name.replace(field.name, "")}`;
+
+  return {
+    ...field,
+    name,
+    label: suffix
+      ? `${field.label || template.title}${suffix}`
+      : field.label || template.title,
+    required: Boolean(field.required),
+    options: field.options || [],
+    multiple:
+      field.type === "image" || field.type === "file"
+        ? field.multiple !== false
+        : undefined,
+  };
 }
 
 export default function FormsManager({
@@ -215,10 +428,14 @@ export default function FormsManager({
                     Edit
                   </button>
                   <Link
-                    href={`/forms/${form.slug}`}
+                    href={
+                      form.is_active
+                        ? `/forms/${form.slug}`
+                        : `/forms/${form.slug}?preview=1`
+                    }
                     className="rounded-full border border-[var(--color-border)] px-4 py-2 text-sm font-medium transition hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]"
                   >
-                    Open
+                    {form.is_active ? "Open" : "Preview"}
                   </Link>
                 </div>
 
@@ -330,7 +547,7 @@ function FormEditor({
   const isEdit = Boolean(form);
   const initialSchema: LocalFormSchema = form?.schema || {};
   const [fields, setFields] = useState<LocalFormField[]>(() =>
-    fieldsFrom(form)
+    form ? fieldsFrom(form) : []
   );
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -344,6 +561,11 @@ function FormEditor({
     [fields]
   );
 
+  const selectedFieldNames = useMemo(
+    () => new Set(activeFields.map((field) => String(field.name || ""))),
+    [activeFields]
+  );
+
   function updateField(
     index: number,
     patch: Partial<LocalFormField>
@@ -355,12 +577,12 @@ function FormEditor({
     );
   }
 
-  function addField() {
+  function addBlankField() {
     setFields((current) => [
       ...current,
       {
-        name: "",
-        label: "",
+        name: makeUniqueName("customField", current),
+        label: "Custom Field",
         type: "text",
         required: false,
         placeholder: "",
@@ -370,10 +592,30 @@ function FormEditor({
     ]);
   }
 
+  function addTemplate(template: FieldTemplate) {
+    setFields((current) => {
+      if (template.unique && current.some((field) => field.name === template.name)) {
+        return current.filter((field) => field.name !== template.name);
+      }
+      return [...current, fieldFromTemplate(template, current)];
+    });
+  }
+
   function removeField(index: number) {
     setFields((current) =>
       current.filter((_, fieldIndex) => fieldIndex !== index)
     );
+  }
+
+  function moveField(index: number, direction: -1 | 1) {
+    setFields((current) => {
+      const nextIndex = index + direction;
+      if (nextIndex < 0 || nextIndex >= current.length) return current;
+      const next = [...current];
+      const [field] = next.splice(index, 1);
+      next.splice(nextIndex, 0, field);
+      return next;
+    });
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -411,250 +653,202 @@ function FormEditor({
   }
 
   return (
-    <section className="rounded-2xl border border-[var(--color-border)] bg-white p-5 shadow-sm">
+    <section className="rounded-2xl border border-[var(--color-border)] bg-white shadow-sm">
       <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-        <div>
+        <div className="p-5 pb-0">
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--color-accent)]">
-            {isEdit ? "Edit Form" : "New Form"}
+            {isEdit ? "Edit Form" : "Create Form"}
           </p>
           <h3 className="mt-1 font-serif text-2xl font-medium tracking-tight">
-            {isEdit ? form?.name : "Create a customer form"}
+            {isEdit ? form?.name : "Build a customer form"}
           </h3>
+          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-[var(--color-ink-muted)]">
+            Choose fields from the library, tune labels and requirements in the
+            canvas, then save. Draft forms can be previewed by staff before they
+            are published.
+          </p>
         </div>
-        <button
-          type="button"
-          onClick={onClose}
-          className="rounded-full border border-[var(--color-border)] px-4 py-2 text-sm font-medium transition hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]"
-        >
-          Close
-        </button>
-      </div>
-
-      <form onSubmit={handleSubmit} className="space-y-5">
-        {form ? <input type="hidden" name="id" value={form.id} /> : null}
-        <div className="grid gap-4 md:grid-cols-2">
-          <Field label="Form Name">
-            <input
-              name="name"
-              type="text"
-              required
-              defaultValue={form?.name || ""}
-              className="form-input"
-            />
-          </Field>
-          <Field label="Slug">
-            <input
-              name="slug"
-              type="text"
-              defaultValue={form?.slug || ""}
-              placeholder="guest-info"
-              className="form-input"
-            />
-          </Field>
-          <Field label="Description" full>
-            <textarea
-              name="description"
-              defaultValue={form?.description || ""}
-              rows={3}
-              className="form-input resize-y"
-            />
-          </Field>
-          <Field label="Submit Button">
-            <input
-              name="submit_label"
-              type="text"
-              defaultValue={initialSchema.submitLabel || "Submit"}
-              className="form-input"
-            />
-          </Field>
-          <Field label="Success Message">
-            <input
-              name="success_message"
-              type="text"
-              defaultValue={
-                initialSchema.successMessage ||
-                "Thanks. We received your information."
-              }
-              className="form-input"
-            />
-          </Field>
-        </div>
-
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            name="is_active"
-            type="checkbox"
-            defaultChecked={form?.is_active ?? true}
-            className="h-4 w-4 rounded border-[var(--color-border)] accent-[var(--color-accent)]"
-          />
-          Active
-        </label>
-
-        <div className="space-y-3">
-          <div className="flex items-center justify-between gap-3">
-            <h4 className="text-sm font-semibold text-[var(--color-ink)]">
-              Fields
-            </h4>
-            <button
-              type="button"
-              onClick={addField}
+        <div className="flex items-center gap-2 px-5 pt-5">
+          {form ? (
+            <Link
+              href={`/forms/${form.slug}?preview=1`}
               className="rounded-full border border-[var(--color-border)] px-4 py-2 text-sm font-medium transition hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]"
             >
-              Add Field
-            </button>
-          </div>
+              Test Form
+            </Link>
+          ) : null}
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-full border border-[var(--color-border)] px-4 py-2 text-sm font-medium transition hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]"
+          >
+            Close
+          </button>
+        </div>
+      </div>
 
-          <input type="hidden" name="field_count" value={activeFields.length} />
-          <div className="space-y-3">
-            {activeFields.map((field, index) => (
-              <div
-                key={index}
-                className="grid gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] p-3 md:grid-cols-[1fr_1fr_120px_auto]"
-              >
-                <Field label="Name">
-                  <input
-                    name={`field_name_${index}`}
-                    type="text"
-                    value={field.name || ""}
-                    onChange={(event) =>
-                      updateField(index, { name: event.target.value })
-                    }
-                    className="form-input bg-white"
-                  />
-                </Field>
-                <Field label="Label">
-                  <input
-                    name={`field_label_${index}`}
-                    type="text"
-                    value={field.label || ""}
-                    onChange={(event) =>
-                      updateField(index, { label: event.target.value })
-                    }
-                    className="form-input bg-white"
-                  />
-                </Field>
-                <Field label="Type">
-                  <select
-                    name={`field_type_${index}`}
-                    value={field.type || "text"}
-                    onChange={(event) =>
-                      updateField(index, { type: event.target.value })
-                    }
-                    className="form-input bg-white"
-                  >
-                    <option value="text">Text</option>
-                    <option value="email">Email</option>
-                    <option value="tel">Phone</option>
-                    <option value="number">Number</option>
-                    <option value="date">Date</option>
-                    <option value="textarea">Long Text</option>
-                    <option value="select">Select</option>
-                    <option value="checkbox">Checkbox</option>
-                    <option value="image">Image Upload</option>
-                    <option value="file">File Upload</option>
-                    <option value="signature">Signature</option>
-                  </select>
-                </Field>
-                <div className="flex items-end gap-2">
-                  <label className="flex min-h-10 items-center gap-2 rounded-lg border border-[var(--color-border)] bg-white px-3 text-xs font-medium">
+      <form onSubmit={handleSubmit}>
+        {form ? <input type="hidden" name="id" value={form.id} /> : null}
+        <div className="grid border-t border-[var(--color-border)] lg:grid-cols-[300px_minmax(0,1fr)]">
+          <aside className="border-b border-[var(--color-border)] bg-[var(--color-bg)] p-4 lg:border-b-0 lg:border-r">
+            <FieldLibrary
+              selectedFieldNames={selectedFieldNames}
+              onSelect={addTemplate}
+            />
+          </aside>
+
+          <div className="space-y-5 p-5">
+            <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+              <div className="space-y-4">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <Field label="Form Name">
                     <input
-                      name={`field_required_${index}`}
-                      type="checkbox"
-                      checked={Boolean(field.required)}
-                      onChange={(event) =>
-                        updateField(index, { required: event.target.checked })
-                      }
-                      className="h-4 w-4 rounded border-[var(--color-border)] accent-[var(--color-accent)]"
-                    />
-                    Required
-                  </label>
-                  {(field.type === "image" || field.type === "file") && (
-                    <label className="flex min-h-10 items-center gap-2 rounded-lg border border-[var(--color-border)] bg-white px-3 text-xs font-medium">
-                      <input
-                        name={`field_multiple_${index}`}
-                        type="checkbox"
-                        checked={field.multiple !== false}
-                        onChange={(event) =>
-                          updateField(index, {
-                            multiple: event.target.checked,
-                          })
-                        }
-                        className="h-4 w-4 rounded border-[var(--color-border)] accent-[var(--color-accent)]"
-                      />
-                      Multiple
-                    </label>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => removeField(index)}
-                    disabled={activeFields.length <= 1}
-                    className="flex h-10 w-10 items-center justify-center rounded-lg border border-[var(--color-border)] bg-white text-sm font-semibold text-[var(--color-ink-muted)] transition hover:border-red-300 hover:text-red-700 disabled:opacity-40"
-                    aria-label="Remove field"
-                  >
-                    -
-                  </button>
-                </div>
-                <Field label="Placeholder" full>
-                  <input
-                    name={`field_placeholder_${index}`}
-                    type="text"
-                    value={field.placeholder || ""}
-                    onChange={(event) =>
-                      updateField(index, { placeholder: event.target.value })
-                    }
-                    className="form-input bg-white"
-                  />
-                </Field>
-                {field.type === "select" && (
-                  <Field label="Options" full>
-                    <textarea
-                      name={`field_options_${index}`}
-                      value={(field.options || []).join("\n")}
-                      onChange={(event) =>
-                        updateField(index, {
-                          options: event.target.value
-                            .split(/\r?\n|,/)
-                            .map((option) => option.trim())
-                            .filter(Boolean),
-                        })
-                      }
-                      rows={3}
-                      placeholder={"One option per line"}
-                      className="form-input resize-y bg-white"
+                      name="name"
+                      type="text"
+                      required
+                      defaultValue={form?.name || ""}
+                      className="form-input"
                     />
                   </Field>
-                )}
+                  <Field label="Slug">
+                    <input
+                      name="slug"
+                      type="text"
+                      defaultValue={form?.slug || ""}
+                      placeholder="guest-info"
+                      className="form-input"
+                    />
+                  </Field>
+                  <Field label="Description" full>
+                    <textarea
+                      name="description"
+                      defaultValue={form?.description || ""}
+                      rows={3}
+                      className="form-input resize-y"
+                    />
+                  </Field>
+                  <Field label="Submit Button">
+                    <input
+                      name="submit_label"
+                      type="text"
+                      defaultValue={initialSchema.submitLabel || "Submit"}
+                      className="form-input"
+                    />
+                  </Field>
+                  <Field label="Success Message">
+                    <input
+                      name="success_message"
+                      type="text"
+                      defaultValue={
+                        initialSchema.successMessage ||
+                        "Thanks. We received your information."
+                      }
+                      className="form-input"
+                    />
+                  </Field>
+                </div>
+
+                <label className="flex items-center justify-between gap-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] px-4 py-3 text-sm">
+                  <span>
+                    <span className="block font-semibold text-[var(--color-ink)]">
+                      Publish on customer portal
+                    </span>
+                    <span className="mt-1 block text-xs text-[var(--color-ink-muted)]">
+                      Leave off while drafting. Staff can still use Test Form.
+                    </span>
+                  </span>
+                  <input
+                    name="is_active"
+                    type="checkbox"
+                    defaultChecked={form?.is_active ?? false}
+                    className="h-5 w-5 rounded border-[var(--color-border)] accent-[var(--color-accent)]"
+                  />
+                </label>
               </div>
-            ))}
+
+              <FormPreview fields={activeFields} />
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h4 className="text-sm font-semibold text-[var(--color-ink)]">
+                    Form Canvas
+                  </h4>
+                  <p className="mt-1 text-xs text-[var(--color-ink-muted)]">
+                    These fields appear to customers in this order.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={addBlankField}
+                  className="rounded-full border border-[var(--color-border)] px-4 py-2 text-sm font-medium transition hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]"
+                >
+                  Custom Field
+                </button>
+              </div>
+
+              <input
+                type="hidden"
+                name="field_count"
+                value={activeFields.length}
+              />
+
+              {activeFields.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-[var(--color-border)] bg-[var(--color-bg)] p-8 text-center">
+                  <p className="font-serif text-xl font-medium text-[var(--color-ink)]">
+                    Start from the field library
+                  </p>
+                  <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-[var(--color-ink-muted)]">
+                    Select guest details, questions, uploads, or signature
+                    capture from the left. The form will build here as you go.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {activeFields.map((field, index) => (
+                    <FieldCanvasItem
+                      key={`${field.name}-${index}`}
+                      field={field}
+                      index={index}
+                      fieldCount={activeFields.length}
+                      updateField={updateField}
+                      removeField={removeField}
+                      moveField={moveField}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {error ? (
+              <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700">
+                {error}
+              </p>
+            ) : null}
+
+            <div className="flex items-center justify-between gap-3 border-t border-[var(--color-border)] pt-5">
+              {form ? (
+                <button
+                  type="button"
+                  onClick={handleArchive}
+                  disabled={submitting || !form.is_active}
+                  className="rounded-full border border-amber-300 bg-white px-4 py-2 text-sm font-medium text-amber-800 transition hover:bg-amber-50 disabled:opacity-40"
+                >
+                  Hide Form
+                </button>
+              ) : (
+                <span />
+              )}
+              <button
+                type="submit"
+                disabled={submitting}
+                className="rounded-full bg-[var(--color-accent)] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[var(--color-accent-strong)] disabled:opacity-60"
+              >
+                {submitting ? "Saving..." : form ? "Save Changes" : "Save Draft"}
+              </button>
+            </div>
           </div>
-        </div>
-
-        {error ? (
-          <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700">
-            {error}
-          </p>
-        ) : null}
-
-        <div className="flex items-center justify-between gap-3">
-          {form ? (
-            <button
-              type="button"
-              onClick={handleArchive}
-              disabled={submitting || !form.is_active}
-              className="rounded-full border border-amber-300 bg-white px-4 py-2 text-sm font-medium text-amber-800 transition hover:bg-amber-50 disabled:opacity-40"
-            >
-              Hide Form
-            </button>
-          ) : (
-            <span />
-          )}
-          <button
-            type="submit"
-            disabled={submitting}
-            className="rounded-full bg-[var(--color-accent)] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[var(--color-accent-strong)] disabled:opacity-60"
-          >
-            {submitting ? "Saving..." : "Save Form"}
-          </button>
         </div>
       </form>
 
@@ -674,6 +868,311 @@ function FormEditor({
         }
       `}</style>
     </section>
+  );
+}
+
+function FieldLibrary({
+  selectedFieldNames,
+  onSelect,
+}: {
+  selectedFieldNames: Set<string>;
+  onSelect: (template: FieldTemplate) => void;
+}) {
+  return (
+    <div className="space-y-5 lg:sticky lg:top-4">
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--color-accent)]">
+          Field Library
+        </p>
+        <h4 className="mt-1 font-serif text-xl font-medium tracking-tight">
+          Add what you need
+        </h4>
+      </div>
+
+      {FIELD_LIBRARY_GROUPS.map((group) => (
+        <div key={group.title} className="space-y-2">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-ink)]">
+              {group.title}
+            </p>
+            <p className="mt-1 text-xs leading-relaxed text-[var(--color-ink-muted)]">
+              {group.description}
+            </p>
+          </div>
+          <div className="space-y-2">
+            {group.fields.map((template) => {
+              const selected =
+                template.unique && selectedFieldNames.has(template.name);
+              return (
+                <button
+                  key={template.id}
+                  type="button"
+                  onClick={() => onSelect(template)}
+                  className={`flex w-full items-start gap-3 rounded-xl border p-3 text-left transition ${
+                    selected
+                      ? "border-[var(--color-accent)] bg-white"
+                      : "border-[var(--color-border)] bg-white/70 hover:border-[var(--color-accent)] hover:bg-white"
+                  }`}
+                >
+                  <span
+                    className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-xs font-semibold ${
+                      selected
+                        ? "border-[var(--color-accent)] bg-[var(--color-accent)] text-white"
+                        : "border-[var(--color-border)] text-[var(--color-ink-muted)]"
+                    }`}
+                    aria-hidden="true"
+                  >
+                    {selected ? "✓" : "+"}
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-sm font-semibold text-[var(--color-ink)]">
+                      {template.title}
+                    </span>
+                    <span className="mt-0.5 block text-xs leading-relaxed text-[var(--color-ink-muted)]">
+                      {selected ? "Selected. Click to remove." : template.description}
+                    </span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function FieldCanvasItem({
+  field,
+  index,
+  fieldCount,
+  updateField,
+  removeField,
+  moveField,
+}: {
+  field: LocalFormField;
+  index: number;
+  fieldCount: number;
+  updateField: (index: number, patch: Partial<LocalFormField>) => void;
+  removeField: (index: number) => void;
+  moveField: (index: number, direction: -1 | 1) => void;
+}) {
+  const type = fieldType(field);
+
+  return (
+    <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg)] p-4">
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <p className="truncate font-semibold text-[var(--color-ink)]">
+            {fieldLabel(field)}
+          </p>
+          <p className="mt-1 font-mono text-xs text-[var(--color-ink-muted)]">
+            {field.name || "unnamed"} - {type}
+          </p>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <button
+            type="button"
+            onClick={() => moveField(index, -1)}
+            disabled={index === 0}
+            className="h-9 rounded-lg border border-[var(--color-border)] bg-white px-3 text-xs font-semibold text-[var(--color-ink-muted)] transition hover:border-[var(--color-accent)] hover:text-[var(--color-accent)] disabled:opacity-35"
+          >
+            Up
+          </button>
+          <button
+            type="button"
+            onClick={() => moveField(index, 1)}
+            disabled={index === fieldCount - 1}
+            className="h-9 rounded-lg border border-[var(--color-border)] bg-white px-3 text-xs font-semibold text-[var(--color-ink-muted)] transition hover:border-[var(--color-accent)] hover:text-[var(--color-accent)] disabled:opacity-35"
+          >
+            Down
+          </button>
+          <button
+            type="button"
+            onClick={() => removeField(index)}
+            className="h-9 rounded-lg border border-[var(--color-border)] bg-white px-3 text-xs font-semibold text-[var(--color-ink-muted)] transition hover:border-red-300 hover:text-red-700"
+          >
+            Remove
+          </button>
+        </div>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-[1fr_1fr_150px]">
+        <Field label="Name">
+          <input
+            name={`field_name_${index}`}
+            type="text"
+            value={field.name || ""}
+            onChange={(event) => updateField(index, { name: event.target.value })}
+            className="form-input bg-white"
+          />
+        </Field>
+        <Field label="Label">
+          <input
+            name={`field_label_${index}`}
+            type="text"
+            value={field.label || ""}
+            onChange={(event) => updateField(index, { label: event.target.value })}
+            className="form-input bg-white"
+          />
+        </Field>
+        <Field label="Type">
+          <select
+            name={`field_type_${index}`}
+            value={field.type || "text"}
+            onChange={(event) =>
+              updateField(index, { type: event.target.value })
+            }
+            className="form-input bg-white"
+          >
+            <option value="text">Text</option>
+            <option value="email">Email</option>
+            <option value="tel">Phone</option>
+            <option value="number">Number</option>
+            <option value="date">Date</option>
+            <option value="textarea">Long Text</option>
+            <option value="select">Select</option>
+            <option value="checkbox">Checkbox</option>
+            <option value="image">Image Upload</option>
+            <option value="file">File Upload</option>
+            <option value="signature">Signature</option>
+          </select>
+        </Field>
+        <Field label="Placeholder" full>
+          <input
+            name={`field_placeholder_${index}`}
+            type="text"
+            value={field.placeholder || ""}
+            onChange={(event) =>
+              updateField(index, { placeholder: event.target.value })
+            }
+            className="form-input bg-white"
+          />
+        </Field>
+      </div>
+
+      <div className="mt-3 flex flex-wrap gap-2">
+        <label className="flex min-h-10 items-center gap-2 rounded-lg border border-[var(--color-border)] bg-white px-3 text-xs font-medium">
+          <input
+            name={`field_required_${index}`}
+            type="checkbox"
+            checked={Boolean(field.required)}
+            onChange={(event) =>
+              updateField(index, { required: event.target.checked })
+            }
+            className="h-4 w-4 rounded border-[var(--color-border)] accent-[var(--color-accent)]"
+          />
+          Required
+        </label>
+        {(type === "image" || type === "file") && (
+          <label className="flex min-h-10 items-center gap-2 rounded-lg border border-[var(--color-border)] bg-white px-3 text-xs font-medium">
+            <input
+              name={`field_multiple_${index}`}
+              type="checkbox"
+              checked={field.multiple !== false}
+              onChange={(event) =>
+                updateField(index, {
+                  multiple: event.target.checked,
+                })
+              }
+              className="h-4 w-4 rounded border-[var(--color-border)] accent-[var(--color-accent)]"
+            />
+            Multiple files
+          </label>
+        )}
+      </div>
+
+      {type === "select" ? (
+        <div className="mt-3">
+          <Field label="Options">
+            <textarea
+              name={`field_options_${index}`}
+              value={(field.options || []).join("\n")}
+              onChange={(event) =>
+                updateField(index, {
+                  options: event.target.value
+                    .split(/\r?\n|,/)
+                    .map((option) => option.trim())
+                    .filter(Boolean),
+                })
+              }
+              rows={3}
+              placeholder="One option per line"
+              className="form-input resize-y bg-white"
+            />
+          </Field>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function FormPreview({ fields }: { fields: LocalFormField[] }) {
+  return (
+    <aside className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg)] p-4">
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-accent)]">
+            Preview
+          </p>
+          <h4 className="mt-1 font-serif text-xl font-medium tracking-tight">
+            Customer View
+          </h4>
+        </div>
+        <span className="rounded-full border border-[var(--color-border)] bg-white px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--color-ink-muted)]">
+          Draft
+        </span>
+      </div>
+
+      {fields.length === 0 ? (
+        <p className="rounded-xl border border-dashed border-[var(--color-border)] bg-white p-4 text-sm leading-relaxed text-[var(--color-ink-muted)]">
+          Select fields to see the form take shape.
+        </p>
+      ) : (
+        <div className="space-y-3">
+          {fields.map((field, index) => (
+            <PreviewField key={`${field.name}-${index}`} field={field} />
+          ))}
+        </div>
+      )}
+    </aside>
+  );
+}
+
+function PreviewField({ field }: { field: LocalFormField }) {
+  const type = fieldType(field);
+  const label = fieldLabel(field);
+  const required = field.required ? " *" : "";
+  const baseClass =
+    "mt-1 rounded-xl border border-[var(--color-border)] bg-white px-3 py-2 text-sm text-[var(--color-ink-muted)]";
+
+  return (
+    <div>
+      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-ink-muted)]">
+        {label}
+        {required}
+      </p>
+      {type === "textarea" ? (
+        <div className={`${baseClass} min-h-20`}>{field.placeholder || "Long answer"}</div>
+      ) : type === "select" ? (
+        <div className={baseClass}>
+          {(field.options && field.options[0]) || "Select an option"}
+        </div>
+      ) : type === "checkbox" ? (
+        <div className="mt-2 flex items-center gap-2 text-sm text-[var(--color-ink-muted)]">
+          <span className="h-4 w-4 rounded border border-[var(--color-border)] bg-white" />
+          {label}
+        </div>
+      ) : type === "image" || type === "file" ? (
+        <div className={`${baseClass} border-dashed`}>
+          {type === "image" ? "Image upload" : "File upload"}
+        </div>
+      ) : type === "signature" ? (
+        <div className="mt-1 h-24 rounded-xl border border-dashed border-[var(--color-border)] bg-white" />
+      ) : (
+        <div className={baseClass}>{field.placeholder || type}</div>
+      )}
+    </div>
   );
 }
 
