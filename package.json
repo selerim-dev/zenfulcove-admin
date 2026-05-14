@@ -17,6 +17,8 @@
   },
   "dependencies": {
     "@sendgrid/mail": "^8.1.6",
+    "@supabase/ssr": "^0.8.0",
+    "@supabase/supabase-js": "^2.105.4",
     "@upstash/redis": "^1.36.4",
     "next": "16.1.6",
     "react": "19.2.3",
@@ -24,8 +26,12 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@types/node": "^20.19.41",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
-    "tailwindcss": "^4"
+    "tailwindcss": "^4",
+    "typescript": "^5.9.3"
   }
 }

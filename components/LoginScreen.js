@@ -1,8 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 
 export default function LoginScreen({ onAuthenticated }) {
+  const router = useRouter();
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -21,7 +23,8 @@ export default function LoginScreen({ onAuthenticated }) {
 
       if (res.ok) {
         sessionStorage.setItem("zc_admin_auth", "true");
-        onAuthenticated();
+        if (onAuthenticated) onAuthenticated();
+        router.refresh();
       } else {
         setError("Incorrect password.");
       }

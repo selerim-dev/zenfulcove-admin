@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import LoginScreen from "@/components/LoginScreen";
 import Header from "@/components/Header";
 import Sidebar from "@/components/Sidebar";
 import SettingsPanel from "@/components/SettingsPanel";
@@ -15,7 +14,6 @@ import MessagesPanel from "@/components/MessagesPanel";
 import ActivityLog from "@/components/ActivityLog";
 
 export default function Dashboard() {
-  const [authenticated, setAuthenticated] = useState(false);
   const [config, setConfig] = useState(null);
   const [logs, setLogs] = useState([]);
   const [logsPage, setLogsPage] = useState(1);
@@ -28,13 +26,6 @@ export default function Dashboard() {
   const [activeCategory, setActiveCategory] = useState("settings");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [messagesInitial, setMessagesInitial] = useState(null);
-
-  // Check auth on mount
-  useEffect(() => {
-    if (sessionStorage.getItem("zc_admin_auth") === "true") {
-      setAuthenticated(true);
-    }
-  }, []);
 
   // Honor deep links from notification emails: ?tab=messages&number=...&contact=...
   useEffect(() => {
@@ -96,8 +87,8 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => {
-    if (authenticated) fetchData();
-  }, [authenticated, fetchData]);
+    fetchData();
+  }, [fetchData]);
 
   // Save config
   async function handleSave() {
@@ -118,12 +109,6 @@ export default function Dashboard() {
   }
 
   // ─── Auth gate ────────────────────────────────────────────────────────────
-
-  if (!authenticated) {
-    return <LoginScreen onAuthenticated={() => setAuthenticated(true)} />;
-  }
-
-  // ─── Loading state ────────────────────────────────────────────────────────
 
   if (loading) {
     return (

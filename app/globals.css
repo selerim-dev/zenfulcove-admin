@@ -1,26 +1,47 @@
 @import "tailwindcss";
 
-@config "../tailwind.config.js";
-
 :root {
-  --background: #F5F2E8;
-  --foreground: #1C3A1F;
+  --color-bg: #f7f5ef;
+  --color-surface: #ffffff;
+  --color-ink: #1a2820;
+  --color-ink-muted: #5a6b62;
+  --color-accent: #2b6e5a;
+  --color-accent-strong: #1e4f40;
+  --color-border: #d8d2c4;
+  --background: var(--color-bg);
+  --foreground: var(--color-ink);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --color-cream: #F5F2E8;
-  --color-forest: #1C3A1F;
-  --color-grove: #3D6B45;
-  --color-sage: #7A9E7E;
-  --color-sand: #E0D9C8;
-  --font-serif: "Playfair Display", serif;
-  --font-sans: "Inter", sans-serif;
+  --color-cream: var(--color-bg);
+  --color-forest: var(--color-ink);
+  --color-grove: var(--color-accent);
+  --color-sage: #7a9e7e;
+  --color-sand: var(--color-border);
+  --font-serif: var(--font-display), ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
+  --font-sans: var(--font-body), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 
+html,
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+button:not(:disabled),
+[role="button"]:not(:disabled),
+summary {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
 }

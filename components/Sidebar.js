@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 const CATEGORIES = [
   {
     id: "settings",
@@ -35,6 +37,28 @@ const CATEGORIES = [
         strokeLinejoin="round"
       >
         <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+      </svg>
+    ),
+  },
+  {
+    id: "kayaks",
+    label: "Kayaks",
+    href: "/admin/kayaks",
+    icon: (
+      <svg
+        width="20"
+        height="20"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M3 16c4 3 14 3 18 0" />
+        <path d="M5 13c2-3 12-3 14 0" />
+        <path d="M8 11l2 7" />
+        <path d="M16 11l-2 7" />
       </svg>
     ),
   },
@@ -201,6 +225,24 @@ export default function Sidebar({
       <nav className="flex-1 flex flex-col gap-1 px-2">
         {CATEGORIES.map((cat) => {
           const isActive = activeCategory === cat.id;
+          if (cat.href) {
+            return (
+              <Link
+                key={cat.id}
+                href={cat.href}
+                title={collapsed ? cat.label : undefined}
+                className={`flex items-center gap-3 rounded-lg px-3 py-3 text-sm text-white/60 transition-colors duration-150 hover:bg-white/10 hover:text-white ${
+                  collapsed ? "justify-center" : ""
+                }`}
+              >
+                <span className="shrink-0">{cat.icon}</span>
+                {!collapsed && (
+                  <span className="truncate font-medium">{cat.label}</span>
+                )}
+              </Link>
+            );
+          }
+
           return (
             <button
               key={cat.id}
