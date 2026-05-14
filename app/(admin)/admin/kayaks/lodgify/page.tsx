@@ -1,4 +1,5 @@
 import Link from "next/link";
+import AdminRouteShell from "@/components/AdminRouteShell";
 import {
   lodgifyGet,
   LodgifyError,
@@ -111,12 +112,12 @@ export default async function LodgifyTestPage() {
     : 0;
 
   return (
-    <div className="mx-auto max-w-5xl space-y-10">
-      <header>
+    <AdminRouteShell activeCategory="kayaks" activeTitle="Lodgify Reservations">
+      <header className="rounded-2xl border border-[var(--color-border)] bg-white p-5 shadow-sm">
         <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[var(--color-accent)]">
           Lodgify
         </p>
-        <h1 className="mt-2 font-serif text-4xl font-medium leading-[1.05] tracking-tight md:text-5xl">
+        <h1 className="mt-2 font-serif text-3xl font-medium leading-tight tracking-tight md:text-4xl">
           Reservations
         </h1>
         <p className="mt-3 text-sm text-[var(--color-ink-muted)]">
@@ -270,6 +271,6 @@ export default async function LodgifyTestPage() {
       >
         ← Back to admin
       </Link>
-    </div>
+    </AdminRouteShell>
   );
 }

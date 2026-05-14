@@ -1,4 +1,5 @@
 import Link from "next/link";
+import AdminRouteShell from "@/components/AdminRouteShell";
 import { createSupabaseAdminClient } from "@/lib/supabaseAdmin";
 import { hasSupabaseAdminEnv } from "@/lib/supabaseEnv";
 import { type Booking, type Kayak } from "@/lib/types";
@@ -33,17 +34,21 @@ export default async function AdminDashboard() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl space-y-12">
-      <header className="flex items-start justify-between gap-4">
+    <AdminRouteShell activeCategory="kayaks" activeTitle="Kayak Management">
+      <header className="flex flex-col gap-4 rounded-2xl border border-[var(--color-border)] bg-white p-5 shadow-sm md:flex-row md:items-start md:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[var(--color-accent)]">
             Staff
           </p>
-          <h1 className="mt-3 font-serif text-5xl font-medium leading-[1.05] tracking-tight md:text-6xl">
+          <h1 className="mt-2 font-serif text-3xl font-medium leading-tight tracking-tight md:text-4xl">
             Kayak Management
           </h1>
+          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-[var(--color-ink-muted)]">
+            Manage fleet inventory, booking records, and Lodgify reservation
+            checks from the staff workspace.
+          </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2">
           <Link
             href="/admin/kayaks/lodgify"
             className="rounded-full border border-[var(--color-border)] bg-white px-4 py-2 text-sm font-medium transition hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]"
@@ -88,13 +93,25 @@ export default async function AdminDashboard() {
           </section>
         </>
       ) : (
-        <p className="rounded-2xl border border-dashed border-[var(--color-border)] bg-white p-8 text-sm leading-relaxed text-[var(--color-ink-muted)]">
-          Kayak management is installed but not connected in this environment.
-          Add <span className="font-mono">NEXT_PUBLIC_SUPABASE_URL</span> and{" "}
-          <span className="font-mono">SUPABASE_SERVICE_ROLE_KEY</span>, then
-          run the migrations in <span className="font-mono">supabase/sql</span>.
-        </p>
+        <div className="rounded-2xl border border-dashed border-[var(--color-border)] bg-white p-6 text-sm leading-relaxed text-[var(--color-ink-muted)] md:p-8">
+          <p className="font-medium text-[var(--color-ink)]">
+            Kayak management is installed but Supabase is not connected in this
+            environment.
+          </p>
+          <p className="mt-3">
+            Add the Supabase Project URL as{" "}
+            <span className="font-mono">NEXT_PUBLIC_SUPABASE_URL</span>, the
+            Publishable key as{" "}
+            <span className="font-mono">NEXT_PUBLIC_SUPABASE_ANON_KEY</span>,
+            and the Secret/service role key as{" "}
+            <span className="font-mono">SUPABASE_SERVICE_ROLE_KEY</span>.
+          </p>
+          <p className="mt-3">
+            For a fresh database, run the single SQL file at{" "}
+            <span className="font-mono">supabase/zenfulcove_full_schema.sql</span>.
+          </p>
+        </div>
       )}
-    </div>
+    </AdminRouteShell>
   );
 }
