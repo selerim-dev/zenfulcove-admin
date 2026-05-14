@@ -231,12 +231,14 @@ export default function Dashboard() {
               {activeCategory === "syncs" && (
                 <SyncsPanel
                   jotformConfig={config.jotformClientSync}
+                  localFormConfig={config.localFormClientSync}
                   lodgifyConfig={config.lodgifyClientSync}
                   salesmateConfig={config.salesmateFormSync}
                   onChange={(updated) =>
                     setConfig((prev) => ({
                       ...prev,
                       jotformClientSync: updated.jotformClientSync,
+                      localFormClientSync: updated.localFormClientSync,
                       lodgifyClientSync: updated.lodgifyClientSync,
                       salesmateFormSync: updated.salesmateFormSync,
                     }))

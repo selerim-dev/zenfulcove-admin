@@ -12,6 +12,12 @@ import {
 } from "@/lib/kv";
 import { getProperties, getAvailability, getBookings, getAllBookings } from "@/lib/lodgify";
 import { getFormSubmissions, bookingHasWaiver, extractClientContact } from "@/lib/jotform";
+import {
+  extractLocalFormContact,
+  listLocalFormSubmissions,
+  markLocalFormSubmissionsSynced,
+} from "@/lib/local-forms";
+import { hasSupabaseAdminEnv } from "@/lib/supabaseEnv";
 import { appendLogs, writeLastRunStatus } from "@/lib/activity-log";
 import { createSalesmateContact, validateSalesmateConfig } from "@/lib/salesmate";
 import {
@@ -293,6 +299,11 @@ function parseSelectedAutomations(request) {
     jotform: "jotform-sync",
     "jotform-sync": "jotform-sync",
     "jotform-client-sync": "jotform-sync",
+    forms: "local-form-sync",
+    "local-forms": "local-form-sync",
+    "local-form": "local-form-sync",
+    "local-form-sync": "local-form-sync",
+    "local-form-client-sync": "local-form-sync",
     lodgify: "lodgify-sync",
     "lodgify-sync": "lodgify-sync",
     "lodgify-client-sync": "lodgify-sync",
@@ -1862,6 +1873,183 @@ async function runJotformClientSync(automationConfig, dryRunOverride) {
   return logs;
 }
 
+async function runLocalFormClientSync(automationConfig, dryRunOverride) {
+  const isDryRun = dryRunOverride !== undefined ? dryRunOverride : DRY_RUN_ENV;
+  const logs = [];
+  const config = automationConfig.localFormClientSync || {};
+  const formSlugs = (config.formSlugs || [])
+    .map((slug) => String(slug || "").trim())
+    .filter(Boolean);
+
+  if (!config.enabled) {
+    logs.push({
+      timestamp: new Date().toISOString(),
+      automation: "Local Form Client Sync",
+      property: "—",
+      action: "Skipped (disabled)",
+      status: "skipped",
+    });
+    return logs;
+  }
+
+  if (!config.sendgridContactListId) {
+    logs.push({
+      timestamp: new Date().toISOString(),
+      automation: "Local Form Client Sync",
+      property: "—",
+      action: "Skipped: no SendGrid master list ID configured",
+      status: "skipped",
+    });
+    return logs;
+  }
+
+  if (!hasSupabaseAdminEnv()) {
+    logs.push({
+      timestamp: new Date().toISOString(),
+      automation: "Local Form Client Sync",
+      property: "—",
+      action: "Skipped: Supabase URL/service-role key is not configured",
+      status: "skipped",
+    });
+    return logs;
+  }
+
+  if (isDryRun) {
+    logs.push({
+      timestamp: new Date().toISOString(),
+      automation: "Local Form Client Sync",
+      property: "—",
+      action: "═══ DRY RUN: No SendGrid contacts will be written. Validation: WHICH local form records would be synced. ═══",
+      status: "info",
+    });
+  }
+
+  let submissions = [];
+  try {
+    submissions = await listLocalFormSubmissions({
+      formSlugs,
+      onlyUnsynced: config.onlyUnsynced === true,
+      limit: config.limit || 5000,
+    });
+    logs.push({
+      timestamp: new Date().toISOString(),
+      automation: "Local Form Client Sync",
+      property: "—",
+      action: `Loaded ${submissions.length} local form submission(s)${
+        formSlugs.length ? ` for ${formSlugs.join(", ")}` : ""
+      }`,
+      status: "info",
+    });
+  } catch (err) {
+    logs.push({
+      timestamp: new Date().toISOString(),
+      automation: "Local Form Client Sync",
+      property: "—",
+      action: `Failed to load local form submissions: ${err.message}`,
+      status: "failed",
+    });
+    return logs;
+  }
+
+  const dedupedContacts = new Map();
+  let missingEmailCount = 0;
+
+  for (const submission of submissions) {
+    const contact = extractLocalFormContact(submission);
+    if (!contact.email) {
+      missingEmailCount += 1;
+      continue;
+    }
+
+    const merged = mergeClientContact(
+      dedupedContacts.get(contact.email) || {
+        email: contact.email,
+        firstName: "",
+        lastName: "",
+        phone: "",
+        submissionIds: [],
+        formIds: [],
+      },
+      {
+        ...contact,
+        submissionIds: contact.submissionId ? [contact.submissionId] : [],
+        formIds: contact.formSlug ? [contact.formSlug] : [],
+      }
+    );
+    dedupedContacts.set(contact.email, merged);
+  }
+
+  const contactsToSync = Array.from(dedupedContacts.values());
+  logs.push({
+    timestamp: new Date().toISOString(),
+    automation: "Local Form Client Sync",
+    property: "—",
+    action: `Prepared ${contactsToSync.length} unique contact(s) from ${submissions.length} local form submission(s); skipped ${missingEmailCount} submission(s) with no email`,
+    status: "info",
+  });
+
+  if (contactsToSync.length === 0) {
+    logs.push({
+      timestamp: new Date().toISOString(),
+      automation: "Local Form Client Sync",
+      property: "—",
+      action: "No eligible local form contacts found to sync",
+      status: "skipped",
+    });
+    return logs;
+  }
+
+  if (isDryRun) {
+    contactsToSync.forEach((contact) => {
+      logs.push({
+        timestamp: new Date().toISOString(),
+        automation: "Local Form Client Sync",
+        property: "—",
+        action: `[DRY RUN] Would sync ${contact.email} | first: ${contact.firstName || "(blank)"} | last: ${contact.lastName || "(blank)"} | phone: ${contact.phone || "(blank)"} | forms: ${contact.formIds.join(",") || "(unknown)"} | submissions: ${contact.submissionIds.join(",") || "(unknown)"}`,
+        status: "success",
+      });
+    });
+    return logs;
+  }
+
+  try {
+    const results = await upsertContactsToList({
+      listId: config.sendgridContactListId,
+      contacts: contactsToSync,
+    });
+    const requestedCount = results.reduce((sum, item) => sum + Number(item?.results?.requested_count || 0), 0);
+    const createdCount = results.reduce((sum, item) => sum + Number(item?.results?.created_count || 0), 0);
+    const updatedCount = results.reduce((sum, item) => sum + Number(item?.results?.updated_count || 0), 0);
+    const erroredCount = results.reduce((sum, item) => sum + Number(item?.results?.errored_count || 0), 0);
+    const pendingCount = results.filter((item) => item?.status === "pending_timeout").length;
+
+    logs.push({
+      timestamp: new Date().toISOString(),
+      automation: "Local Form Client Sync",
+      property: "—",
+      action: pendingCount > 0
+        ? `SendGrid accepted ${contactsToSync.length} local form contact(s) for sync to list ${config.sendgridContactListId}, but ${pendingCount} batch job(s) were still pending after the wait window | requested: ${requestedCount} | created: ${createdCount} | updated: ${updatedCount} | errored: ${erroredCount}`
+        : `Synced ${contactsToSync.length} local form contact(s) to SendGrid list ${config.sendgridContactListId} | requested: ${requestedCount} | created: ${createdCount} | updated: ${updatedCount} | errored: ${erroredCount}`,
+      status: erroredCount > 0 ? "failed" : pendingCount > 0 ? "info" : "success",
+    });
+
+    if (erroredCount === 0 && pendingCount === 0) {
+      const syncedSubmissionIds = contactsToSync.flatMap((contact) => contact.submissionIds || []);
+      await markLocalFormSubmissionsSynced(syncedSubmissionIds);
+    }
+  } catch (err) {
+    logs.push({
+      timestamp: new Date().toISOString(),
+      automation: "Local Form Client Sync",
+      property: "—",
+      action: `Failed to sync local form contacts to SendGrid: ${err.message}`,
+      status: "failed",
+    });
+  }
+
+  return logs;
+}
+
 async function runLodgifyClientSync(automationConfig, dryRunOverride) {
   const isDryRun = dryRunOverride !== undefined ? dryRunOverride : DRY_RUN_ENV;
   const logs = [];
@@ -2308,6 +2496,15 @@ export async function POST(request) {
   ) {
     const jotformSyncLogs = await runJotformClientSync(automationConfig, isDryRun);
     allLogs.push(...jotformSyncLogs);
+  }
+
+  if (
+    runAllAutomations ||
+    selectedAutomations.has("local-form-sync") ||
+    selectedAutomations.has("syncs")
+  ) {
+    const localFormSyncLogs = await runLocalFormClientSync(automationConfig, isDryRun);
+    allLogs.push(...localFormSyncLogs);
   }
 
   if (
