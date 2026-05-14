@@ -27,7 +27,7 @@ export default async function KayakBookingPage({
   if (!hasSupabaseClientEnv()) {
     return (
       <div className="mx-auto max-w-xl rounded-2xl border border-dashed border-[var(--color-border)] bg-white p-6 text-sm leading-relaxed text-[var(--color-ink-muted)]">
-        Kayak booking is installed but not connected in this environment. Add
+        Guest portal booking is installed but not connected in this environment. Add
         the Supabase URL and anon key, then run the migrations in{" "}
         <span className="font-mono">supabase/sql</span>.
       </div>

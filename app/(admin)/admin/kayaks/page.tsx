@@ -34,18 +34,18 @@ export default async function AdminDashboard() {
   }
 
   return (
-    <AdminRouteShell activeCategory="kayaks" activeTitle="Kayak Management">
+    <AdminRouteShell activeCategory="kayaks" activeTitle="Rental Management">
       <header className="flex flex-col gap-4 rounded-2xl border border-[var(--color-border)] bg-white p-5 shadow-sm md:flex-row md:items-start md:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[var(--color-accent)]">
             Staff
           </p>
           <h1 className="mt-2 font-serif text-3xl font-medium leading-tight tracking-tight md:text-4xl">
-            Kayak Management
+            Rental Management
           </h1>
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-[var(--color-ink-muted)]">
-            Manage fleet inventory, booking records, and Lodgify reservation
-            checks from the staff workspace.
+            Manage customer portal inventory, booking records, and Lodgify
+            reservation checks from the staff workspace.
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
@@ -69,7 +69,7 @@ export default async function AdminDashboard() {
           <section>
             <div className="mb-4 flex items-baseline justify-between">
               <h2 className="font-serif text-2xl font-medium tracking-tight">
-                Fleet ({kayaks.length})
+                Inventory ({kayaks.length})
               </h2>
               <p className="text-sm text-[var(--color-ink-muted)]">
                 Click a card to edit.
@@ -81,7 +81,7 @@ export default async function AdminDashboard() {
           <section>
             <div className="mb-4 flex items-baseline justify-between">
               <h2 className="font-serif text-2xl font-medium tracking-tight">
-                Recent bookings ({bookings.length})
+                Recent reservations ({bookings.length})
               </h2>
               {bookings.length > 0 && (
                 <p className="text-sm text-[var(--color-ink-muted)]">
@@ -95,7 +95,7 @@ export default async function AdminDashboard() {
       ) : (
         <div className="rounded-2xl border border-dashed border-[var(--color-border)] bg-white p-6 text-sm leading-relaxed text-[var(--color-ink-muted)] md:p-8">
           <p className="font-medium text-[var(--color-ink)]">
-            Kayak management is installed but Supabase is not connected in this
+            Rental management is installed but Supabase is not connected in this
             environment.
           </p>
           <p className="mt-3">

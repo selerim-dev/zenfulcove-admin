@@ -201,7 +201,7 @@ export async function deleteKayak(id: string) {
   if (error) {
     if (error.code === "23503") {
       throw new Error(
-        "Can't delete: this kayak has bookings. Mark it inactive instead."
+        "Can't delete: this rental has bookings. Mark it inactive instead."
       );
     }
     throw new Error(`Delete failed: ${error.message}`);

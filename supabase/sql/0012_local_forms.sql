@@ -67,7 +67,7 @@ insert into public.local_forms (slug, name, description, schema, is_active)
 values (
   'guest-info',
   'Guest Information',
-  'Default local guest/contact form used to replace Jotform submissions over time.',
+  'Share the details needed for your stay.',
   '{
     "submitLabel": "Submit",
     "successMessage": "Thanks. We received your information.",

@@ -4,8 +4,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const items = [
-  { href: "/book", label: "Book a Kayak" },
-  { href: "/fleet", label: "Fleet" },
+  { href: "/book", label: "Reserve Rentals" },
+  { href: "/fleet", label: "Availability" },
   { href: "/terms", label: "Terms" },
 ];
 
@@ -30,7 +30,7 @@ export default function Sidebar({
             Zenfulcove
           </h1>
           <p className="mt-1 text-xs font-medium uppercase tracking-[0.2em] text-[var(--color-ink-muted)]">
-            Kayak Booking
+            Guest Portal
           </p>
         </div>
 

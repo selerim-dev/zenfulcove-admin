@@ -15,7 +15,7 @@ export default function CustomerAccessForm() {
     const code = reservation.trim();
     const name = lastName.trim();
     if (!code || !name) {
-      setError("Enter your booking code and last name.");
+      setError("Enter your booking code and last name to continue.");
       return;
     }
 
@@ -90,7 +90,7 @@ export default function CustomerAccessForm() {
         disabled={submitting}
         className="self-end rounded-xl bg-[var(--color-accent)] px-5 py-2.5 text-sm font-medium text-white transition hover:bg-[var(--color-accent-strong)] disabled:opacity-60"
       >
-        {submitting ? "Checking" : "Continue"}
+        {submitting ? "Checking" : "Open Portal"}
       </button>
       {error ? (
         <p className="text-sm text-red-100 sm:col-span-3">{error}</p>

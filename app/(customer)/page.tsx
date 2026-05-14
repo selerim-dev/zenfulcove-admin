@@ -40,7 +40,7 @@ export default async function Home({
             Zenfulcove
           </span>
           <span className="mt-0.5 text-[10px] font-medium uppercase tracking-[0.2em] text-white/80">
-            Kayak Booking
+            Guest Portal
           </span>
         </Link>
         <div className="flex items-center gap-2">
@@ -48,7 +48,7 @@ export default async function Home({
             href="/book"
             className="rounded-full border border-white/40 bg-white/10 px-4 py-2 text-sm font-medium text-white backdrop-blur-sm transition hover:bg-white/20"
           >
-            Book
+            Portal
           </Link>
           <Link
             href="/admin"
@@ -64,14 +64,15 @@ export default async function Home({
         style={{ textShadow: "0 2px 12px rgba(0,0,0,0.45)" }}
       >
         <p className="text-[11px] font-semibold uppercase tracking-[0.24em]">
-          Reserve a Kayak
+          Guest Portal
         </p>
         <h2 className="mt-4 max-w-3xl font-serif text-5xl font-medium leading-[1.05] tracking-tight md:text-7xl">
-          Out on the water.
+          Your stay, in one place.
         </h2>
         <p className="mt-5 max-w-xl text-base leading-relaxed text-white/90 md:text-lg">
-          One rental is included with your stay. Pick a day, claim your boat,
-          and add more if the whole crew wants in.
+          Use your booking code to access stay details, guest forms, and
+          optional experiences. Rentals are available now, with more self-serve
+          tools coming into the portal.
         </p>
         <CustomerAccessForm />
         <div
@@ -82,13 +83,13 @@ export default async function Home({
             href="/book"
             className="inline-flex items-center rounded-full bg-[var(--color-accent)] px-6 py-3 text-sm font-medium text-white shadow-sm transition hover:bg-[var(--color-accent-strong)]"
           >
-            Book a Kayak →
+            Open Portal →
           </Link>
           <Link
             href="/fleet"
             className="inline-flex items-center rounded-full border border-white/40 bg-white/10 px-6 py-3 text-sm font-medium text-white backdrop-blur-sm transition hover:bg-white/20"
           >
-            See the fleet
+            View Availability
           </Link>
         </div>
       </section>

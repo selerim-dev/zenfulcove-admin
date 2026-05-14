@@ -79,11 +79,11 @@ export default function KayakForm({
           type="text"
           required
           defaultValue={kayak?.name ?? ""}
-          placeholder="e.g. Solo Cove"
+        placeholder="e.g. Rental #10"
           className="form-input"
         />
       </Field>
-      <Field label="Code">
+      <Field label="Access Code">
         <input
           name="code"
           type="text"
@@ -195,7 +195,7 @@ export default function KayakForm({
             ? "Saving…"
             : isEdit
               ? "Save changes"
-              : "Add kayak"}
+              : "Add rental"}
         </button>
       </div>
 

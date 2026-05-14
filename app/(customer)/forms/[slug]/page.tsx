@@ -41,6 +41,9 @@ export default async function LocalFormPage({
 
   const form = await getLocalFormBySlug(slug);
   if (!form || form.is_active === false) notFound();
+  const description = String(form.description || "").includes("Jotform")
+    ? "Share the details needed for your stay."
+    : form.description;
 
   return (
     <div className="mx-auto max-w-xl space-y-6">
@@ -51,9 +54,9 @@ export default async function LocalFormPage({
         <h1 className="mt-2 font-serif text-4xl font-medium leading-[1.05] tracking-tight">
           {form.name}
         </h1>
-        {form.description ? (
+        {description ? (
           <p className="mt-3 text-sm leading-relaxed text-[var(--color-ink-muted)]">
-            {form.description}
+            {description}
           </p>
         ) : null}
       </header>

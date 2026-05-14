@@ -76,7 +76,7 @@ export async function POST(req: Request) {
 
   if (!hasSupabaseAdminEnv()) {
     return NextResponse.json(
-      { error: "Kayak booking database is not configured yet." },
+      { error: "Portal booking database is not configured yet." },
       { status: 503 }
     );
   }

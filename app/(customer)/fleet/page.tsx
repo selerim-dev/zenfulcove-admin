@@ -79,25 +79,26 @@ export default async function FleetPage() {
     <div className="mx-auto max-w-5xl space-y-8">
       <header>
         <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[var(--color-accent)]">
-          The Fleet
+          Customer Portal
         </p>
         <h1 className="mt-2 font-serif text-4xl font-medium leading-[1.05] tracking-tight md:text-5xl">
-          Open or out, this week.
+          Availability this week.
         </h1>
         <p className="mt-3 max-w-xl text-sm leading-relaxed text-[var(--color-ink-muted)]">
-          Click any OPEN cell to book that kayak for that day.
+          Click any OPEN cell to reserve available rental equipment for that
+          day.
         </p>
       </header>
 
       {!isSupabaseConfigured ? (
         <p className="rounded-2xl border border-dashed border-[var(--color-border)] bg-white p-8 text-center text-sm text-[var(--color-ink-muted)]">
-          Fleet availability is ready to connect. Add the Supabase URL, anon
-          key, and service-role key to this environment, then run the migrations
+          Portal availability is ready to connect. Add the Supabase URL, anon
+          key, and service-role key to this environment, then run the setup SQL
           in <span className="font-mono">supabase/sql</span>.
         </p>
       ) : kayaks.length === 0 ? (
         <p className="rounded-2xl border border-dashed border-[var(--color-border)] bg-white p-8 text-center text-sm text-[var(--color-ink-muted)]">
-          No kayaks in the fleet yet.
+          No rentals in the portal yet.
         </p>
       ) : (
         <FleetCalendar

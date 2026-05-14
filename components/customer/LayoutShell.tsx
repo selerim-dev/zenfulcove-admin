@@ -26,7 +26,7 @@ export default function LayoutShell({
             Zenfulcove
           </span>
           <span className="mt-0.5 text-[10px] font-medium uppercase tracking-[0.2em] text-[var(--color-ink-muted)]">
-            Kayak Booking
+            Guest Portal
           </span>
         </Link>
         <button

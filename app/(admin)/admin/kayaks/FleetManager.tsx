@@ -86,7 +86,7 @@ export default function FleetManager({ kayaks }: { kayaks: Kayak[] }) {
             <span className="flex h-14 w-14 items-center justify-center rounded-full border-2 border-current text-3xl leading-none">
               +
             </span>
-            <span className="text-sm font-medium">Add Kayak</span>
+            <span className="text-sm font-medium">Add Rental</span>
           </button>
         </li>
       </ul>
@@ -94,7 +94,7 @@ export default function FleetManager({ kayaks }: { kayaks: Kayak[] }) {
       <Modal
         open={state.mode !== "closed"}
         onClose={close}
-        title={state.mode === "edit" ? `Edit ${state.kayak.name}` : "Add a kayak"}
+        title={state.mode === "edit" ? `Edit ${state.kayak.name}` : "Add a rental"}
       >
         {state.mode === "edit" ? (
           <KayakForm kayak={state.kayak} onSuccess={close} />

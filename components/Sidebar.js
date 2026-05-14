@@ -41,8 +41,30 @@ const CATEGORIES = [
     ),
   },
   {
+    id: "forms",
+    label: "Forms",
+    href: "/admin/forms",
+    icon: (
+      <svg
+        width="20"
+        height="20"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7z" />
+        <path d="M14 2v5h5" />
+        <path d="M9 13h6" />
+        <path d="M9 17h4" />
+      </svg>
+    ),
+  },
+  {
     id: "kayaks",
-    label: "Kayaks",
+    label: "Rentals",
     href: "/admin/kayaks",
     icon: (
       <svg
@@ -184,6 +206,26 @@ const CATEGORIES = [
   },
 ];
 
+const GROUPS = [
+  { label: "Operations", ids: ["settings", "syncs"] },
+  {
+    label: "Marketing",
+    ids: [
+      "messages",
+      "promotions",
+      "vacancy",
+      "waiver",
+      "popup",
+      "event-popup",
+    ],
+  },
+  { label: "Customer Portal", ids: ["forms", "kayaks"] },
+];
+
+const CATEGORY_BY_ID = Object.fromEntries(
+  CATEGORIES.map((category) => [category.id, category])
+);
+
 export default function Sidebar({
   activeCategory,
   onSelect,
@@ -226,50 +268,59 @@ export default function Sidebar({
         </svg>
       </button>
 
-      {/* Nav items */}
-      <nav className="flex-1 flex flex-col gap-1.5 px-2 py-3">
-        {CATEGORIES.map((cat) => {
-          const isActive = activeCategory === cat.id;
-          if (cat.href) {
-            return (
-              <Link
-                key={cat.id}
-                href={cat.href}
-                title={collapsed ? cat.label : undefined}
-                className={`flex items-center gap-3 rounded-xl px-3 py-3 text-sm transition-colors duration-150 ${
-                  isActive
-                    ? "bg-[var(--color-accent)] text-white shadow-sm"
-                    : "text-[var(--color-ink-muted)] hover:bg-[var(--color-bg)] hover:text-[var(--color-ink)]"
-                } ${
-                  collapsed ? "justify-center" : ""
-                }`}
-              >
-                <span className="shrink-0">{cat.icon}</span>
-                {!collapsed && (
-                  <span className="truncate font-medium">{cat.label}</span>
-                )}
-              </Link>
-            );
-          }
+      <nav className="flex-1 flex flex-col gap-4 px-2 py-3">
+        {GROUPS.map((group) => (
+          <div key={group.label} className="space-y-1.5">
+            {!collapsed && (
+              <p className="px-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--color-ink-muted)]">
+                {group.label}
+              </p>
+            )}
+            {group.ids.map((id) => {
+              const cat = CATEGORY_BY_ID[id];
+              const isActive = activeCategory === cat.id;
+              if (cat.href) {
+                return (
+                  <Link
+                    key={cat.id}
+                    href={cat.href}
+                    title={collapsed ? cat.label : undefined}
+                    className={`flex items-center gap-3 rounded-xl px-3 py-3 text-sm transition-colors duration-150 ${
+                      isActive
+                        ? "bg-[var(--color-accent)] text-white shadow-sm"
+                        : "text-[var(--color-ink-muted)] hover:bg-[var(--color-bg)] hover:text-[var(--color-ink)]"
+                    } ${collapsed ? "justify-center" : ""}`}
+                  >
+                    <span className="shrink-0">{cat.icon}</span>
+                    {!collapsed && (
+                      <span className="truncate font-medium">
+                        {cat.label}
+                      </span>
+                    )}
+                  </Link>
+                );
+              }
 
-          return (
-            <button
-              key={cat.id}
-              onClick={() => onSelect(cat.id)}
-              title={collapsed ? cat.label : undefined}
-              className={`flex items-center gap-3 rounded-xl px-3 py-3 text-left text-sm transition-colors duration-150 ${
-                isActive
-                  ? "bg-[var(--color-accent)] text-white shadow-sm"
-                  : "text-[var(--color-ink-muted)] hover:bg-[var(--color-bg)] hover:text-[var(--color-ink)]"
-              } ${collapsed ? "justify-center" : ""}`}
-            >
-              <span className="shrink-0">{cat.icon}</span>
-              {!collapsed && (
-                <span className="truncate font-medium">{cat.label}</span>
-              )}
-            </button>
-          );
-        })}
+              return (
+                <button
+                  key={cat.id}
+                  onClick={() => onSelect(cat.id)}
+                  title={collapsed ? cat.label : undefined}
+                  className={`flex items-center gap-3 rounded-xl px-3 py-3 text-left text-sm transition-colors duration-150 ${
+                    isActive
+                      ? "bg-[var(--color-accent)] text-white shadow-sm"
+                      : "text-[var(--color-ink-muted)] hover:bg-[var(--color-bg)] hover:text-[var(--color-ink)]"
+                  } ${collapsed ? "justify-center" : ""}`}
+                >
+                  <span className="shrink-0">{cat.icon}</span>
+                  {!collapsed && (
+                    <span className="truncate font-medium">{cat.label}</span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        ))}
       </nav>
     </aside>
   );

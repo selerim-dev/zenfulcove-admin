@@ -101,14 +101,15 @@ export default async function BookPage({
     <div className="mx-auto max-w-4xl space-y-8">
       <section>
         <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[var(--color-accent)]">
-          Reserve a Kayak
+          Guest Portal
         </p>
         <h1 className="mt-2 font-serif text-4xl font-medium leading-[1.05] tracking-tight md:text-5xl">
-          Out on the water.
+          Reserve an experience.
         </h1>
         <p className="mt-3 max-w-xl text-sm leading-relaxed text-[var(--color-ink-muted)]">
-          One rental is included with your stay. Pick a day, claim your boat,
-          and add more if the whole crew wants in.
+          Pick a date and reserve available equipment for your stay. Kayaks are
+          live now, and more guest portal tools will move here as we bring
+          forms and stay details in-house.
         </p>
       </section>
 
@@ -128,10 +129,10 @@ export default async function BookPage({
               </h2>
               <p className="text-sm font-medium text-[var(--color-ink-muted)]">
                 {available.length === 0
-                  ? "No kayaks ready"
+                  ? "No rentals ready"
                   : available.length === 1
-                    ? "1 kayak ready"
-                    : `${available.length} kayaks ready`}
+                    ? "1 rental ready"
+                    : `${available.length} rentals ready`}
               </p>
             </div>
 
@@ -147,7 +148,7 @@ export default async function BookPage({
               </div>
             ) : (
               <p className="mt-4 rounded-2xl border border-dashed border-[var(--color-border)] bg-white p-6 text-center text-sm text-[var(--color-ink-muted)]">
-                No kayaks in the fleet yet. Add some in Supabase to get
+                No rentals in the portal yet. Add some in staff tools to get
                 started.
               </p>
             )}
@@ -155,8 +156,8 @@ export default async function BookPage({
         </>
       ) : (
         <p className="rounded-2xl border border-dashed border-[var(--color-border)] bg-white p-6 text-sm leading-relaxed text-[var(--color-ink-muted)]">
-          Kayak booking is ready to connect. Add the Supabase URL, anon key,
-          and service-role key to this environment, then run the migrations in
+          The guest portal is ready to connect. Add the Supabase URL, anon key,
+          and service-role key to this environment, then run the setup SQL in
           <span className="font-mono"> supabase/sql</span>.
         </p>
       )}

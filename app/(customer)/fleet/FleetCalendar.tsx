@@ -28,7 +28,7 @@ export default function FleetCalendar({
           <thead>
             <tr>
               <th className="sticky left-0 z-10 bg-[var(--color-bg)] px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-[var(--color-ink-muted)]">
-                Kayak
+                Rental
               </th>
               {days.map((d) => (
                 <th
