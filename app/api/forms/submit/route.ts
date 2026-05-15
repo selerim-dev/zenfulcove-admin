@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import { hasSupabaseAdminEnv } from "@/lib/supabaseEnv";
 import {
   createLocalFormSubmission,
   extractSubmittedContact,
   getLocalFormBySlug,
+  markLocalFormSubmissionsSynced,
   updateLocalFormSubmissionPayload,
   uploadLocalFormFile,
 } from "@/lib/local-forms";
@@ -43,6 +45,10 @@ function valuePresent(value: unknown) {
   return String(value ?? "").trim().length > 0;
 }
 
+function isTruthy(value: unknown) {
+  return value === true || value === "true" || value === "1" || value === 1;
+}
+
 function validateRequiredFields({
   fields,
   payload,
@@ -78,6 +84,7 @@ async function readRequest(request: Request) {
     return {
       formSlug: String(body.formSlug || body.form_slug || "guest-info").trim(),
       source: String(body.source || "local").trim() || "local",
+      preview: isTruthy(body.preview || body.staffPreview),
       payload,
       uploads: [] as UploadedInput[],
     };
@@ -106,6 +113,7 @@ async function readRequest(request: Request) {
   return {
     formSlug: String(formData.get("formSlug") || "guest-info").trim(),
     source: String(formData.get("source") || "local").trim() || "local",
+    preview: isTruthy(formData.get("preview")),
     payload,
     uploads,
   };
@@ -131,8 +139,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Form slug is required." }, { status: 400 });
   }
 
+  const cookieStore = await cookies();
+  const isTrustedPreview =
+    parsed.preview === true &&
+    cookieStore.get("zc_admin_auth")?.value === "true";
+
   const form = await getLocalFormBySlug(formSlug);
-  if (!form || form.is_active === false) {
+  if (!form || (form.is_active === false && !isTrustedPreview)) {
     return NextResponse.json({ error: "Form not found." }, { status: 404 });
   }
 
@@ -148,19 +161,28 @@ export async function POST(request: Request) {
 
   const contact = extractSubmittedContact({ payload: parsed.payload });
 
-  if (!contact.email || !EMAIL_RE.test(contact.email)) {
+  if (contact.email && !EMAIL_RE.test(contact.email)) {
     return NextResponse.json(
-      { error: "A valid email address is required." },
+      { error: "Enter a valid email address." },
       { status: 400 }
     );
   }
+
+  const submittedAt = new Date().toISOString();
+  const submissionPayload = isTrustedPreview
+    ? {
+        ...parsed.payload,
+        __staffPreview: true,
+        __staffPreviewAt: submittedAt,
+      }
+    : parsed.payload;
 
   const submission = await createLocalFormSubmission({
     form,
     formSlug,
     contact,
-    payload: parsed.payload,
-    source: parsed.source,
+    payload: submissionPayload,
+    source: isTrustedPreview ? "staff-preview" : parsed.source,
   });
 
   const uploadedFiles = [];
@@ -177,7 +199,7 @@ export async function POST(request: Request) {
 
   if (uploadedFiles.length > 0) {
     const nextPayload: Record<string, unknown> = {
-      ...parsed.payload,
+      ...submissionPayload,
       __files: uploadedFiles,
       __uploadedAt: new Date().toISOString(),
     };
@@ -195,6 +217,10 @@ export async function POST(request: Request) {
       }
     }
     await updateLocalFormSubmissionPayload(submission.id, nextPayload);
+  }
+
+  if (isTrustedPreview) {
+    await markLocalFormSubmissionsSynced([submission.id]);
   }
 
   return NextResponse.json({

@@ -74,7 +74,11 @@ export default async function LocalFormPage({
         ) : null}
       </header>
 
-      <LocalForm formSlug={form.slug} schema={(form.schema || {}) as LocalFormSchema} />
+      <LocalForm
+        formSlug={form.slug}
+        schema={(form.schema || {}) as LocalFormSchema}
+        staffPreview={isAdminPreview}
+      />
     </div>
   );
 }

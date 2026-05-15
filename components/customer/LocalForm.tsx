@@ -144,10 +144,12 @@ export default function LocalForm({
   formSlug,
   schema,
   preview = false,
+  staffPreview = false,
 }: {
   formSlug: string;
   schema: LocalFormSchema;
   preview?: boolean;
+  staffPreview?: boolean;
 }) {
   const fields = Array.isArray(schema.fields) ? schema.fields : [];
   const [values, setValues] = useState<Record<string, string | boolean>>({});
@@ -209,6 +211,10 @@ export default function LocalForm({
     const payload: Record<string, unknown> = {};
     const formData = new FormData();
     formData.append("formSlug", formSlug);
+    formData.append("source", staffPreview ? "staff-preview" : "local");
+    if (staffPreview) {
+      formData.append("preview", "1");
+    }
 
     for (const field of fields) {
       const name = String(field.name || "").trim();
