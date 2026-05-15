@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
+import { requireAdminRequest } from "@/lib/adminAuth";
 import { getConfig, setConfig } from "@/lib/kv";
 
-export async function GET() {
+export async function GET(request) {
+  const unauthorized = await requireAdminRequest(request);
+  if (unauthorized) return unauthorized;
+
   try {
     const config = await getConfig();
     return NextResponse.json(config);
@@ -14,6 +18,9 @@ export async function GET() {
 }
 
 export async function POST(request) {
+  const unauthorized = await requireAdminRequest(request);
+  if (unauthorized) return unauthorized;
+
   try {
     const updates = await request.json();
     const current = await getConfig();

@@ -1,4 +1,5 @@
 const BASE_URL = process.env.BASE_URL || "http://localhost:3000";
+const secret = process.env.CRON_SECRET;
 
 const channel = process.env.PROMOTION_CHANNEL || "sms";
 const lists = (process.env.PROMOTION_LISTS || "all-clients")
@@ -12,7 +13,10 @@ async function main() {
 
   const res = await fetch(`${BASE_URL}/api/promotions`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...(secret ? { Authorization: `Bearer ${secret}` } : {}),
+    },
     body: JSON.stringify({
       mode: "dryRun",
       lists,

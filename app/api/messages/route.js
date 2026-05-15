@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { requireAdminRequest } from "@/lib/adminAuth";
 import {
   listSmsThreads,
   listSmsMessages,
@@ -10,6 +11,9 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(request) {
+  const unauthorized = await requireAdminRequest(request);
+  if (unauthorized) return unauthorized;
+
   const { searchParams } = new URL(request.url);
   const twilioNumberRaw = searchParams.get("twilioNumber") || "";
   const contactPhoneRaw = searchParams.get("contactPhone") || "";

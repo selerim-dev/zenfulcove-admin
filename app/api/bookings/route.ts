@@ -10,6 +10,7 @@ import {
   getAppBaseUrl,
   hasStripeSecretEnv,
 } from "@/lib/stripe";
+import { createBookingCancelToken } from "@/lib/bookingCancelToken";
 
 type BookingPayload = {
   kayakId: string;
@@ -249,13 +250,19 @@ export async function POST(req: Request) {
     const stripe = createStripeClient();
     const baseUrl = getAppBaseUrl(req);
     const successUrl = `${baseUrl}/book/confirmation/${inserted.id}?session_id={CHECKOUT_SESSION_ID}`;
+    const cancelToken = createBookingCancelToken({
+      bookingId: inserted.id,
+      referenceCode: inserted.reference_code,
+      kayakId: kayak.id,
+    });
     const cancelParams = new URLSearchParams({
       date: body.dateIso,
       reservation: body.reservationId.trim(),
       lastName: body.lastName.trim(),
       payment: "cancelled",
+      token: cancelToken,
     });
-    const cancelUrl = `${baseUrl}/book/${kayak.id}?${cancelParams.toString()}`;
+    const cancelUrl = `${baseUrl}/book/cancel/${inserted.id}?${cancelParams.toString()}`;
     const metadata = {
       kind: "kayak_booking",
       bookingId: inserted.id,

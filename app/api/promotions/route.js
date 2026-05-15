@@ -1,9 +1,13 @@
 import { NextResponse } from "next/server";
+import { requireAdminRequest } from "@/lib/adminAuth";
 import { getConfig } from "@/lib/kv";
 import { appendLogs, writeLastRunStatus } from "@/lib/activity-log";
 import { runOneOffPromotion } from "@/lib/promotions";
 
 export async function POST(request) {
+  const unauthorized = await requireAdminRequest(request);
+  if (unauthorized) return unauthorized;
+
   try {
     const body = await request.json();
     const config = await getConfig();

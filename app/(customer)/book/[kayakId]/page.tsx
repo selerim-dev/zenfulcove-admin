@@ -17,10 +17,12 @@ export default async function KayakBookingPage({
     date?: string;
     reservation?: string;
     lastName?: string;
+    payment?: string;
   }>;
 }) {
   const { kayakId } = await params;
-  const { date, reservation = "", lastName = "" } = await searchParams;
+  const { date, reservation = "", lastName = "", payment = "" } =
+    await searchParams;
   const dateIso =
     date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : todayIso();
 
@@ -74,6 +76,12 @@ export default async function KayakBookingPage({
           {formatMoney(kayak.daily_rate_cents)}/day
         </p>
       </header>
+      {payment === "cancelled" ? (
+        <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-relaxed text-amber-900">
+          Checkout was cancelled and no payment was taken. We released that
+          temporary hold so you can try again when ready.
+        </p>
+      ) : null}
       <BookingForm
         kayak={kayak}
         dateIso={dateIso}

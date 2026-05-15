@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { requireAdminRequest } from "@/lib/adminAuth";
 import {
   fetchTwilioInboundsForNumber,
   fetchTwilioOutboundToContact,
@@ -24,6 +25,9 @@ function messageTimestamp(msg) {
 }
 
 export async function POST(request) {
+  const unauthorized = await requireAdminRequest(request);
+  if (unauthorized) return unauthorized;
+
   try {
     const body = await request.json().catch(() => ({}));
     const sinceMs = Number(body?.sinceMs) || Date.now() - ONE_YEAR_MS;

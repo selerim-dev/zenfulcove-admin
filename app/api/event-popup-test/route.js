@@ -1,8 +1,12 @@
 import { NextResponse } from "next/server";
+import { requireAdminRequest } from "@/lib/adminAuth";
 import { getConfig } from "@/lib/kv";
 import { runEventPopupSalesmateSms } from "@/app/api/cron/route";
 
 export async function POST(request) {
+  const unauthorized = await requireAdminRequest(request);
+  if (unauthorized) return unauthorized;
+
   try {
     const body = await request.json();
     const dryRun = body?.dryRun === true;
