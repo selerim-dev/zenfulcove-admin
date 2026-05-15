@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { type BookingSuccess, type Kayak } from "@/lib/types";
+import { formatMoney, type BookingSuccess, type Kayak } from "@/lib/types";
 
 type FieldName = "reservation" | "lastName" | "waiver";
 
@@ -164,6 +164,11 @@ export default function BookingForm({
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Booking failed");
 
+      if (typeof json.checkoutUrl === "string" && json.checkoutUrl) {
+        window.location.assign(json.checkoutUrl);
+        return;
+      }
+
       const result: BookingSuccess = {
         bookingId: json.bookingId,
         referenceCode: json.referenceCode,
@@ -200,6 +205,9 @@ export default function BookingForm({
   let submitLabel = "Confirm reservation";
   if (submitting) submitLabel = "Reserving…";
   else if (validation.status === "loading") submitLabel = "Checking…";
+  else if (validation.status === "ok" && validation.isFree === false) {
+    submitLabel = `Continue to checkout · ${formatMoney(kayak.daily_rate_cents)}`;
+  }
 
   return (
     <form onSubmit={handleSubmit} noValidate className="space-y-6">
@@ -253,6 +261,9 @@ export default function BookingForm({
         <p className="rounded-lg bg-emerald-50 p-3 text-xs text-emerald-900">
           Verified · {validation.cabin}
           {validation.guestName ? ` · ${validation.guestName}` : ""}
+          {validation.isFree
+            ? " · Included with this stay"
+            : ` · ${formatMoney(kayak.daily_rate_cents)} due at checkout`}
         </p>
       )}
 

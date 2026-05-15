@@ -5,6 +5,11 @@ import { hasSupabaseAdminEnv } from "@/lib/supabaseEnv";
 import { PROPERTY_TO_CABIN } from "@/lib/types";
 import { propertyTimeToUtc, todayIso } from "@/lib/dates";
 import { fetchReservationById, LodgifyError } from "@/lib/customer/lodgify";
+import {
+  createStripeClient,
+  getAppBaseUrl,
+  hasStripeSecretEnv,
+} from "@/lib/stripe";
 
 type BookingPayload = {
   kayakId: string;
@@ -140,7 +145,7 @@ export async function POST(req: Request) {
   const supabase = createSupabaseAdminClient();
   const { data: kayak, error: kayakError } = await supabase
     .from("kayaks")
-    .select("id, code, daily_rate_cents, is_active")
+    .select("id, code, name, daily_rate_cents, is_active")
     .eq("id", body.kayakId)
     .maybeSingle();
 
@@ -157,6 +162,16 @@ export async function POST(req: Request) {
   const isComplimentary = (existingCount ?? 0) === 0;
   const amountCents = isComplimentary ? 0 : kayak.daily_rate_cents;
   const status = isComplimentary ? "confirmed" : "pending";
+
+  if (!isComplimentary && !hasStripeSecretEnv()) {
+    return NextResponse.json(
+      {
+        error:
+          "Payment checkout is not configured yet. Add STRIPE_SECRET_KEY before accepting paid rentals.",
+      },
+      { status: 503 }
+    );
+  }
 
   const start = propertyTimeToUtc(body.dateIso, 9, 0);
   const end = propertyTimeToUtc(body.dateIso, 17, 0);
@@ -201,6 +216,20 @@ export async function POST(req: Request) {
     }
     if (
       error.code === "23505" &&
+      (error.message ?? "")
+        .toLowerCase()
+        .includes("bookings_one_complimentary")
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "This stay's included rental was just claimed. Try again to continue to paid checkout.",
+        },
+        { status: 409 }
+      );
+    }
+    if (
+      error.code === "23505" &&
       (error.message ?? "").toLowerCase().includes("reference_code")
     ) {
       lastError = error;
@@ -214,6 +243,118 @@ export async function POST(req: Request) {
       { error: lastError?.message ?? "Could not generate booking reference." },
       { status: 500 }
     );
+  }
+
+  if (!isComplimentary) {
+    const stripe = createStripeClient();
+    const baseUrl = getAppBaseUrl(req);
+    const successUrl = `${baseUrl}/book/confirmation/${inserted.id}?session_id={CHECKOUT_SESSION_ID}`;
+    const cancelParams = new URLSearchParams({
+      date: body.dateIso,
+      reservation: body.reservationId.trim(),
+      lastName: body.lastName.trim(),
+      payment: "cancelled",
+    });
+    const cancelUrl = `${baseUrl}/book/${kayak.id}?${cancelParams.toString()}`;
+    const metadata = {
+      kind: "kayak_booking",
+      bookingId: inserted.id,
+      reservationId: reservation.id,
+      kayakId: kayak.id,
+      referenceCode: inserted.reference_code,
+    };
+
+    try {
+      const session = await stripe.checkout.sessions.create(
+        {
+          mode: "payment",
+          client_reference_id: inserted.id,
+          success_url: successUrl,
+          cancel_url: cancelUrl,
+          expires_at: Math.floor(Date.now() / 1000) + 31 * 60,
+          metadata,
+          payment_intent_data: { metadata },
+          line_items: [
+            {
+              quantity: 1,
+              price_data: {
+                currency: "usd",
+                unit_amount: amountCents,
+                product_data: {
+                  name: `${kayak.name} rental`,
+                  description: `${cabin} · ${body.dateIso}`,
+                },
+              },
+            },
+          ],
+        },
+        { idempotencyKey: `booking-checkout-${inserted.id}` }
+      );
+
+      const paymentIntentId =
+        typeof session.payment_intent === "string"
+          ? session.payment_intent
+          : session.payment_intent?.id ?? null;
+
+      const { error: updateError } = await supabase
+        .from("bookings")
+        .update({
+          stripe_checkout_session_id: session.id,
+          stripe_payment_intent_id: paymentIntentId,
+        })
+        .eq("id", inserted.id);
+
+      if (updateError || !session.url) {
+        await stripe.checkout.sessions.expire(session.id).catch(() => {});
+        await supabase
+          .from("bookings")
+          .update({
+            status: "cancelled",
+            notes: updateError
+              ? `Stripe checkout created but could not be saved: ${updateError.message}`
+              : "Stripe checkout did not return a redirect URL.",
+          })
+          .eq("id", inserted.id);
+
+        return NextResponse.json(
+          { error: updateError?.message ?? "Could not create checkout." },
+          { status: 500 }
+        );
+      }
+
+      return NextResponse.json({
+        bookingId: inserted.id,
+        referenceCode: inserted.reference_code,
+        lockboxCode: null,
+        isComplimentary,
+        amountCents,
+        cabin,
+        customerName,
+        guestName: reservation.guestName,
+        checkoutSessionId: session.id,
+        checkoutUrl: session.url,
+      });
+    } catch (err) {
+      await supabase
+        .from("bookings")
+        .update({
+          status: "cancelled",
+          notes: `Stripe checkout failed: ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        })
+        .eq("id", inserted.id);
+
+      return NextResponse.json(
+        {
+          error:
+            err instanceof Error
+              ? `Could not start checkout: ${err.message}`
+              : "Could not start checkout.",
+        },
+        { status: 502 }
+      );
+    }
   }
 
   return NextResponse.json({
