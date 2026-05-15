@@ -67,6 +67,10 @@ export default function BookingsTable({
     }
   }
 
+  function openBooking(b: Booking) {
+    setActive(b);
+  }
+
   if (bookings.length === 0) {
     return (
       <p className="mt-4 rounded-2xl border border-dashed border-[var(--color-border)] bg-white p-6 text-sm text-[var(--color-ink-muted)]">
@@ -98,11 +102,21 @@ export default function BookingsTable({
               {bookings.map((b) => (
                 <tr
                   key={b.id}
-                  onClick={() => setActive(b)}
-                  className="cursor-pointer border-t border-[var(--color-border)] transition hover:bg-[var(--color-bg)]"
+                  onClick={() => openBooking(b)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      openBooking(b);
+                    }
+                  }}
+                  tabIndex={0}
+                  title="Open booking details"
+                  className="group cursor-pointer border-t border-[var(--color-border)] transition hover:bg-[var(--color-bg)] focus:bg-[var(--color-bg)] focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[var(--color-accent)]/30"
                 >
-                  <td className="px-4 py-3">{formatStamp(b.starts_at)}</td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-3 transition group-hover:text-[var(--color-accent)]">
+                    {formatStamp(b.starts_at)}
+                  </td>
+                  <td className="px-4 py-3 transition group-hover:text-[var(--color-accent)]">
                     <div className="font-medium">{b.customer_name}</div>
                     {b.customer_email && (
                       <div className="text-xs text-[var(--color-ink-muted)]">
@@ -110,11 +124,15 @@ export default function BookingsTable({
                       </div>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-[var(--color-ink-muted)]">
+                  <td className="px-4 py-3 text-[var(--color-ink-muted)] transition group-hover:text-[var(--color-accent)]">
                     {b.stay_location ?? "—"}
                   </td>
-                  <td className="px-4 py-3 capitalize">{b.status}</td>
-                  <td className="px-4 py-3">{formatMoney(b.amount_cents)}</td>
+                  <td className="px-4 py-3 capitalize transition group-hover:text-[var(--color-accent)]">
+                    {b.status}
+                  </td>
+                  <td className="px-4 py-3 transition group-hover:text-[var(--color-accent)]">
+                    {formatMoney(b.amount_cents)}
+                  </td>
                 </tr>
               ))}
             </tbody>

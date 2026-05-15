@@ -133,19 +133,6 @@ export default async function AdminFormsPage() {
 
   return (
     <AdminRouteShell activeCategory="forms" activeTitle="Forms">
-      <header className="rounded-2xl border border-[var(--color-border)] bg-white p-5 shadow-sm">
-        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[var(--color-accent)]">
-          Customer Portal
-        </p>
-        <h1 className="mt-2 font-serif text-3xl font-medium leading-tight tracking-tight md:text-4xl">
-          Form Management
-        </h1>
-        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-[var(--color-ink-muted)]">
-          Build and publish local customer forms. Submissions are saved in
-          Supabase and can sync into SendGrid from the Syncs panel.
-        </p>
-      </header>
-
       {!isSupabaseConfigured ? (
         <div className="rounded-2xl border border-dashed border-[var(--color-border)] bg-white p-6 text-sm leading-relaxed text-[var(--color-ink-muted)] md:p-8">
           <p className="font-medium text-[var(--color-ink)]">

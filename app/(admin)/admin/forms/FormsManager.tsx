@@ -338,135 +338,143 @@ export default function FormsManager({
 }) {
   const [editor, setEditor] = useState<EditorState>({ mode: "closed" });
 
+  if (editor.mode !== "closed") {
+    return (
+      <FormEditor
+        key={editor.mode === "edit" ? editor.form.id : "create"}
+        form={editor.mode === "edit" ? editor.form : undefined}
+        onClose={() => setEditor({ mode: "closed" })}
+      />
+    );
+  }
+
   return (
     <div className="space-y-5">
-      <div className="flex flex-col gap-3 rounded-2xl border border-[var(--color-border)] bg-white p-5 shadow-sm md:flex-row md:items-center md:justify-between">
-        <div>
-          <h2 className="font-serif text-2xl font-medium tracking-tight">
-            Forms
-          </h2>
-          <p className="mt-1 text-sm text-[var(--color-ink-muted)]">
-            Create customer-facing forms and review submission activity.
-          </p>
+      <div className="rounded-2xl border border-[var(--color-border)] bg-white shadow-sm">
+        <div className="flex flex-col gap-4 border-b border-[var(--color-border)] p-5 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--color-accent)]">
+              Customer Portal
+            </p>
+            <h2 className="mt-1 font-serif text-2xl font-medium tracking-tight">
+              Forms
+            </h2>
+            <p className="mt-1 text-sm text-[var(--color-ink-muted)]">
+              Create forms, review activity, and publish drafts when ready.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setEditor({ mode: "create" })}
+            className="rounded-full bg-[var(--color-accent)] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[var(--color-accent-strong)]"
+          >
+            Create Form
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={() => setEditor({ mode: "create" })}
-          className="rounded-full bg-[var(--color-accent)] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[var(--color-accent-strong)]"
-        >
-          Create Form
-        </button>
-      </div>
 
-      {forms.length === 0 ? (
-        <button
-          type="button"
-          onClick={() => setEditor({ mode: "create" })}
-          className="w-full rounded-2xl border border-dashed border-[var(--color-border)] bg-white p-8 text-center text-sm text-[var(--color-ink-muted)] transition hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]"
-        >
-          No forms yet. Create the first customer form.
-        </button>
-      ) : (
-        <div className="grid gap-4 lg:grid-cols-2">
-          {forms.map((form) => {
-            const formStats = stats[form.slug] || {
-              submissions: 0,
-              unsynced: 0,
-              lastSubmittedAt: null,
-            };
-            const recentSubmissions = submissionsBySlug[form.slug] || [];
-            return (
-              <article
-                key={form.id}
-                className="rounded-2xl border border-[var(--color-border)] bg-white p-5 shadow-sm"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setEditor({ mode: "edit", form })}
-                    className="min-w-0 text-left"
-                  >
-                    <p className="truncate font-serif text-xl font-medium tracking-tight">
-                      {form.name}
-                    </p>
-                    <p className="mt-1 font-mono text-xs text-[var(--color-ink-muted)]">
-                      /forms/{form.slug}
-                    </p>
-                  </button>
-                  <span
-                    className={`rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] ${
-                      form.is_active
-                        ? "bg-emerald-100 text-emerald-800"
-                        : "bg-amber-100 text-amber-800"
-                    }`}
-                  >
-                    {form.is_active ? "Active" : "Hidden"}
-                  </span>
-                </div>
+        {forms.length === 0 ? (
+          <button
+            type="button"
+            onClick={() => setEditor({ mode: "create" })}
+            className="m-5 w-[calc(100%-2.5rem)] rounded-2xl border border-dashed border-[var(--color-border)] bg-[var(--color-bg)] p-8 text-center text-sm text-[var(--color-ink-muted)] transition hover:border-[var(--color-accent)] hover:bg-white hover:text-[var(--color-accent)]"
+          >
+            No forms yet. Create the first customer form.
+          </button>
+        ) : (
+          <div className="divide-y divide-[var(--color-border)]">
+            {forms.map((form) => {
+              const formStats = stats[form.slug] || {
+                submissions: 0,
+                unsynced: 0,
+                lastSubmittedAt: null,
+              };
+              const recentSubmissions = submissionsBySlug[form.slug] || [];
+              return (
+                <article
+                  key={form.id}
+                  className="group p-4 transition hover:bg-[var(--color-bg)]"
+                >
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <button
+                      type="button"
+                      onClick={() => setEditor({ mode: "edit", form })}
+                      className="min-w-0 rounded-xl p-2 text-left transition hover:bg-white focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]/30"
+                    >
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="truncate font-serif text-xl font-medium tracking-tight">
+                          {form.name}
+                        </p>
+                        <span
+                          className={`rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] ${
+                            form.is_active
+                              ? "bg-emerald-100 text-emerald-800"
+                              : "bg-amber-100 text-amber-800"
+                          }`}
+                        >
+                          {form.is_active ? "Active" : "Draft"}
+                        </span>
+                      </div>
+                      <p className="mt-1 font-mono text-xs text-[var(--color-ink-muted)]">
+                        /forms/{form.slug}
+                      </p>
+                      {form.description ? (
+                        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-[var(--color-ink-muted)]">
+                          {form.description}
+                        </p>
+                      ) : null}
+                    </button>
 
-                {form.description ? (
-                  <p className="mt-3 text-sm leading-relaxed text-[var(--color-ink-muted)]">
-                    {form.description}
-                  </p>
-                ) : null}
-
-                <div className="mt-4 grid grid-cols-3 gap-2 text-sm">
-                  <Metric label="Submissions" value={formStats.submissions} />
-                  <Metric label="Unsynced" value={formStats.unsynced} />
-                  <Metric
-                    label="Latest"
-                    value={formatDate(formStats.lastSubmittedAt)}
-                  />
-                </div>
-
-                <div className="mt-4 flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setEditor({ mode: "edit", form })}
-                    className="rounded-full border border-[var(--color-border)] px-4 py-2 text-sm font-medium transition hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]"
-                  >
-                    Edit
-                  </button>
-                  <Link
-                    href={
-                      form.is_active
-                        ? `/forms/${form.slug}`
-                        : `/forms/${form.slug}?preview=1`
-                    }
-                    className="rounded-full border border-[var(--color-border)] px-4 py-2 text-sm font-medium transition hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]"
-                  >
-                    {form.is_active ? "Open" : "Preview"}
-                  </Link>
-                </div>
-
-                {recentSubmissions.length > 0 ? (
-                  <div className="mt-5 border-t border-[var(--color-border)] pt-4">
-                    <p className="mb-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--color-ink-muted)]">
-                      Recent Submissions
-                    </p>
-                    <div className="space-y-3">
-                      {recentSubmissions.slice(0, 3).map((submission) => (
-                        <SubmissionPreview
-                          key={submission.id}
-                          submission={submission}
-                        />
-                      ))}
+                    <div className="grid min-w-full gap-2 text-sm sm:grid-cols-3 lg:min-w-[26rem]">
+                      <Metric label="Submissions" value={formStats.submissions} />
+                      <Metric label="Unsynced" value={formStats.unsynced} />
+                      <Metric
+                        label="Latest"
+                        value={formatDate(formStats.lastSubmittedAt)}
+                      />
                     </div>
                   </div>
-                ) : null}
-              </article>
-            );
-          })}
-        </div>
-      )}
 
-      {editor.mode !== "closed" ? (
-        <FormEditor
-          key={editor.mode === "edit" ? editor.form.id : "create"}
-          form={editor.mode === "edit" ? editor.form : undefined}
-          onClose={() => setEditor({ mode: "closed" })}
-        />
-      ) : null}
+                  <div className="mt-3 flex flex-wrap gap-2 pl-2">
+                    <button
+                      type="button"
+                      onClick={() => setEditor({ mode: "edit", form })}
+                      className="rounded-full border border-[var(--color-border)] bg-white px-4 py-2 text-sm font-medium transition hover:border-[var(--color-accent)] hover:bg-[var(--color-bg)] hover:text-[var(--color-accent)]"
+                    >
+                      Edit
+                    </button>
+                    <Link
+                      href={
+                        form.is_active
+                          ? `/forms/${form.slug}`
+                          : `/forms/${form.slug}?preview=1`
+                      }
+                      className="rounded-full border border-[var(--color-border)] bg-white px-4 py-2 text-sm font-medium transition hover:border-[var(--color-accent)] hover:bg-[var(--color-bg)] hover:text-[var(--color-accent)]"
+                    >
+                      {form.is_active ? "Open" : "Preview"}
+                    </Link>
+                  </div>
+
+                  {recentSubmissions.length > 0 ? (
+                    <div className="mt-4 pl-2">
+                      <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--color-ink-muted)]">
+                        Recent Submissions
+                      </p>
+                      <div className="grid gap-3 lg:grid-cols-3">
+                        {recentSubmissions.slice(0, 3).map((submission) => (
+                          <SubmissionPreview
+                            key={submission.id}
+                            submission={submission}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -654,43 +662,64 @@ function FormEditor({
 
   return (
     <section className="rounded-2xl border border-[var(--color-border)] bg-white shadow-sm">
-      <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-        <div className="p-5 pb-0">
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--color-accent)]">
-            {isEdit ? "Edit Form" : "Create Form"}
-          </p>
-          <h3 className="mt-1 font-serif text-2xl font-medium tracking-tight">
-            {isEdit ? form?.name : "Build a customer form"}
-          </h3>
-          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-[var(--color-ink-muted)]">
-            Choose fields from the library, tune labels and requirements in the
-            canvas, then save. Draft forms can be previewed by staff before they
-            are published.
-          </p>
-        </div>
-        <div className="flex items-center gap-2 px-5 pt-5">
-          {form ? (
-            <Link
-              href={`/forms/${form.slug}?preview=1`}
-              className="rounded-full border border-[var(--color-border)] px-4 py-2 text-sm font-medium transition hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]"
-            >
-              Test Form
-            </Link>
-          ) : null}
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-full border border-[var(--color-border)] px-4 py-2 text-sm font-medium transition hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]"
-          >
-            Close
-          </button>
-        </div>
-      </div>
-
       <form onSubmit={handleSubmit}>
         {form ? <input type="hidden" name="id" value={form.id} /> : null}
-        <div className="grid border-t border-[var(--color-border)] lg:grid-cols-[300px_minmax(0,1fr)]">
-          <aside className="border-b border-[var(--color-border)] bg-[var(--color-bg)] p-4 lg:border-b-0 lg:border-r">
+
+        <div className="flex flex-col gap-3 border-b border-[var(--color-border)] p-4 md:flex-row md:items-center md:justify-between">
+          <div className="flex min-w-0 items-center gap-3">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-full border border-[var(--color-border)] px-4 py-2 text-sm font-medium transition hover:border-[var(--color-accent)] hover:bg-[var(--color-bg)] hover:text-[var(--color-accent)]"
+            >
+              Back
+            </button>
+            <div className="min-w-0">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--color-accent)]">
+                {isEdit ? "Editing Form" : "New Draft"}
+              </p>
+              <h3 className="truncate font-serif text-xl font-medium tracking-tight">
+                {isEdit ? form?.name : "Build a customer form"}
+              </h3>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {form ? (
+              <Link
+                href={`/forms/${form.slug}?preview=1`}
+                className="rounded-full border border-[var(--color-border)] px-4 py-2 text-sm font-medium transition hover:border-[var(--color-accent)] hover:bg-[var(--color-bg)] hover:text-[var(--color-accent)]"
+              >
+                Test Form
+              </Link>
+            ) : null}
+            {form ? (
+              <button
+                type="button"
+                onClick={handleArchive}
+                disabled={submitting || !form.is_active}
+                className="rounded-full border border-amber-300 bg-white px-4 py-2 text-sm font-medium text-amber-800 transition hover:bg-amber-50 disabled:opacity-40"
+              >
+                Hide
+              </button>
+            ) : null}
+          <button
+            type="submit"
+            disabled={submitting}
+            className="rounded-full bg-[var(--color-accent)] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[var(--color-accent-strong)] disabled:opacity-60"
+          >
+            {submitting ? "Saving..." : form ? "Save Changes" : "Save Draft"}
+          </button>
+          </div>
+        </div>
+
+        {error ? (
+          <p className="m-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">
+            {error}
+          </p>
+        ) : null}
+
+        <div className="grid lg:grid-cols-[220px_minmax(0,1fr)]">
+          <aside className="border-b border-[var(--color-border)] bg-[var(--color-bg)] p-3 lg:border-b-0 lg:border-r">
             <FieldLibrary
               selectedFieldNames={selectedFieldNames}
               onSelect={addTemplate}
@@ -698,18 +727,50 @@ function FormEditor({
           </aside>
 
           <div className="space-y-5 p-5">
-            <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
-              <div className="space-y-4">
-                <div className="grid gap-4 md:grid-cols-2">
-                  <Field label="Form Name">
-                    <input
-                      name="name"
-                      type="text"
-                      required
-                      defaultValue={form?.name || ""}
-                      className="form-input"
-                    />
-                  </Field>
+            <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg)] p-4">
+              <div className="mb-4">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-accent)]">
+                  Form Setup
+                </p>
+                <h4 className="mt-1 font-serif text-xl font-medium tracking-tight">
+                  Name and publishing
+                </h4>
+              </div>
+
+              <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
+                <Field label="Form Name">
+                  <input
+                    name="name"
+                    type="text"
+                    required
+                    defaultValue={form?.name || ""}
+                    className="form-input"
+                  />
+                </Field>
+
+                <label className="flex items-center justify-between gap-4 rounded-xl border border-[var(--color-border)] bg-white px-4 py-3 text-sm">
+                  <span>
+                    <span className="block font-semibold text-[var(--color-ink)]">
+                      Publish
+                    </span>
+                    <span className="mt-1 block text-xs text-[var(--color-ink-muted)]">
+                      Off keeps this as a staff-only draft.
+                    </span>
+                  </span>
+                  <input
+                    name="is_active"
+                    type="checkbox"
+                    defaultChecked={form?.is_active ?? false}
+                    className="h-5 w-5 rounded border-[var(--color-border)] accent-[var(--color-accent)]"
+                  />
+                </label>
+              </div>
+
+              <details className="mt-4 rounded-xl border border-[var(--color-border)] bg-white">
+                <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-[var(--color-ink)] transition hover:bg-[var(--color-bg)]">
+                  Advanced details
+                </summary>
+                <div className="grid gap-4 border-t border-[var(--color-border)] p-4 md:grid-cols-2">
                   <Field label="Slug">
                     <input
                       name="slug"
@@ -747,106 +808,63 @@ function FormEditor({
                     />
                   </Field>
                 </div>
+              </details>
+            </section>
 
-                <label className="flex items-center justify-between gap-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] px-4 py-3 text-sm">
-                  <span>
-                    <span className="block font-semibold text-[var(--color-ink)]">
-                      Publish on customer portal
-                    </span>
-                    <span className="mt-1 block text-xs text-[var(--color-ink-muted)]">
-                      Leave off while drafting. Staff can still use Test Form.
-                    </span>
-                  </span>
-                  <input
-                    name="is_active"
-                    type="checkbox"
-                    defaultChecked={form?.is_active ?? false}
-                    className="h-5 w-5 rounded border-[var(--color-border)] accent-[var(--color-accent)]"
-                  />
-                </label>
-              </div>
+            <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
+              <section className="space-y-3 rounded-2xl border border-[var(--color-border)] bg-white p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-accent)]">
+                      Form Canvas
+                    </p>
+                    <h4 className="mt-1 font-serif text-xl font-medium tracking-tight">
+                      Field order
+                    </h4>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={addBlankField}
+                    className="rounded-full border border-[var(--color-border)] px-4 py-2 text-sm font-medium transition hover:border-[var(--color-accent)] hover:bg-[var(--color-bg)] hover:text-[var(--color-accent)]"
+                  >
+                    Custom Field
+                  </button>
+                </div>
+
+                <input
+                  type="hidden"
+                  name="field_count"
+                  value={activeFields.length}
+                />
+
+                {activeFields.length === 0 ? (
+                  <div className="rounded-2xl border border-dashed border-[var(--color-border)] bg-[var(--color-bg)] p-8 text-center">
+                    <p className="font-serif text-xl font-medium text-[var(--color-ink)]">
+                      Start from the field library
+                    </p>
+                    <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-[var(--color-ink-muted)]">
+                      Select fields from the left. They will appear here in the
+                      order customers see them.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {activeFields.map((field, index) => (
+                      <FieldCanvasItem
+                        key={`${field.name}-${index}`}
+                        field={field}
+                        index={index}
+                        fieldCount={activeFields.length}
+                        updateField={updateField}
+                        removeField={removeField}
+                        moveField={moveField}
+                      />
+                    ))}
+                  </div>
+                )}
+              </section>
 
               <FormPreview fields={activeFields} />
-            </div>
-
-            <div className="space-y-3">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <h4 className="text-sm font-semibold text-[var(--color-ink)]">
-                    Form Canvas
-                  </h4>
-                  <p className="mt-1 text-xs text-[var(--color-ink-muted)]">
-                    These fields appear to customers in this order.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={addBlankField}
-                  className="rounded-full border border-[var(--color-border)] px-4 py-2 text-sm font-medium transition hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]"
-                >
-                  Custom Field
-                </button>
-              </div>
-
-              <input
-                type="hidden"
-                name="field_count"
-                value={activeFields.length}
-              />
-
-              {activeFields.length === 0 ? (
-                <div className="rounded-2xl border border-dashed border-[var(--color-border)] bg-[var(--color-bg)] p-8 text-center">
-                  <p className="font-serif text-xl font-medium text-[var(--color-ink)]">
-                    Start from the field library
-                  </p>
-                  <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-[var(--color-ink-muted)]">
-                    Select guest details, questions, uploads, or signature
-                    capture from the left. The form will build here as you go.
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {activeFields.map((field, index) => (
-                    <FieldCanvasItem
-                      key={`${field.name}-${index}`}
-                      field={field}
-                      index={index}
-                      fieldCount={activeFields.length}
-                      updateField={updateField}
-                      removeField={removeField}
-                      moveField={moveField}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {error ? (
-              <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700">
-                {error}
-              </p>
-            ) : null}
-
-            <div className="flex items-center justify-between gap-3 border-t border-[var(--color-border)] pt-5">
-              {form ? (
-                <button
-                  type="button"
-                  onClick={handleArchive}
-                  disabled={submitting || !form.is_active}
-                  className="rounded-full border border-amber-300 bg-white px-4 py-2 text-sm font-medium text-amber-800 transition hover:bg-amber-50 disabled:opacity-40"
-                >
-                  Hide Form
-                </button>
-              ) : (
-                <span />
-              )}
-              <button
-                type="submit"
-                disabled={submitting}
-                className="rounded-full bg-[var(--color-accent)] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[var(--color-accent-strong)] disabled:opacity-60"
-              >
-                {submitting ? "Saving..." : form ? "Save Changes" : "Save Draft"}
-              </button>
             </div>
           </div>
         </div>
@@ -884,22 +902,14 @@ function FieldLibrary({
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--color-accent)]">
           Field Library
         </p>
-        <h4 className="mt-1 font-serif text-xl font-medium tracking-tight">
-          Add what you need
-        </h4>
       </div>
 
       {FIELD_LIBRARY_GROUPS.map((group) => (
         <div key={group.title} className="space-y-2">
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-ink)]">
-              {group.title}
-            </p>
-            <p className="mt-1 text-xs leading-relaxed text-[var(--color-ink-muted)]">
-              {group.description}
-            </p>
-          </div>
-          <div className="space-y-2">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-ink-muted)]">
+            {group.title}
+          </p>
+          <div className="flex flex-wrap gap-2">
             {group.fields.map((template) => {
               const selected =
                 template.unique && selectedFieldNames.has(template.name);
@@ -907,30 +917,18 @@ function FieldLibrary({
                 <button
                   key={template.id}
                   type="button"
+                  title={template.description}
+                  aria-label={`${selected ? "Remove" : "Add"} ${template.title}. ${template.description}`}
                   onClick={() => onSelect(template)}
-                  className={`flex w-full items-start gap-3 rounded-xl border p-3 text-left transition ${
+                  className={`group relative rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
                     selected
-                      ? "border-[var(--color-accent)] bg-white"
-                      : "border-[var(--color-border)] bg-white/70 hover:border-[var(--color-accent)] hover:bg-white"
+                      ? "border-[var(--color-accent)] bg-[var(--color-accent)] text-white"
+                      : "border-[var(--color-border)] bg-white text-[var(--color-ink)] hover:border-[var(--color-accent)] hover:bg-white hover:text-[var(--color-accent)]"
                   }`}
                 >
-                  <span
-                    className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-xs font-semibold ${
-                      selected
-                        ? "border-[var(--color-accent)] bg-[var(--color-accent)] text-white"
-                        : "border-[var(--color-border)] text-[var(--color-ink-muted)]"
-                    }`}
-                    aria-hidden="true"
-                  >
-                    {selected ? "✓" : "+"}
-                  </span>
-                  <span className="min-w-0">
-                    <span className="block text-sm font-semibold text-[var(--color-ink)]">
-                      {template.title}
-                    </span>
-                    <span className="mt-0.5 block text-xs leading-relaxed text-[var(--color-ink-muted)]">
-                      {selected ? "Selected. Click to remove." : template.description}
-                    </span>
+                  <span>{selected ? "✓ " : "+ "}{template.title}</span>
+                  <span className="pointer-events-none absolute left-0 top-[calc(100%+0.35rem)] z-20 hidden w-52 rounded-lg border border-[var(--color-border)] bg-white p-2 text-left text-xs font-medium leading-relaxed text-[var(--color-ink-muted)] shadow-lg group-hover:block group-focus-visible:block">
+                    {template.description}
                   </span>
                 </button>
               );
