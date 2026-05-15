@@ -278,12 +278,26 @@ function fieldsFrom(form?: LocalFormRow) {
   }));
 }
 
-function fieldLabel(field: LocalFormField) {
-  return String(field.label || field.name || "Untitled Field");
-}
-
 function fieldType(field: LocalFormField) {
   return String(field.type || "text").toLowerCase();
+}
+
+function typeLabel(type: string) {
+  const labels: Record<string, string> = {
+    text: "Short answer",
+    email: "Email",
+    tel: "Phone",
+    number: "Number",
+    date: "Date",
+    textarea: "Long answer",
+    select: "Dropdown",
+    checkbox: "Checkbox",
+    image: "Image upload",
+    file: "File upload",
+    signature: "Signature",
+  };
+
+  return labels[type] || "Custom field";
 }
 
 function makeUniqueName(baseName: string, fields: LocalFormField[]) {
@@ -726,7 +740,7 @@ function FormEditor({
                 href={`/forms/${form.slug}?preview=1`}
                 className="rounded-full border border-[var(--color-border)] px-4 py-2 text-sm font-medium transition hover:border-[var(--color-accent)] hover:bg-[var(--color-bg)] hover:text-[var(--color-accent)]"
               >
-                Test Form
+                Preview
               </Link>
             ) : null}
             {form ? (
@@ -739,13 +753,13 @@ function FormEditor({
                 Hide
               </button>
             ) : null}
-          <button
-            type="submit"
-            disabled={submitting}
-            className="rounded-full bg-[var(--color-accent)] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[var(--color-accent-strong)] disabled:opacity-60"
-          >
-            {submitting ? "Saving..." : form ? "Save Changes" : "Save Draft"}
-          </button>
+            <button
+              type="submit"
+              disabled={submitting}
+              className="rounded-full bg-[var(--color-accent)] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[var(--color-accent-strong)] disabled:opacity-60"
+            >
+              {submitting ? "Saving..." : form ? "Save Changes" : "Save Draft"}
+            </button>
           </div>
         </div>
 
@@ -755,8 +769,8 @@ function FormEditor({
           </p>
         ) : null}
 
-        <div className="grid lg:grid-cols-[270px_minmax(0,1fr)_320px]">
-          <aside className="border-b border-[var(--color-border)] bg-[var(--color-bg)] p-4 lg:border-b-0 lg:border-r">
+        <div className="grid lg:grid-cols-[220px_minmax(0,1fr)_280px] 2xl:grid-cols-[250px_minmax(620px,1fr)_320px]">
+          <aside className="min-w-0 border-b border-[var(--color-border)] bg-[var(--color-bg)] p-4 lg:border-b-0 lg:border-r">
             <FieldLibrary
               fields={activeFields}
               selectedFieldNames={selectedFieldNames}
@@ -775,10 +789,7 @@ function FormEditor({
             moveField={moveField}
           />
 
-          <FormSettings
-            form={form}
-            initialSchema={initialSchema}
-          />
+          <FormSettings form={form} initialSchema={initialSchema} />
         </div>
       </form>
 
@@ -809,7 +820,7 @@ function FormSettings({
   initialSchema: LocalFormSchema;
 }) {
   return (
-    <aside className="border-t border-[var(--color-border)] bg-[var(--color-bg)] p-4 lg:border-l lg:border-t-0">
+    <aside className="min-w-0 border-t border-[var(--color-border)] bg-[var(--color-bg)] p-4 lg:border-l lg:border-t-0">
       <div className="space-y-4 lg:sticky lg:top-4">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--color-accent)]">
@@ -913,15 +924,18 @@ function LiveFormEditor({
   moveField: (index: number, direction: -1 | 1) => void;
 }) {
   return (
-    <section className="min-h-[36rem] bg-white p-5">
+    <section className="min-h-[38rem] min-w-0 bg-white p-5 xl:p-6">
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-accent)]">
-            Live Preview
+            Form Builder
           </p>
           <h4 className="mt-1 font-serif text-2xl font-medium tracking-tight">
             Edit the form directly
           </h4>
+          <p className="mt-1 text-sm text-[var(--color-ink-muted)]">
+            Save the draft, then use Preview to see the customer view.
+          </p>
         </div>
         <button
           type="button"
@@ -945,7 +959,7 @@ function LiveFormEditor({
           </p>
         </div>
       ) : (
-        <div className="mx-auto max-w-2xl space-y-3">
+        <div className="mx-auto w-full max-w-4xl space-y-3">
           {fields.map((field, index) => (
             <EditablePreviewField
               key={fieldKey(field, index)}
@@ -1023,8 +1037,14 @@ function EditablePreviewField({
             className="w-full rounded-lg border border-transparent bg-transparent px-1 py-1 font-serif text-xl font-medium tracking-tight text-[var(--color-ink)] outline-none transition hover:border-[var(--color-border)] focus:border-[var(--color-accent)] focus:bg-[var(--color-bg)]"
             placeholder="Field label"
           />
-
-          <PreviewControl field={field} />
+          <div className="flex flex-wrap items-center gap-2 px-1 text-xs text-[var(--color-ink-muted)]">
+            <span className="rounded-full border border-[var(--color-border)] bg-[var(--color-bg)] px-2.5 py-1 font-medium text-[var(--color-ink)]">
+              {typeLabel(type)}
+            </span>
+            <span className="font-mono">
+              {field.name || `field${index + 1}`}
+            </span>
+          </div>
         </div>
 
         <div className="flex shrink-0 flex-wrap gap-2">
@@ -1032,29 +1052,35 @@ function EditablePreviewField({
             type="button"
             onClick={() => moveField(index, -1)}
             disabled={index === 0}
-            className="rounded-lg border border-[var(--color-border)] px-3 py-2 text-xs font-semibold text-[var(--color-ink-muted)] transition hover:border-[var(--color-accent)] hover:text-[var(--color-accent)] disabled:opacity-35"
+            title="Move up"
+            aria-label="Move field up"
+            className="grid h-9 w-9 place-items-center rounded-full border border-[var(--color-border)] text-base font-semibold leading-none text-[var(--color-ink-muted)] transition hover:border-[var(--color-accent)] hover:bg-[var(--color-bg)] hover:text-[var(--color-accent)] disabled:opacity-35"
           >
-            Up
+            ↑
           </button>
           <button
             type="button"
             onClick={() => moveField(index, 1)}
             disabled={index === fieldCount - 1}
-            className="rounded-lg border border-[var(--color-border)] px-3 py-2 text-xs font-semibold text-[var(--color-ink-muted)] transition hover:border-[var(--color-accent)] hover:text-[var(--color-accent)] disabled:opacity-35"
+            title="Move down"
+            aria-label="Move field down"
+            className="grid h-9 w-9 place-items-center rounded-full border border-[var(--color-border)] text-base font-semibold leading-none text-[var(--color-ink-muted)] transition hover:border-[var(--color-accent)] hover:bg-[var(--color-bg)] hover:text-[var(--color-accent)] disabled:opacity-35"
           >
-            Down
+            ↓
           </button>
           <button
             type="button"
             onClick={() => removeField(index)}
-            className="rounded-lg border border-[var(--color-border)] px-3 py-2 text-xs font-semibold text-[var(--color-ink-muted)] transition hover:border-red-300 hover:text-red-700"
+            title="Remove field"
+            aria-label="Remove field"
+            className="grid h-9 w-9 place-items-center rounded-full border border-[var(--color-border)] text-lg font-semibold leading-none text-[var(--color-ink-muted)] transition hover:border-red-300 hover:bg-red-50 hover:text-red-700"
           >
-            Remove
+            ×
           </button>
         </div>
       </div>
 
-      <div className="mt-4 grid gap-3 md:grid-cols-[160px_1fr_auto] md:items-end">
+      <div className="mt-4 grid gap-3 md:grid-cols-[180px_minmax(0,1fr)_auto] md:items-end">
         <Field label="Type">
           <select
             name={`field_type_${index}`}
@@ -1136,7 +1162,7 @@ function EditablePreviewField({
       ) : null}
 
       {(type === "image" || type === "file") && (
-        <label className="mt-3 flex w-max min-h-10 items-center gap-2 rounded-lg border border-[var(--color-border)] bg-white px-3 text-xs font-medium">
+        <label className="mt-3 flex min-h-10 w-max items-center gap-2 rounded-lg border border-[var(--color-border)] bg-white px-3 text-xs font-medium">
           <input
             name={`field_multiple_${index}`}
             type="checkbox"
@@ -1154,42 +1180,6 @@ function EditablePreviewField({
       )}
     </article>
   );
-}
-
-function PreviewControl({ field }: { field: LocalFormField }) {
-  const type = fieldType(field);
-  const baseClass =
-    "rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 text-sm text-[var(--color-ink-muted)]";
-
-  if (type === "textarea") {
-    return <div className={`${baseClass} min-h-20`}>{field.placeholder || "Long answer"}</div>;
-  }
-  if (type === "select") {
-    return (
-      <div className={baseClass}>
-        {(field.options && field.options[0]) || "Select an option"}
-      </div>
-    );
-  }
-  if (type === "checkbox") {
-    return (
-      <div className="flex items-center gap-2 text-sm text-[var(--color-ink-muted)]">
-        <span className="h-4 w-4 rounded border border-[var(--color-border)] bg-[var(--color-bg)]" />
-        {fieldLabel(field)}
-      </div>
-    );
-  }
-  if (type === "image" || type === "file") {
-    return (
-      <div className={`${baseClass} border-dashed`}>
-        {type === "image" ? "Image upload" : "File upload"}
-      </div>
-    );
-  }
-  if (type === "signature") {
-    return <div className="h-24 rounded-xl border border-dashed border-[var(--color-border)] bg-[var(--color-bg)]" />;
-  }
-  return <div className={baseClass}>{field.placeholder || type}</div>;
 }
 
 function FieldLibrary({
