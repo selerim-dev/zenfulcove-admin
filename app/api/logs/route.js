@@ -4,7 +4,7 @@ import path from "path";
 
 const LOGS_PATH = path.join(process.cwd(), "logs", "activity.json");
 const LAST_RUN_PATH = path.join(process.cwd(), "logs", "last-run.json");
-const DEFAULT_LIMIT = 50;
+const DEFAULT_LIMIT = 10;
 
 export async function GET(request) {
   try {
@@ -14,7 +14,7 @@ export async function GET(request) {
 
     const { searchParams } = new URL(request.url);
     const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
-    const limit = Math.min(100, Math.max(10, parseInt(searchParams.get("limit") || String(DEFAULT_LIMIT), 10)));
+    const limit = Math.min(50, Math.max(1, parseInt(searchParams.get("limit") || String(DEFAULT_LIMIT), 10)));
 
     const reversed = [...allLogs].reverse();
     const start = (page - 1) * limit;

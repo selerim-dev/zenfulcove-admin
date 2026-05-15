@@ -212,17 +212,20 @@ function SalesmateSyncCard({ config, onChange }) {
 
 export default function SyncsPanel({
   jotformConfig,
+  localFormConfig,
   lodgifyConfig,
   salesmateConfig,
   onChange,
 }) {
   const safeJotformConfig = jotformConfig || {};
+  const safeLocalFormConfig = localFormConfig || {};
   const safeLodgifyConfig = lodgifyConfig || {};
   const safeSalesmateConfig = salesmateConfig || {};
 
   function update(patch) {
     onChange({
       jotformClientSync: safeJotformConfig,
+      localFormClientSync: safeLocalFormConfig,
       lodgifyClientSync: safeLodgifyConfig,
       salesmateFormSync: safeSalesmateConfig,
       ...patch,
@@ -231,6 +234,10 @@ export default function SyncsPanel({
 
   function updateJotform(field, value) {
     update({ jotformClientSync: { ...safeJotformConfig, [field]: value } });
+  }
+
+  function updateLocalForm(field, value) {
+    update({ localFormClientSync: { ...safeLocalFormConfig, [field]: value } });
   }
 
   function updateLodgify(field, value) {
@@ -283,6 +290,53 @@ export default function SyncsPanel({
           <p className="text-xs text-forest/40 mt-1">
             Comma-separated form IDs. All submissions from each listed form are read on every sync run.
           </p>
+        </div>
+      </SyncCard>
+
+      <SyncCard
+        title="Local Form Client Sync"
+        description="Pull contacts from Zenfulcove-hosted form submissions in Supabase and upsert them into your master SendGrid client list. This is the replacement path for Jotform."
+        enabled={safeLocalFormConfig.enabled}
+        onToggle={(enabled) => updateLocalForm("enabled", enabled)}
+      >
+        <SendGridListPicker
+          label="SendGrid Master List"
+          value={safeLocalFormConfig.sendgridContactListId || ""}
+          onChange={(value) => updateLocalForm("sendgridContactListId", value)}
+          helperText="Usually this should be the same master client list used by the Jotform sync."
+        />
+
+        <div>
+          <FieldLabel>Local Form Slugs</FieldLabel>
+          <textarea
+            value={(safeLocalFormConfig.formSlugs || []).join(", ")}
+            onChange={(e) => {
+              const slugs = e.target.value
+                .split(",")
+                .map((item) => item.trim())
+                .filter(Boolean);
+              updateLocalForm("formSlugs", slugs);
+            }}
+            placeholder="guest-info"
+            rows={3}
+            className="border border-sand rounded-lg px-3 py-2 text-sm w-full font-mono focus:outline-none focus:ring-2 focus:ring-grove/30"
+          />
+          <p className="text-xs text-forest/40 mt-1">
+            Comma-separated slugs from <span className="font-mono">local_forms</span>. Leave blank to sync every local form submission.
+          </p>
+        </div>
+
+        <div className="flex items-center justify-between rounded-lg border border-sand px-4 py-3">
+          <div>
+            <p className="text-sm font-medium text-forest">Only Unsynced Submissions</p>
+            <p className="text-xs text-forest/50 mt-1">
+              Off matches the current Jotform behavior by re-upserting all contacts each run.
+            </p>
+          </div>
+          <Toggle
+            enabled={safeLocalFormConfig.onlyUnsynced === true}
+            onChange={(enabled) => updateLocalForm("onlyUnsynced", enabled)}
+          />
         </div>
       </SyncCard>
 

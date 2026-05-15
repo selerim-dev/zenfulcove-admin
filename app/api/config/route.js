@@ -112,6 +112,18 @@ export async function POST(request) {
       }
     }
 
+    if (updates.localFormClientSync !== undefined) {
+      updated.localFormClientSync = {
+        ...updated.localFormClientSync,
+        ...updates.localFormClientSync,
+      };
+      if (updates.localFormClientSync.formSlugs !== undefined) {
+        updated.localFormClientSync.formSlugs = Array.isArray(updates.localFormClientSync.formSlugs)
+          ? updates.localFormClientSync.formSlugs
+          : [];
+      }
+    }
+
     if (updates.lodgifyClientSync !== undefined) {
       updated.lodgifyClientSync = {
         ...updated.lodgifyClientSync,

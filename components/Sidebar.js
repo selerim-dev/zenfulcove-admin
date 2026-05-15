@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 const CATEGORIES = [
   {
     id: "settings",
@@ -35,6 +37,50 @@ const CATEGORIES = [
         strokeLinejoin="round"
       >
         <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+      </svg>
+    ),
+  },
+  {
+    id: "forms",
+    label: "Forms",
+    href: "/admin/forms",
+    icon: (
+      <svg
+        width="20"
+        height="20"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7z" />
+        <path d="M14 2v5h5" />
+        <path d="M9 13h6" />
+        <path d="M9 17h4" />
+      </svg>
+    ),
+  },
+  {
+    id: "kayaks",
+    label: "Rentals",
+    href: "/admin/kayaks",
+    icon: (
+      <svg
+        width="20"
+        height="20"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M3 16c4 3 14 3 18 0" />
+        <path d="M5 13c2-3 12-3 14 0" />
+        <path d="M8 11l2 7" />
+        <path d="M16 11l-2 7" />
       </svg>
     ),
   },
@@ -160,6 +206,26 @@ const CATEGORIES = [
   },
 ];
 
+const GROUPS = [
+  { label: "Operations", ids: ["settings", "syncs"] },
+  {
+    label: "Marketing",
+    ids: [
+      "messages",
+      "promotions",
+      "vacancy",
+      "waiver",
+      "popup",
+      "event-popup",
+    ],
+  },
+  { label: "Customer Portal", ids: ["forms", "kayaks"] },
+];
+
+const CATEGORY_BY_ID = Object.fromEntries(
+  CATEGORIES.map((category) => [category.id, category])
+);
+
 export default function Sidebar({
   activeCategory,
   onSelect,
@@ -168,18 +234,23 @@ export default function Sidebar({
 }) {
   return (
     <aside
-      className={`bg-forest flex flex-col shrink-0 transition-all duration-200 ${
-        collapsed ? "w-[60px]" : "w-[240px]"
+      className={`flex shrink-0 flex-col border-r border-[var(--color-border)] bg-[var(--color-surface)] transition-all duration-200 ${
+        collapsed ? "w-[64px]" : "w-[260px]"
       }`}
     >
       {/* Collapse toggle */}
       <button
         onClick={onToggleCollapse}
-        className={`flex items-center py-4 text-white/60 hover:text-white transition-colors ${
-          collapsed ? "justify-center" : "justify-start pl-4"
+        className={`mx-2 mt-3 flex items-center rounded-xl px-3 py-2 text-[var(--color-ink-muted)] transition-colors hover:bg-[var(--color-bg)] hover:text-[var(--color-ink)] ${
+          collapsed ? "justify-center" : "justify-between"
         }`}
         title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
       >
+        {!collapsed && (
+          <span className="text-xs font-semibold uppercase tracking-[0.2em]">
+            Menu
+          </span>
+        )}
         <svg
           width="20"
           height="20"
@@ -197,28 +268,59 @@ export default function Sidebar({
         </svg>
       </button>
 
-      {/* Nav items */}
-      <nav className="flex-1 flex flex-col gap-1 px-2">
-        {CATEGORIES.map((cat) => {
-          const isActive = activeCategory === cat.id;
-          return (
-            <button
-              key={cat.id}
-              onClick={() => onSelect(cat.id)}
-              title={collapsed ? cat.label : undefined}
-              className={`flex items-center gap-3 rounded-lg px-3 py-3 text-sm transition-colors duration-150 ${
-                isActive
-                  ? "bg-grove text-white"
-                  : "text-white/60 hover:text-white hover:bg-white/10"
-              } ${collapsed ? "justify-center" : ""}`}
-            >
-              <span className="shrink-0">{cat.icon}</span>
-              {!collapsed && (
-                <span className="truncate font-medium">{cat.label}</span>
-              )}
-            </button>
-          );
-        })}
+      <nav className="flex-1 flex flex-col gap-4 px-2 py-3">
+        {GROUPS.map((group) => (
+          <div key={group.label} className="space-y-1.5">
+            {!collapsed && (
+              <p className="px-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--color-ink-muted)]">
+                {group.label}
+              </p>
+            )}
+            {group.ids.map((id) => {
+              const cat = CATEGORY_BY_ID[id];
+              const isActive = activeCategory === cat.id;
+              if (cat.href) {
+                return (
+                  <Link
+                    key={cat.id}
+                    href={cat.href}
+                    title={collapsed ? cat.label : undefined}
+                    className={`flex items-center gap-3 rounded-xl px-3 py-3 text-sm transition-colors duration-150 ${
+                      isActive
+                        ? "bg-[var(--color-accent)] text-white shadow-sm"
+                        : "text-[var(--color-ink-muted)] hover:bg-[var(--color-bg)] hover:text-[var(--color-ink)]"
+                    } ${collapsed ? "justify-center" : ""}`}
+                  >
+                    <span className="shrink-0">{cat.icon}</span>
+                    {!collapsed && (
+                      <span className="truncate font-medium">
+                        {cat.label}
+                      </span>
+                    )}
+                  </Link>
+                );
+              }
+
+              return (
+                <button
+                  key={cat.id}
+                  onClick={() => onSelect(cat.id)}
+                  title={collapsed ? cat.label : undefined}
+                  className={`flex items-center gap-3 rounded-xl px-3 py-3 text-left text-sm transition-colors duration-150 ${
+                    isActive
+                      ? "bg-[var(--color-accent)] text-white shadow-sm"
+                      : "text-[var(--color-ink-muted)] hover:bg-[var(--color-bg)] hover:text-[var(--color-ink)]"
+                  } ${collapsed ? "justify-center" : ""}`}
+                >
+                  <span className="shrink-0">{cat.icon}</span>
+                  {!collapsed && (
+                    <span className="truncate font-medium">{cat.label}</span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        ))}
       </nav>
     </aside>
   );
