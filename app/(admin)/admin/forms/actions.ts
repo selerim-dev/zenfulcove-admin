@@ -166,3 +166,18 @@ export async function archiveLocalForm(id: string) {
   if (error) throw new Error(`Archive failed: ${error.message}`);
   revalidatePath("/admin/forms");
 }
+
+export async function deleteLocalForm(id: string) {
+  await requireAdminCookie();
+  const normalizedId = String(id || "").trim();
+  if (!normalizedId) throw new Error("Missing form id.");
+
+  const supabase = createSupabaseAdminClient();
+  const { error } = await supabase
+    .from("local_forms")
+    .delete()
+    .eq("id", normalizedId);
+
+  if (error) throw new Error(`Delete failed: ${error.message}`);
+  revalidatePath("/admin/forms");
+}

@@ -143,9 +143,11 @@ function SignaturePad({ label, required, value, onChange }: SignaturePadProps) {
 export default function LocalForm({
   formSlug,
   schema,
+  preview = false,
 }: {
   formSlug: string;
   schema: LocalFormSchema;
+  preview?: boolean;
 }) {
   const fields = Array.isArray(schema.fields) ? schema.fields : [];
   const [values, setValues] = useState<Record<string, string | boolean>>({});
@@ -191,6 +193,9 @@ export default function LocalForm({
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    if (preview) return;
+
     setStatus("submitting");
     setError("");
 
@@ -385,7 +390,7 @@ export default function LocalForm({
       {error ? <p className="text-sm text-red-700">{error}</p> : null}
 
       <button
-        type="submit"
+        type={preview ? "button" : "submit"}
         disabled={status === "submitting"}
         className="rounded-full bg-[var(--color-accent)] px-6 py-3 text-sm font-medium text-white transition hover:bg-[var(--color-accent-strong)] disabled:opacity-60"
       >

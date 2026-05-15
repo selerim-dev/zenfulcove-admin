@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
-import { archiveLocalForm, saveLocalForm } from "./actions";
+import LocalForm from "@/components/customer/LocalForm";
+import { archiveLocalForm, deleteLocalForm, saveLocalForm } from "./actions";
 
 type LocalFormField = {
   name: string;
@@ -19,6 +20,15 @@ type LocalFormSchema = {
   fields?: LocalFormField[];
   submitLabel?: string;
   successMessage?: string;
+};
+
+type FormDraftSettings = {
+  name: string;
+  slug: string;
+  description: string;
+  submitLabel: string;
+  successMessage: string;
+  isActive: boolean;
 };
 
 export type LocalFormRow = {
@@ -282,24 +292,6 @@ function fieldType(field: LocalFormField) {
   return String(field.type || "text").toLowerCase();
 }
 
-function typeLabel(type: string) {
-  const labels: Record<string, string> = {
-    text: "Short answer",
-    email: "Email",
-    tel: "Phone",
-    number: "Number",
-    date: "Date",
-    textarea: "Long answer",
-    select: "Dropdown",
-    checkbox: "Checkbox",
-    image: "Image upload",
-    file: "File upload",
-    signature: "Signature",
-  };
-
-  return labels[type] || "Custom field";
-}
-
 function makeUniqueName(baseName: string, fields: LocalFormField[]) {
   const normalizedBase = baseName.replace(/[^A-Za-z0-9_]/g, "") || "field";
   const used = new Set(fields.map((field) => String(field.name || "")));
@@ -342,7 +334,7 @@ function fieldFromTemplate(template: FieldTemplate, fields: LocalFormField[]) {
 }
 
 function fieldKey(field: LocalFormField, index: number) {
-  return `${field.name || "field"}-${index}`;
+  return field.name || `field-${index}`;
 }
 
 function templateCount(template: FieldTemplate, fields: LocalFormField[]) {
@@ -369,7 +361,29 @@ export default function FormsManager({
   stats: Record<string, LocalFormStats>;
   submissionsBySlug: Record<string, LocalFormSubmissionRow[]>;
 }) {
+  const router = useRouter();
   const [editor, setEditor] = useState<EditorState>({ mode: "closed" });
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  async function handleDelete(form: LocalFormRow) {
+    if (
+      !window.confirm(
+        `Delete ${form.name}? This removes the form from the admin list. Existing submissions stay in the database.`
+      )
+    ) {
+      return;
+    }
+
+    setDeletingId(form.id);
+    try {
+      await deleteLocalForm(form.id);
+      router.refresh();
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : "Delete failed.");
+    } finally {
+      setDeletingId(null);
+    }
+  }
 
   if (editor.mode !== "closed") {
     return (
@@ -427,11 +441,11 @@ export default function FormsManager({
                   key={form.id}
                   className="group p-4 transition hover:bg-[var(--color-bg)]"
                 >
-                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                  <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                     <button
                       type="button"
                       onClick={() => setEditor({ mode: "edit", form })}
-                      className="min-w-0 rounded-xl p-2 text-left transition hover:bg-white focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]/30"
+                      className="min-w-0 flex-1 rounded-xl p-2 text-left transition hover:bg-white focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]/30"
                     >
                       <div className="flex flex-wrap items-center gap-2">
                         <p className="truncate font-serif text-xl font-medium tracking-tight">
@@ -457,34 +471,40 @@ export default function FormsManager({
                       ) : null}
                     </button>
 
-                    <div className="grid min-w-full gap-2 text-sm sm:grid-cols-3 lg:min-w-[26rem]">
-                      <Metric label="Submissions" value={formStats.submissions} />
-                      <Metric label="Unsynced" value={formStats.unsynced} />
-                      <Metric
-                        label="Latest"
-                        value={formatDate(formStats.lastSubmittedAt)}
-                      />
-                    </div>
-                  </div>
+                    <div className="grid gap-3 sm:grid-cols-[1fr_auto] xl:min-w-[34rem] xl:grid-cols-[1fr_auto]">
+                      <div className="grid gap-2 text-sm sm:grid-cols-3">
+                        <Metric
+                          label="Submissions"
+                          value={formStats.submissions}
+                        />
+                        <Metric label="Unsynced" value={formStats.unsynced} />
+                        <Metric
+                          label="Latest"
+                          value={formatDate(formStats.lastSubmittedAt)}
+                        />
+                      </div>
 
-                  <div className="mt-3 flex flex-wrap gap-2 pl-2">
-                    <button
-                      type="button"
-                      onClick={() => setEditor({ mode: "edit", form })}
-                      className="rounded-full border border-[var(--color-border)] bg-white px-4 py-2 text-sm font-medium transition hover:border-[var(--color-accent)] hover:bg-[var(--color-bg)] hover:text-[var(--color-accent)]"
-                    >
-                      Edit
-                    </button>
-                    <Link
-                      href={
-                        form.is_active
-                          ? `/forms/${form.slug}`
-                          : `/forms/${form.slug}?preview=1`
-                      }
-                      className="rounded-full border border-[var(--color-border)] bg-white px-4 py-2 text-sm font-medium transition hover:border-[var(--color-accent)] hover:bg-[var(--color-bg)] hover:text-[var(--color-accent)]"
-                    >
-                      {form.is_active ? "Open" : "Preview"}
-                    </Link>
+                      <div className="flex flex-wrap items-start gap-2 sm:justify-end">
+                        <Link
+                          href={
+                            form.is_active
+                              ? `/forms/${form.slug}`
+                              : `/forms/${form.slug}?preview=1`
+                          }
+                          className="rounded-full border border-[var(--color-border)] bg-white px-4 py-2 text-sm font-medium transition hover:border-[var(--color-accent)] hover:bg-[var(--color-bg)] hover:text-[var(--color-accent)]"
+                        >
+                          Preview
+                        </Link>
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(form)}
+                          disabled={deletingId === form.id}
+                          className="rounded-full border border-red-200 bg-white px-4 py-2 text-sm font-medium text-red-700 transition hover:bg-red-50 disabled:opacity-50"
+                        >
+                          {deletingId === form.id ? "Deleting..." : "Delete"}
+                        </button>
+                      </div>
+                    </div>
                   </div>
 
                   {recentSubmissions.length > 0 ? (
@@ -590,7 +610,17 @@ function FormEditor({
   const [fields, setFields] = useState<LocalFormField[]>(() =>
     form ? fieldsFrom(form) : []
   );
+  const [settings, setSettings] = useState<FormDraftSettings>(() => ({
+    name: form?.name || "",
+    slug: form?.slug || "",
+    description: form?.description || "",
+    submitLabel: initialSchema.submitLabel || "Submit",
+    successMessage:
+      initialSchema.successMessage || "Thanks. We received your information.",
+    isActive: form?.is_active ?? false,
+  }));
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -612,6 +642,20 @@ function FormEditor({
     activeFields.length === 0
       ? -1
       : Math.min(selectedIndex, activeFields.length - 1);
+
+  const previewSchema = useMemo(
+    () => ({
+      fields: activeFields,
+      submitLabel: settings.submitLabel || "Submit",
+      successMessage:
+        settings.successMessage || "Thanks. We received your information.",
+    }),
+    [activeFields, settings.submitLabel, settings.successMessage]
+  );
+
+  function updateSettings(patch: Partial<FormDraftSettings>) {
+    setSettings((current) => ({ ...current, ...patch }));
+  }
 
   function updateField(
     index: number,
@@ -730,19 +774,21 @@ function FormEditor({
                 {isEdit ? "Editing Form" : "New Draft"}
               </p>
               <h3 className="truncate font-serif text-xl font-medium tracking-tight">
-                {isEdit ? form?.name : "Build a customer form"}
+                {isEdit
+                  ? settings.name || form?.name
+                  : settings.name || "Build a customer form"}
               </h3>
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            {form ? (
-              <Link
-                href={`/forms/${form.slug}?preview=1`}
-                className="rounded-full border border-[var(--color-border)] px-4 py-2 text-sm font-medium transition hover:border-[var(--color-accent)] hover:bg-[var(--color-bg)] hover:text-[var(--color-accent)]"
-              >
-                Preview
-              </Link>
-            ) : null}
+            <button
+              type="button"
+              onClick={() => setPreviewOpen(true)}
+              disabled={activeFields.length === 0}
+              className="rounded-full border border-[var(--color-border)] px-4 py-2 text-sm font-medium transition hover:border-[var(--color-accent)] hover:bg-[var(--color-bg)] hover:text-[var(--color-accent)] disabled:opacity-45"
+            >
+              Preview
+            </button>
             {form ? (
               <button
                 type="button"
@@ -789,9 +835,18 @@ function FormEditor({
             moveField={moveField}
           />
 
-          <FormSettings form={form} initialSchema={initialSchema} />
+          <FormSettings settings={settings} onChange={updateSettings} />
         </div>
       </form>
+
+      {previewOpen ? (
+        <CustomerPreviewModal
+          title={settings.name || "Untitled Form"}
+          description={settings.description}
+          schema={previewSchema}
+          onClose={() => setPreviewOpen(false)}
+        />
+      ) : null}
 
       <style>{`
         .form-input {
@@ -813,11 +868,11 @@ function FormEditor({
 }
 
 function FormSettings({
-  form,
-  initialSchema,
+  settings,
+  onChange,
 }: {
-  form?: LocalFormRow;
-  initialSchema: LocalFormSchema;
+  settings: FormDraftSettings;
+  onChange: (patch: Partial<FormDraftSettings>) => void;
 }) {
   return (
     <aside className="min-w-0 border-t border-[var(--color-border)] bg-[var(--color-bg)] p-4 lg:border-l lg:border-t-0">
@@ -836,7 +891,8 @@ function FormSettings({
             name="name"
             type="text"
             required
-            defaultValue={form?.name || ""}
+            value={settings.name}
+            onChange={(event) => onChange({ name: event.target.value })}
             className="form-input"
           />
         </Field>
@@ -853,7 +909,8 @@ function FormSettings({
           <input
             name="is_active"
             type="checkbox"
-            defaultChecked={form?.is_active ?? false}
+            checked={settings.isActive}
+            onChange={(event) => onChange({ isActive: event.target.checked })}
             className="h-5 w-5 rounded border-[var(--color-border)] accent-[var(--color-accent)]"
           />
         </label>
@@ -867,7 +924,8 @@ function FormSettings({
               <input
                 name="slug"
                 type="text"
-                defaultValue={form?.slug || ""}
+                value={settings.slug}
+                onChange={(event) => onChange({ slug: event.target.value })}
                 placeholder="guest-info"
                 className="form-input"
               />
@@ -875,7 +933,10 @@ function FormSettings({
             <Field label="Description">
               <textarea
                 name="description"
-                defaultValue={form?.description || ""}
+                value={settings.description}
+                onChange={(event) =>
+                  onChange({ description: event.target.value })
+                }
                 rows={3}
                 className="form-input resize-y"
               />
@@ -884,7 +945,10 @@ function FormSettings({
               <input
                 name="submit_label"
                 type="text"
-                defaultValue={initialSchema.submitLabel || "Submit"}
+                value={settings.submitLabel}
+                onChange={(event) =>
+                  onChange({ submitLabel: event.target.value })
+                }
                 className="form-input"
               />
             </Field>
@@ -892,9 +956,9 @@ function FormSettings({
               <input
                 name="success_message"
                 type="text"
-                defaultValue={
-                  initialSchema.successMessage ||
-                  "Thanks. We received your information."
+                value={settings.successMessage}
+                onChange={(event) =>
+                  onChange({ successMessage: event.target.value })
                 }
                 className="form-input"
               />
@@ -903,6 +967,72 @@ function FormSettings({
         </details>
       </div>
     </aside>
+  );
+}
+
+function CustomerPreviewModal({
+  title,
+  description,
+  schema,
+  onClose,
+}: {
+  title: string;
+  description: string;
+  schema: LocalFormSchema;
+  onClose: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-[var(--color-ink)]/35 px-4 py-6">
+      <button
+        type="button"
+        aria-label="Close preview"
+        onClick={onClose}
+        className="fixed inset-0 h-full w-full cursor-default"
+      />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Customer form preview"
+        className="relative mx-auto w-full max-w-3xl rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg)] p-4 shadow-2xl md:p-6"
+      >
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--color-accent)]">
+              Customer Preview
+            </p>
+            <p className="mt-1 text-sm text-[var(--color-ink-muted)]">
+              Unsaved draft view
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="grid h-9 w-9 place-items-center rounded-full border border-[var(--color-border)] bg-white text-lg font-semibold leading-none text-[var(--color-ink-muted)] transition hover:border-red-300 hover:bg-red-50 hover:text-red-700"
+            aria-label="Close preview"
+          >
+            ×
+          </button>
+        </div>
+
+        <div className="mx-auto max-w-xl space-y-6 rounded-2xl bg-[var(--color-bg)]">
+          <header>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[var(--color-accent)]">
+              Zenfulcove
+            </p>
+            <h1 className="mt-2 font-serif text-4xl font-medium leading-[1.05] tracking-tight">
+              {title}
+            </h1>
+            {description ? (
+              <p className="mt-3 text-sm leading-relaxed text-[var(--color-ink-muted)]">
+                {description}
+              </p>
+            ) : null}
+          </header>
+
+          <LocalForm formSlug="preview" schema={schema} preview />
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -1003,7 +1133,7 @@ function EditablePreviewField({
   return (
     <article
       onFocusCapture={onSelect}
-      className={`rounded-2xl border bg-white p-4 shadow-sm transition ${
+      className={`rounded-2xl border bg-white p-3 shadow-sm transition ${
         selected
           ? "border-[var(--color-accent)] ring-2 ring-[var(--color-accent)]/15"
           : "border-[var(--color-border)] hover:border-[var(--color-accent)]/60"
@@ -1024,8 +1154,8 @@ function EditablePreviewField({
         />
       ) : null}
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0 flex-1 space-y-2">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0 flex-1">
           <input
             name={`field_label_${index}`}
             type="text"
@@ -1037,14 +1167,6 @@ function EditablePreviewField({
             className="w-full rounded-lg border border-transparent bg-transparent px-1 py-1 font-serif text-xl font-medium tracking-tight text-[var(--color-ink)] outline-none transition hover:border-[var(--color-border)] focus:border-[var(--color-accent)] focus:bg-[var(--color-bg)]"
             placeholder="Field label"
           />
-          <div className="flex flex-wrap items-center gap-2 px-1 text-xs text-[var(--color-ink-muted)]">
-            <span className="rounded-full border border-[var(--color-border)] bg-[var(--color-bg)] px-2.5 py-1 font-medium text-[var(--color-ink)]">
-              {typeLabel(type)}
-            </span>
-            <span className="font-mono">
-              {field.name || `field${index + 1}`}
-            </span>
-          </div>
         </div>
 
         <div className="flex shrink-0 flex-wrap gap-2">
@@ -1080,7 +1202,7 @@ function EditablePreviewField({
         </div>
       </div>
 
-      <div className="mt-4 grid gap-3 md:grid-cols-[180px_minmax(0,1fr)_auto] md:items-end">
+      <div className="mt-3 grid gap-3 md:grid-cols-[180px_minmax(0,1fr)_auto] md:items-end">
         <Field label="Type">
           <select
             name={`field_type_${index}`}
@@ -1211,9 +1333,12 @@ function FieldLibrary({
               const count = templateCount(template, fields);
               const selected =
                 template.unique && selectedFieldNames.has(template.name);
+              const focusedName =
+                selectedIndex >= 0 ? String(fields[selectedIndex]?.name || "") : "";
               const focused =
-                selectedIndex >= 0 &&
-                fields[selectedIndex]?.name === template.name;
+                focusedName === template.name ||
+                (!template.unique && focusedName.startsWith(template.name));
+              const active = selected || focused || count > 0;
               return (
                 <button
                   key={template.id}
@@ -1221,8 +1346,8 @@ function FieldLibrary({
                   title={template.description}
                   aria-label={`${selected ? "Focus" : "Add"} ${template.title}. ${template.description}`}
                   onClick={() => onSelect(template)}
-                  className={`group relative rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
-                    selected || focused
+                  className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                    active
                       ? "border-[var(--color-accent)] bg-[var(--color-accent)] text-white shadow-sm"
                       : "border-[var(--color-border)] bg-white text-[var(--color-ink)] hover:border-[var(--color-accent)] hover:bg-white hover:text-[var(--color-accent)]"
                   }`}
@@ -1230,9 +1355,6 @@ function FieldLibrary({
                   <span>
                     {selected ? "Added " : count > 0 ? `${count} ` : "+ "}
                     {template.title}
-                  </span>
-                  <span className="pointer-events-none absolute left-0 top-[calc(100%+0.35rem)] z-20 hidden w-52 rounded-lg border border-[var(--color-border)] bg-white p-2 text-left text-xs font-medium leading-relaxed text-[var(--color-ink-muted)] shadow-lg group-hover:block group-focus-visible:block">
-                    {template.description}
                   </span>
                 </button>
               );
