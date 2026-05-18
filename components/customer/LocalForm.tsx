@@ -1,6 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import {
+  DEFAULT_LOCAL_FORM_TERMS,
+  optionsForLocalFormSource,
+} from "@/lib/local-form-options";
 
 type LocalFormField = {
   name: string;
@@ -8,12 +12,17 @@ type LocalFormField = {
   type?: string;
   required?: boolean;
   placeholder?: string;
+  helpText?: string;
   options?: string[];
+  optionSource?: string;
   multiple?: boolean;
 };
 
 type LocalFormSchema = {
   fields?: LocalFormField[];
+  subtitle?: string;
+  introText?: string;
+  termsText?: string;
   submitLabel?: string;
   successMessage?: string;
 };
@@ -21,12 +30,18 @@ type LocalFormSchema = {
 type SignaturePadProps = {
   label: string;
   required?: boolean;
+  helpText?: string;
   value: string;
   onChange: (value: string) => void;
 };
 
 const inputClass =
   "w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2.5 text-sm text-[var(--color-ink)] outline-none transition focus:border-[var(--color-accent)] focus:bg-white";
+
+function fieldDomId(name: string, suffix = "") {
+  const safeName = name.replace(/[^A-Za-z0-9_-]/g, "-") || "field";
+  return `local-form-${safeName}${suffix ? `-${suffix}` : ""}`;
+}
 
 function dataUrlToBlob(dataUrl: string) {
   const [meta, data] = dataUrl.split(",");
@@ -39,7 +54,13 @@ function dataUrlToBlob(dataUrl: string) {
   return new Blob([bytes], { type: mime });
 }
 
-function SignaturePad({ label, required, value, onChange }: SignaturePadProps) {
+function SignaturePad({
+  label,
+  required,
+  helpText,
+  value,
+  onChange,
+}: SignaturePadProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const drawingRef = useRef(false);
   const hasInkRef = useRef(Boolean(value));
@@ -113,9 +134,12 @@ function SignaturePad({ label, required, value, onChange }: SignaturePadProps) {
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-3">
-        <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--color-ink-muted)]">
-          {label}
-          {required ? " *" : ""}
+        <span className="inline-flex items-center gap-2">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--color-ink-muted)]">
+            {label}
+            {required ? " *" : ""}
+          </span>
+          <HelpNote text={helpText} />
         </span>
         <button
           type="button"
@@ -137,6 +161,47 @@ function SignaturePad({ label, required, value, onChange }: SignaturePadProps) {
         Sign inside the box using your finger, mouse, or trackpad.
       </p>
     </div>
+  );
+}
+
+function HelpNote({ text }: { text?: string }) {
+  const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const [pinned, setPinned] = useState(false);
+  const trimmed = String(text || "").trim();
+  const open = Boolean(trimmed && (hovered || focused || pinned));
+
+  if (!trimmed) return null;
+
+  return (
+    <span
+      className="relative inline-flex"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      <button
+        type="button"
+        aria-label="Please read"
+        aria-expanded={open}
+        onClick={() => setPinned((current) => !current)}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
+        className="grid h-5 w-5 place-items-center rounded-full border border-[var(--color-border)] bg-white text-[11px] font-bold leading-none text-[var(--color-accent)] shadow-sm transition hover:border-[var(--color-accent)] hover:bg-[var(--color-bg)]"
+      >
+        i
+      </button>
+      {open ? (
+        <span
+          role="tooltip"
+          className="absolute left-0 top-7 z-30 w-72 max-w-[calc(100vw-3rem)] rounded-xl border border-[var(--color-border)] bg-white p-3 text-xs font-normal normal-case leading-relaxed tracking-normal text-[var(--color-ink)] shadow-xl"
+        >
+          <span className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--color-accent)]">
+            Please read
+          </span>
+          <span className="whitespace-pre-line">{trimmed}</span>
+        </span>
+      ) : null}
+    </span>
   );
 }
 
@@ -174,6 +239,7 @@ export default function LocalForm({
       const name = String(field.name || "").trim();
       if (!name || !field.required) continue;
       const type = String(field.type || "text").toLowerCase();
+      if (type === "section") continue;
       if (type === "signature" && !signatures[name]) {
         return `${field.label || name} is required.`;
       }
@@ -183,7 +249,27 @@ export default function LocalForm({
       if (type === "checkbox" && values[name] !== true) {
         return `${field.label || name} is required.`;
       }
-      if (!["file", "image", "signature", "checkbox"].includes(type)) {
+      if (type === "terms" && values[name] !== true) {
+        return `${field.label || name} is required.`;
+      }
+      if (
+        type === "daterange" &&
+        (!String(values[`${name}CheckIn`] || "").trim() ||
+          !String(values[`${name}CheckOut`] || "").trim())
+      ) {
+        return `${field.label || name} is required.`;
+      }
+      if (
+        ![
+          "file",
+          "image",
+          "signature",
+          "checkbox",
+          "daterange",
+          "section",
+          "terms",
+        ].includes(type)
+      ) {
         const value = values[name];
         if (!String(value || "").trim()) {
           return `${field.label || name} is required.`;
@@ -221,6 +307,10 @@ export default function LocalForm({
       if (!name) continue;
       const type = String(field.type || "text").toLowerCase();
 
+      if (type === "section") {
+        continue;
+      }
+
       if (type === "file" || type === "image") {
         const selectedFiles = files[name] || [];
         payload[name] = selectedFiles.map((file) => file.name);
@@ -238,6 +328,14 @@ export default function LocalForm({
           payload[name] = "Signed";
         }
         formData.append(`fieldType:${name}`, "signature");
+        continue;
+      }
+
+      if (type === "daterange") {
+        payload[name] = {
+          checkIn: values[`${name}CheckIn`] || "",
+          checkOut: values[`${name}CheckOut`] || "",
+        };
         continue;
       }
 
@@ -283,11 +381,41 @@ export default function LocalForm({
         if (!name) return null;
         const type = String(field.type || "text").toLowerCase();
         const label = field.label || name;
+        const helpText = field.helpText || "";
+        const fieldId = fieldDomId(name);
+
+        if (type === "section") {
+          return (
+            <section
+              key={name}
+              className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] p-4"
+            >
+              <div className="flex items-center gap-2">
+                <h2 className="font-serif text-xl font-medium tracking-tight text-[var(--color-ink)]">
+                  {label}
+                </h2>
+                <HelpNote text={helpText} />
+              </div>
+              {field.placeholder ? (
+                <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-[var(--color-ink-muted)]">
+                  {field.placeholder}
+                </p>
+              ) : null}
+            </section>
+          );
+        }
 
         if (type === "textarea") {
           return (
-            <FieldShell key={name} label={label} required={field.required}>
+            <FieldShell
+              key={name}
+              label={label}
+              required={field.required}
+              helpText={helpText}
+              htmlFor={fieldId}
+            >
               <textarea
+                id={fieldId}
                 name={name}
                 required={Boolean(field.required)}
                 value={String(values[name] || "")}
@@ -301,10 +429,23 @@ export default function LocalForm({
         }
 
         if (type === "select") {
-          const options = Array.isArray(field.options) ? field.options : [];
+          const sourcedOptions = optionsForLocalFormSource(field.optionSource);
+          const options =
+            sourcedOptions.length > 0
+              ? sourcedOptions
+              : Array.isArray(field.options)
+                ? field.options
+                : [];
           return (
-            <FieldShell key={name} label={label} required={field.required}>
+            <FieldShell
+              key={name}
+              label={label}
+              required={field.required}
+              helpText={helpText}
+              htmlFor={fieldId}
+            >
               <select
+                id={fieldId}
                 name={name}
                 required={Boolean(field.required)}
                 value={String(values[name] || "")}
@@ -322,6 +463,56 @@ export default function LocalForm({
           );
         }
 
+        if (type === "daterange") {
+          const checkInName = `${name}CheckIn`;
+          const checkOutName = `${name}CheckOut`;
+          return (
+            <FieldShell
+              key={name}
+              label={label}
+              required={field.required}
+              helpText={helpText}
+              htmlFor={fieldDomId(name, "check-in")}
+            >
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="block">
+                  <span className="mb-1 block text-xs font-medium text-[var(--color-ink-muted)]">
+                    Check-in
+                  </span>
+                  <input
+                    id={fieldDomId(name, "check-in")}
+                    name={checkInName}
+                    type="date"
+                    required={Boolean(field.required)}
+                    value={String(values[checkInName] || "")}
+                    onChange={(event) =>
+                      update(checkInName, event.target.value)
+                    }
+                    className={inputClass}
+                  />
+                </label>
+                <label className="block">
+                  <span className="mb-1 block text-xs font-medium text-[var(--color-ink-muted)]">
+                    Check-out
+                  </span>
+                  <input
+                    id={fieldDomId(name, "check-out")}
+                    name={checkOutName}
+                    type="date"
+                    required={Boolean(field.required)}
+                    min={String(values[checkInName] || "") || undefined}
+                    value={String(values[checkOutName] || "")}
+                    onChange={(event) =>
+                      update(checkOutName, event.target.value)
+                    }
+                    className={inputClass}
+                  />
+                </label>
+              </div>
+            </FieldShell>
+          );
+        }
+
         if (type === "checkbox") {
           return (
             <label
@@ -335,9 +526,14 @@ export default function LocalForm({
                 onChange={(event) => update(name, event.target.checked)}
                 className="mt-0.5 h-4 w-4 rounded border-[var(--color-border)] accent-[var(--color-accent)]"
               />
-              <span className="text-sm text-[var(--color-ink)]">
-                {label}
-                {field.required ? " *" : ""}
+              <span className="flex-1 text-sm text-[var(--color-ink)]">
+                <span className="inline-flex items-center gap-2">
+                  <span>
+                    {label}
+                    {field.required ? " *" : ""}
+                  </span>
+                  <HelpNote text={helpText} />
+                </span>
               </span>
             </label>
           );
@@ -345,8 +541,15 @@ export default function LocalForm({
 
         if (type === "file" || type === "image") {
           return (
-            <FieldShell key={name} label={label} required={field.required}>
+            <FieldShell
+              key={name}
+              label={label}
+              required={field.required}
+              helpText={helpText}
+              htmlFor={fieldId}
+            >
               <input
+                id={fieldId}
                 name={name}
                 type="file"
                 required={Boolean(field.required)}
@@ -370,6 +573,7 @@ export default function LocalForm({
               key={name}
               label={label}
               required={field.required}
+              helpText={helpText}
               value={signatures[name] || ""}
               onChange={(value) =>
                 setSignatures((current) => ({ ...current, [name]: value }))
@@ -378,9 +582,50 @@ export default function LocalForm({
           );
         }
 
+        if (type === "terms") {
+          const termsText = schema.termsText || DEFAULT_LOCAL_FORM_TERMS;
+          return (
+            <div
+              key={name}
+              className="space-y-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] p-4"
+            >
+              <div className="flex items-center gap-2">
+                <h2 className="font-serif text-xl font-medium tracking-tight text-[var(--color-ink)]">
+                  Terms and Conditions
+                </h2>
+                <HelpNote text={helpText} />
+              </div>
+              <div className="max-h-52 overflow-y-auto rounded-xl border border-[var(--color-border)] bg-white p-4 text-sm leading-relaxed text-[var(--color-ink-muted)]">
+                <p className="whitespace-pre-line">{termsText}</p>
+              </div>
+              <label className="flex cursor-pointer items-start gap-3 text-sm text-[var(--color-ink)]">
+                <input
+                  name={name}
+                  type="checkbox"
+                  required={Boolean(field.required)}
+                  checked={values[name] === true}
+                  onChange={(event) => update(name, event.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-[var(--color-border)] accent-[var(--color-accent)]"
+                />
+                <span>
+                  {label}
+                  {field.required ? " *" : ""}
+                </span>
+              </label>
+            </div>
+          );
+        }
+
         return (
-          <FieldShell key={name} label={label} required={field.required}>
+          <FieldShell
+            key={name}
+            label={label}
+            required={field.required}
+            helpText={helpText}
+            htmlFor={fieldId}
+          >
             <input
+              id={fieldId}
               name={name}
               type={type || "text"}
               required={Boolean(field.required)}
@@ -411,19 +656,29 @@ export default function LocalForm({
 function FieldShell({
   label,
   required,
+  helpText,
+  htmlFor,
   children,
 }: {
   label: string;
   required?: boolean;
+  helpText?: string;
+  htmlFor?: string;
   children: React.ReactNode;
 }) {
   return (
-    <label className="block">
-      <span className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--color-ink-muted)]">
-        {label}
-        {required ? " *" : ""}
-      </span>
+    <div className="block">
+      <div className="mb-1 flex items-center gap-2">
+        <label
+          htmlFor={htmlFor}
+          className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--color-ink-muted)]"
+        >
+          {label}
+          {required ? " *" : ""}
+        </label>
+        <HelpNote text={helpText} />
+      </div>
       {children}
-    </label>
+    </div>
   );
 }

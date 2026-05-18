@@ -2,6 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
+import {
+  DEFAULT_LOCAL_FORM_TERMS,
+  LOCAL_FORM_STAY_UNIT_OPTIONS,
+} from "@/lib/local-form-options";
 import { createSupabaseAdminClient } from "@/lib/supabaseAdmin";
 
 const FIELD_TYPES = new Set([
@@ -13,10 +17,15 @@ const FIELD_TYPES = new Set([
   "textarea",
   "select",
   "checkbox",
+  "dateRange",
   "image",
   "file",
+  "section",
   "signature",
+  "terms",
 ]);
+
+const OPTION_SOURCES = new Set(["stayUnits"]);
 
 async function requireAdminCookie() {
   const cookieStore = await cookies();
@@ -45,7 +54,9 @@ function parseFields(formData: FormData) {
     type: string;
     required: boolean;
     placeholder?: string;
+    helpText?: string;
     multiple?: boolean;
+    optionSource?: string;
     options?: string[];
   }[] = [];
 
@@ -54,7 +65,13 @@ function parseFields(formData: FormData) {
     const label = readString(formData, `field_label_${index}`);
     const rawType = readString(formData, `field_type_${index}`);
     const placeholder = readString(formData, `field_placeholder_${index}`);
-    const type = FIELD_TYPES.has(rawType) ? rawType : "text";
+    const helpText = readString(formData, `field_help_text_${index}`);
+    const rawOptionSource = readString(formData, `field_option_source_${index}`);
+    const normalizedType = rawType === "daterange" ? "dateRange" : rawType;
+    const type = FIELD_TYPES.has(normalizedType) ? normalizedType : "text";
+    const optionSource = OPTION_SOURCES.has(rawOptionSource)
+      ? rawOptionSource
+      : "";
 
     if (!name && !label) continue;
     if (!name) throw new Error("Every field needs a field name.");
@@ -70,7 +87,9 @@ function parseFields(formData: FormData) {
       type: string;
       required: boolean;
       placeholder?: string;
+      helpText?: string;
       multiple?: boolean;
+      optionSource?: string;
       options?: string[];
     } = {
       name,
@@ -78,6 +97,7 @@ function parseFields(formData: FormData) {
       type,
       required: formData.get(`field_required_${index}`) === "on",
       ...(placeholder ? { placeholder } : {}),
+      ...(helpText ? { helpText } : {}),
     };
 
     if (type === "image" || type === "file") {
@@ -85,10 +105,15 @@ function parseFields(formData: FormData) {
     }
 
     if (type === "select") {
-      field.options = String(formData.get(`field_options_${index}`) || "")
-        .split(/\r?\n|,/)
-        .map((option) => option.trim())
-        .filter(Boolean);
+      if (optionSource === "stayUnits") {
+        field.optionSource = optionSource;
+        field.options = LOCAL_FORM_STAY_UNIT_OPTIONS;
+      } else {
+        field.options = String(formData.get(`field_options_${index}`) || "")
+          .split(/\r?\n|,/)
+          .map((option) => option.trim())
+          .filter(Boolean);
+      }
     }
 
     fields.push(field);
@@ -106,6 +131,8 @@ function parseFormPayload(formData: FormData) {
   const name = readString(formData, "name");
   const slug = slugify(readString(formData, "slug") || name);
   const description = readString(formData, "description");
+  const introText = readString(formData, "intro_text");
+  const termsText = readString(formData, "terms_text");
   const submitLabel = readString(formData, "submit_label") || "Submit";
   const successMessage =
     readString(formData, "success_message") ||
@@ -122,6 +149,9 @@ function parseFormPayload(formData: FormData) {
       description: description || null,
       is_active: formData.get("is_active") === "on",
       schema: {
+        subtitle: description || "",
+        introText: introText || "",
+        termsText: termsText || DEFAULT_LOCAL_FORM_TERMS,
         submitLabel,
         successMessage,
         fields: parseFields(formData),

@@ -13,7 +13,14 @@ type LocalFormSchema = {
     type?: string;
     required?: boolean;
     placeholder?: string;
+    helpText?: string;
+    options?: string[];
+    optionSource?: string;
+    multiple?: boolean;
   }[];
+  subtitle?: string;
+  introText?: string;
+  termsText?: string;
   submitLabel?: string;
   successMessage?: string;
 };
@@ -49,9 +56,11 @@ export default async function LocalFormPage({
     query?.preview === "1" && cookieStore.get("zc_admin_auth")?.value === "true";
 
   if (!form || (form.is_active === false && !isAdminPreview)) notFound();
-  const description = String(form.description || "").includes("Jotform")
+  const schema = (form.schema || {}) as LocalFormSchema;
+  const rawSubtitle = schema.subtitle || form.description || "";
+  const subtitle = String(rawSubtitle || "").includes("Jotform")
     ? "Share the details needed for your stay."
-    : form.description;
+    : rawSubtitle;
 
   return (
     <div className="mx-auto max-w-xl space-y-6">
@@ -67,16 +76,21 @@ export default async function LocalFormPage({
         <h1 className="mt-2 font-serif text-4xl font-medium leading-[1.05] tracking-tight">
           {form.name}
         </h1>
-        {description ? (
+        {subtitle ? (
           <p className="mt-3 text-sm leading-relaxed text-[var(--color-ink-muted)]">
-            {description}
+            {subtitle}
+          </p>
+        ) : null}
+        {schema.introText ? (
+          <p className="mt-4 whitespace-pre-line rounded-xl border border-[var(--color-border)] bg-white p-4 text-sm leading-relaxed text-[var(--color-ink)]">
+            {schema.introText}
           </p>
         ) : null}
       </header>
 
       <LocalForm
         formSlug={form.slug}
-        schema={(form.schema || {}) as LocalFormSchema}
+        schema={schema}
         staffPreview={isAdminPreview}
       />
     </div>

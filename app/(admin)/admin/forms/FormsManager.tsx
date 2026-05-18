@@ -4,6 +4,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import LocalForm from "@/components/customer/LocalForm";
+import {
+  DEFAULT_LOCAL_FORM_TERMS,
+  LOCAL_FORM_STAY_UNIT_OPTIONS,
+} from "@/lib/local-form-options";
 import { archiveLocalForm, deleteLocalForm, saveLocalForm } from "./actions";
 
 type LocalFormField = {
@@ -12,12 +16,17 @@ type LocalFormField = {
   type?: string;
   required?: boolean;
   placeholder?: string;
+  helpText?: string;
   options?: string[];
+  optionSource?: string;
   multiple?: boolean;
 };
 
 type LocalFormSchema = {
   fields?: LocalFormField[];
+  subtitle?: string;
+  introText?: string;
+  termsText?: string;
   submitLabel?: string;
   successMessage?: string;
 };
@@ -26,6 +35,8 @@ type FormDraftSettings = {
   name: string;
   slug: string;
   description: string;
+  introText: string;
+  termsText: string;
   submitLabel: string;
   successMessage: string;
   isActive: boolean;
@@ -87,7 +98,28 @@ const DEFAULT_FIELDS: LocalFormField[] = [
   { name: "lastName", label: "Last Name", type: "text", required: true },
   { name: "email", label: "Email", type: "email", required: true },
   { name: "phone", label: "Phone", type: "tel", required: false },
-  { name: "bookingCode", label: "Booking Code", type: "text", required: false },
+  {
+    name: "bookingCode",
+    label: "Booking Code",
+    type: "text",
+    required: false,
+    helpText:
+      "Please use your Zenfulcove/Lodgify booking confirmation ID. This is not your Expedia, Airbnb, or Vrbo confirmation number.",
+  },
+  {
+    name: "stayUnit",
+    label: "Unit You're Staying In",
+    type: "select",
+    required: true,
+    optionSource: "stayUnits",
+    options: LOCAL_FORM_STAY_UNIT_OPTIONS,
+  },
+  {
+    name: "stayDates",
+    label: "Check-in and Check-out Dates",
+    type: "dateRange",
+    required: true,
+  },
   {
     name: "photoUpload",
     label: "Image Upload",
@@ -160,6 +192,30 @@ const FIELD_LIBRARY_GROUPS: {
         label: "Booking Code",
         type: "text",
         required: false,
+        helpText:
+          "Please use your Zenfulcove/Lodgify booking confirmation ID. This is not your Expedia, Airbnb, or Vrbo confirmation number.",
+        unique: true,
+      },
+      {
+        id: "stayUnit",
+        title: "Stay Unit",
+        description: "Dropdown populated from the Zenfulcove unit list.",
+        name: "stayUnit",
+        label: "Unit You're Staying In",
+        type: "select",
+        required: true,
+        options: LOCAL_FORM_STAY_UNIT_OPTIONS,
+        optionSource: "stayUnits",
+        unique: true,
+      },
+      {
+        id: "stayDates",
+        title: "Stay Dates",
+        description: "Check-in and check-out date range.",
+        name: "stayDates",
+        label: "Check-in and Check-out Dates",
+        type: "dateRange",
+        required: true,
         unique: true,
       },
     ],
@@ -212,12 +268,29 @@ const FIELD_LIBRARY_GROUPS: {
         type: "date",
       },
       {
+        id: "dateRange",
+        title: "Date Range",
+        description: "Two linked date inputs for a start and end date.",
+        name: "dateRange",
+        label: "Date Range",
+        type: "dateRange",
+      },
+      {
         id: "number",
         title: "Number",
         description: "Numeric response.",
         name: "quantity",
         label: "Quantity",
         type: "number",
+      },
+      {
+        id: "section",
+        title: "Section",
+        description: "Heading and optional note for grouping questions.",
+        name: "section",
+        label: "Section Title",
+        type: "section",
+        placeholder: "Add a short section introduction.",
       },
     ],
   },
@@ -253,6 +326,16 @@ const FIELD_LIBRARY_GROUPS: {
         required: true,
         unique: true,
       },
+      {
+        id: "terms",
+        title: "Terms Read-Through",
+        description: "Scrollable terms text with an agreement checkbox.",
+        name: "termsAgreement",
+        label: "I have read and agree to the terms and conditions.",
+        type: "terms",
+        required: true,
+        unique: true,
+      },
     ],
   },
 ];
@@ -272,20 +355,25 @@ function fieldsFrom(form?: LocalFormRow) {
   if (!Array.isArray(fields) || fields.length === 0) {
     return DEFAULT_FIELDS;
   }
-  return fields.map((field) => ({
+  return fields.map((field) => {
+    const type = String(field.type || "text");
+    return {
     name: String(field.name || ""),
     label: String(field.label || ""),
-    type: String(field.type || "text"),
+    type: type.toLowerCase() === "daterange" ? "dateRange" : type,
     required: Boolean(field.required),
     placeholder: String(field.placeholder || ""),
+    helpText: String(field.helpText || ""),
     options: Array.isArray(field.options)
       ? field.options.map((option) => String(option))
       : [],
+    optionSource: String(field.optionSource || ""),
     multiple:
       field.type === "image" || field.type === "file"
         ? field.multiple !== false
         : undefined,
-  }));
+    };
+  });
 }
 
 function fieldType(field: LocalFormField) {
@@ -312,7 +400,9 @@ function fieldFromTemplate(template: FieldTemplate, fields: LocalFormField[]) {
     type: template.type,
     required: template.required,
     placeholder: template.placeholder,
+    helpText: template.helpText,
     options: template.options,
+    optionSource: template.optionSource,
     multiple: template.multiple,
   };
   const name = template.unique ? field.name : makeUniqueName(field.name, fields);
@@ -326,6 +416,8 @@ function fieldFromTemplate(template: FieldTemplate, fields: LocalFormField[]) {
       : field.label || template.title,
     required: Boolean(field.required),
     options: field.options || [],
+    helpText: field.helpText || "",
+    optionSource: field.optionSource || "",
     multiple:
       field.type === "image" || field.type === "file"
         ? field.multiple !== false
@@ -349,7 +441,7 @@ function templateCount(template: FieldTemplate, fields: LocalFormField[]) {
 }
 
 function acceptsPlaceholder(type: string) {
-  return ["text", "email", "tel", "number", "date", "textarea"].includes(type);
+  return ["text", "email", "tel", "number", "date", "textarea", "section"].includes(type);
 }
 
 export default function FormsManager({
@@ -613,7 +705,9 @@ function FormEditor({
   const [settings, setSettings] = useState<FormDraftSettings>(() => ({
     name: form?.name || "",
     slug: form?.slug || "",
-    description: form?.description || "",
+    description: initialSchema.subtitle || form?.description || "",
+    introText: initialSchema.introText || "",
+    termsText: initialSchema.termsText || DEFAULT_LOCAL_FORM_TERMS,
     submitLabel: initialSchema.submitLabel || "Submit",
     successMessage:
       initialSchema.successMessage || "Thanks. We received your information.",
@@ -646,11 +740,21 @@ function FormEditor({
   const previewSchema = useMemo(
     () => ({
       fields: activeFields,
+      subtitle: settings.description,
+      introText: settings.introText,
+      termsText: settings.termsText || DEFAULT_LOCAL_FORM_TERMS,
       submitLabel: settings.submitLabel || "Submit",
       successMessage:
         settings.successMessage || "Thanks. We received your information.",
     }),
-    [activeFields, settings.submitLabel, settings.successMessage]
+    [
+      activeFields,
+      settings.description,
+      settings.introText,
+      settings.submitLabel,
+      settings.successMessage,
+      settings.termsText,
+    ]
   );
 
   function updateSettings(patch: Partial<FormDraftSettings>) {
@@ -677,7 +781,9 @@ function FormEditor({
         type: "text",
         required: false,
         placeholder: "",
+        helpText: "",
         options: [],
+        optionSource: "",
         multiple: true,
       },
     ];
@@ -842,7 +948,8 @@ function FormEditor({
       {previewOpen ? (
         <CustomerPreviewModal
           title={settings.name || "Untitled Form"}
-          description={settings.description}
+          subtitle={settings.description}
+          introText={settings.introText}
           schema={previewSchema}
           onClose={() => setPreviewOpen(false)}
         />
@@ -897,6 +1004,30 @@ function FormSettings({
           />
         </Field>
 
+        <Field label="Subtitle">
+          <textarea
+            name="description"
+            value={settings.description}
+            onChange={(event) =>
+              onChange({ description: event.target.value })
+            }
+            rows={2}
+            placeholder="A short line under the form title"
+            className="form-input resize-y"
+          />
+        </Field>
+
+        <Field label="Welcome Paragraph">
+          <textarea
+            name="intro_text"
+            value={settings.introText}
+            onChange={(event) => onChange({ introText: event.target.value })}
+            rows={5}
+            placeholder="Plain text that welcomes guests and explains the form."
+            className="form-input resize-y"
+          />
+        </Field>
+
         <label className="flex items-center justify-between gap-4 rounded-xl border border-[var(--color-border)] bg-white px-4 py-3 text-sm">
           <span>
             <span className="block font-semibold text-[var(--color-ink)]">
@@ -930,14 +1061,14 @@ function FormSettings({
                 className="form-input"
               />
             </Field>
-            <Field label="Description">
+            <Field label="Terms and Conditions">
               <textarea
-                name="description"
-                value={settings.description}
+                name="terms_text"
+                value={settings.termsText}
                 onChange={(event) =>
-                  onChange({ description: event.target.value })
+                  onChange({ termsText: event.target.value })
                 }
-                rows={3}
+                rows={8}
                 className="form-input resize-y"
               />
             </Field>
@@ -972,12 +1103,14 @@ function FormSettings({
 
 function CustomerPreviewModal({
   title,
-  description,
+  subtitle,
+  introText,
   schema,
   onClose,
 }: {
   title: string;
-  description: string;
+  subtitle: string;
+  introText: string;
   schema: LocalFormSchema;
   onClose: () => void;
 }) {
@@ -1022,9 +1155,14 @@ function CustomerPreviewModal({
             <h1 className="mt-2 font-serif text-4xl font-medium leading-[1.05] tracking-tight">
               {title}
             </h1>
-            {description ? (
+            {subtitle ? (
               <p className="mt-3 text-sm leading-relaxed text-[var(--color-ink-muted)]">
-                {description}
+                {subtitle}
+              </p>
+            ) : null}
+            {introText ? (
+              <p className="mt-4 whitespace-pre-line rounded-xl border border-[var(--color-border)] bg-white p-4 text-sm leading-relaxed text-[var(--color-ink)]">
+                {introText}
               </p>
             ) : null}
           </header>
@@ -1145,6 +1283,12 @@ function EditablePreviewField({
         value={field.name || ""}
         readOnly
       />
+      <input
+        type="hidden"
+        name={`field_option_source_${index}`}
+        value={field.optionSource || ""}
+        readOnly
+      />
       {!acceptsPlaceholder(type) ? (
         <input
           type="hidden"
@@ -1218,68 +1362,127 @@ function EditablePreviewField({
             <option value="tel">Phone</option>
             <option value="number">Number</option>
             <option value="date">Date</option>
+            <option value="dateRange">Date Range</option>
             <option value="textarea">Long Text</option>
             <option value="select">Select</option>
             <option value="checkbox">Checkbox</option>
             <option value="image">Image Upload</option>
             <option value="file">File Upload</option>
+            <option value="section">Section Break</option>
             <option value="signature">Signature</option>
+            <option value="terms">Terms Read-Through</option>
           </select>
         </Field>
 
         {acceptsPlaceholder(type) ? (
-          <Field label="Placeholder">
-            <input
-              name={`field_placeholder_${index}`}
-              type="text"
-              value={field.placeholder || ""}
-              onChange={(event) =>
-                updateField(index, { placeholder: event.target.value })
-              }
-              onFocus={onSelect}
-              className="form-input bg-white"
-              placeholder="Optional placeholder"
-            />
+          <Field label={type === "section" ? "Section Body" : "Placeholder"}>
+            {type === "section" ? (
+              <textarea
+                name={`field_placeholder_${index}`}
+                value={field.placeholder || ""}
+                onChange={(event) =>
+                  updateField(index, { placeholder: event.target.value })
+                }
+                onFocus={onSelect}
+                rows={2}
+                className="form-input resize-y bg-white"
+                placeholder="Optional section introduction"
+              />
+            ) : (
+              <input
+                name={`field_placeholder_${index}`}
+                type="text"
+                value={field.placeholder || ""}
+                onChange={(event) =>
+                  updateField(index, { placeholder: event.target.value })
+                }
+                onFocus={onSelect}
+                className="form-input bg-white"
+                placeholder="Optional placeholder"
+              />
+            )}
           </Field>
         ) : (
           <span />
         )}
 
-        <label className="flex min-h-10 items-center gap-2 rounded-lg border border-[var(--color-border)] bg-white px-3 text-xs font-medium">
-          <input
-            name={`field_required_${index}`}
-            type="checkbox"
-            checked={Boolean(field.required)}
+        {type === "section" ? (
+          <span />
+        ) : (
+          <label className="flex min-h-10 items-center gap-2 rounded-lg border border-[var(--color-border)] bg-white px-3 text-xs font-medium">
+            <input
+              name={`field_required_${index}`}
+              type="checkbox"
+              checked={Boolean(field.required)}
+              onChange={(event) =>
+                updateField(index, { required: event.target.checked })
+              }
+              onFocus={onSelect}
+              className="h-4 w-4 rounded border-[var(--color-border)] accent-[var(--color-accent)]"
+            />
+            {type === "terms" ? "Require agreement" : "Required"}
+          </label>
+        )}
+      </div>
+
+      <div className="mt-3">
+        <Field label={type === "section" ? "Please Read Note" : "Info Button Note"}>
+          <textarea
+            name={`field_help_text_${index}`}
+            value={field.helpText || ""}
             onChange={(event) =>
-              updateField(index, { required: event.target.checked })
+              updateField(index, { helpText: event.target.value })
             }
             onFocus={onSelect}
-            className="h-4 w-4 rounded border-[var(--color-border)] accent-[var(--color-accent)]"
+            rows={2}
+            placeholder="Optional note shown from the i button"
+            className="form-input resize-y bg-white"
           />
-          Required
-        </label>
+        </Field>
       </div>
 
       {type === "select" ? (
         <div className="mt-3">
-          <Field label="Options">
-            <textarea
-              name={`field_options_${index}`}
-              value={(field.options || []).join("\n")}
-              onChange={(event) =>
-                updateField(index, {
-                  options: event.target.value
-                    .split(/\r?\n|,/)
-                    .map((option) => option.trim())
-                    .filter(Boolean),
-                })
-              }
-              onFocus={onSelect}
-              rows={3}
-              placeholder="One option per line"
-              className="form-input resize-y bg-white"
-            />
-          </Field>
+          {field.optionSource === "stayUnits" ? (
+            <>
+              <input
+                type="hidden"
+                name={`field_options_${index}`}
+                value={(field.options || LOCAL_FORM_STAY_UNIT_OPTIONS).join("\n")}
+                readOnly
+              />
+              <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] p-3 text-xs leading-relaxed text-[var(--color-ink-muted)]">
+                <p className="font-semibold text-[var(--color-ink)]">
+                  Unit dropdown
+                </p>
+                <p className="mt-1">
+                  Uses the Zenfulcove Lodgify property map:
+                </p>
+                <p className="mt-2">
+                  {(field.options || LOCAL_FORM_STAY_UNIT_OPTIONS).join(", ")}
+                </p>
+              </div>
+            </>
+          ) : (
+            <Field label="Options">
+              <textarea
+                name={`field_options_${index}`}
+                value={(field.options || []).join("\n")}
+                onChange={(event) =>
+                  updateField(index, {
+                    options: event.target.value
+                      .split(/\r?\n|,/)
+                      .map((option) => option.trim())
+                      .filter(Boolean),
+                  })
+                }
+                onFocus={onSelect}
+                rows={3}
+                placeholder="One option per line"
+                className="form-input resize-y bg-white"
+              />
+            </Field>
+          )}
         </div>
       ) : null}
 

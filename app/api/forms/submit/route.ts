@@ -25,6 +25,7 @@ function parseSchemaFields(form: { schema?: unknown }) {
     : [];
   return fields.map((field) => ({
     name: String(field.name || "").trim(),
+    label: String(field.label || field.name || "").trim(),
     type: String(field.type || "text").trim().toLowerCase(),
     required: Boolean(field.required),
   }));
@@ -45,6 +46,14 @@ function valuePresent(value: unknown) {
   return String(value ?? "").trim().length > 0;
 }
 
+function dateRangePresent(value: unknown) {
+  if (!value || typeof value !== "object") return false;
+  const range = value as { checkIn?: unknown; checkOut?: unknown };
+  return Boolean(
+    String(range.checkIn || "").trim() && String(range.checkOut || "").trim()
+  );
+}
+
 function isTruthy(value: unknown) {
   return value === true || value === "true" || value === "1" || value === 1;
 }
@@ -60,14 +69,21 @@ function validateRequiredFields({
 }) {
   for (const field of fields) {
     if (!field.required || !field.name) continue;
+    if (field.type === "section") continue;
     if (isUploadType(field.type)) {
       if (!uploads.some((upload) => upload.fieldName === field.name)) {
-        return `${field.name} is required.`;
+        return `${field.label || field.name} is required.`;
+      }
+      continue;
+    }
+    if (field.type === "daterange") {
+      if (!dateRangePresent(payload[field.name])) {
+        return `${field.label || field.name} is required.`;
       }
       continue;
     }
     if (!valuePresent(payload[field.name])) {
-      return `${field.name} is required.`;
+      return `${field.label || field.name} is required.`;
     }
   }
   return "";
