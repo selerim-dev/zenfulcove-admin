@@ -362,18 +362,19 @@ export default function WaiverPanel({
 
           <div>
             <label className="block text-xs text-forest/60 uppercase tracking-wider mb-1">
-              Temporary Property Codes
+              Static Property Codes
             </label>
             <textarea
               value={propertyCodesText}
               onChange={(e) => updatePropertyCodes(e.target.value)}
-              placeholder={"608952: 1234\nFairy House: 1234"}
+              placeholder={"Doodle House: 1234\nDesert Rose: 1968"}
               rows={4}
               className="border border-sand rounded-lg px-3 py-2 text-sm w-full font-mono focus:outline-none focus:ring-2 focus:ring-grove/30"
             />
             <p className="text-xs text-forest/40 mt-1">
-              Optional fallback until Jervis sends codes to this app. Use one
-              property ID or property name per line.
+              Use for units with fixed codes. Variable-code units use stored
+              codes, Lodgify/Jervis payloads, or the Jervis webhook when
+              available.
             </p>
           </div>
         </div>

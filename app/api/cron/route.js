@@ -1124,6 +1124,7 @@ async function runAccessCodeRelease(automationConfig, dryRunOverride) {
           guestEmail,
           guestName,
           checkinDate: todayStr,
+          lodgifyBooking: booking,
         },
         config
       );
@@ -1147,7 +1148,7 @@ async function runAccessCodeRelease(automationConfig, dryRunOverride) {
         timestamp: new Date().toISOString(),
         automation: automationName,
         property: propertyName,
-        action: `Failed booking ${bookingId}: no access code available from stored codes, property fallback, or Jervis API`,
+        action: `Failed booking ${bookingId}: no access code available from stored codes, property fallback, Lodgify booking payload, or Jervis API`,
         status: "failed",
       });
       continue;
