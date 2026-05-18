@@ -453,6 +453,7 @@ export default function FormsManager({
   const router = useRouter();
   const [editor, setEditor] = useState<EditorState>({ mode: "closed" });
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [copiedFormId, setCopiedFormId] = useState<string | null>(null);
 
   async function handleDelete(form: LocalFormRow) {
     if (
@@ -472,6 +473,30 @@ export default function FormsManager({
     } finally {
       setDeletingId(null);
     }
+  }
+
+  async function handleCopyPublishedLink(form: LocalFormRow) {
+    if (!form.is_active) return;
+
+    const url = `${window.location.origin}/forms/${form.slug}`;
+    try {
+      await navigator.clipboard.writeText(url);
+    } catch {
+      const textarea = document.createElement("textarea");
+      textarea.value = url;
+      textarea.setAttribute("readonly", "");
+      textarea.style.position = "fixed";
+      textarea.style.left = "-9999px";
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand("copy");
+      document.body.removeChild(textarea);
+    }
+
+    setCopiedFormId(form.id);
+    window.setTimeout(() => {
+      setCopiedFormId((current) => (current === form.id ? null : current));
+    }, 1800);
   }
 
   if (editor.mode !== "closed") {
@@ -584,6 +609,17 @@ export default function FormsManager({
                         >
                           Preview
                         </Link>
+                        {form.is_active ? (
+                          <button
+                            type="button"
+                            onClick={() => handleCopyPublishedLink(form)}
+                            className="rounded-full border border-[var(--color-border)] bg-white px-4 py-2 text-sm font-medium transition hover:border-[var(--color-accent)] hover:bg-[var(--color-bg)] hover:text-[var(--color-accent)]"
+                          >
+                            {copiedFormId === form.id
+                              ? "Copied"
+                              : "Copy Link"}
+                          </button>
+                        ) : null}
                         <button
                           type="button"
                           onClick={() => handleDelete(form)}
