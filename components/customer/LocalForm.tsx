@@ -360,47 +360,40 @@ export default function LocalForm({
     }
   }
 
-  if (status === "success") {
-    return (
-      <div className="rounded-2xl border border-[var(--color-border)] bg-white p-6 text-sm text-[var(--color-ink-muted)]">
-        {schema.successMessage || "Thanks. We received your information."}
-      </div>
-    );
-  }
-
   return (
-    <form
-      onSubmit={handleSubmit}
-      className="space-y-5 rounded-2xl border border-[var(--color-border)] bg-white p-6 shadow-sm"
-    >
-      {fields.map((field) => {
-        const name = String(field.name || "").trim();
-        if (!name) return null;
-        const type = String(field.type || "text").toLowerCase();
-        const label = field.label || name;
-        const helpText = field.helpText || "";
-        const fieldId = fieldDomId(name);
+    <>
+      <form
+        onSubmit={handleSubmit}
+        className="space-y-5 rounded-2xl border border-[var(--color-border)] bg-white p-6 shadow-sm"
+      >
+        {fields.map((field) => {
+          const name = String(field.name || "").trim();
+          if (!name) return null;
+          const type = String(field.type || "text").toLowerCase();
+          const label = field.label || name;
+          const helpText = field.helpText || "";
+          const fieldId = fieldDomId(name);
 
-        if (type === "section") {
-          return (
-            <section
-              key={name}
-              className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] p-4"
-            >
-              <div className="flex items-center gap-2">
-                <h2 className="font-serif text-xl font-medium tracking-tight text-[var(--color-ink)]">
-                  {label}
-                </h2>
-                <HelpNote text={helpText} />
-              </div>
-              {field.placeholder ? (
-                <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-[var(--color-ink-muted)]">
-                  {field.placeholder}
-                </p>
-              ) : null}
-            </section>
-          );
-        }
+          if (type === "section") {
+            return (
+              <section
+                key={name}
+                className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] p-4"
+              >
+                <div className="flex items-center gap-2">
+                  <h2 className="font-serif text-xl font-medium tracking-tight text-[var(--color-ink)]">
+                    {label}
+                  </h2>
+                  <HelpNote text={helpText} />
+                </div>
+                {field.placeholder ? (
+                  <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-[var(--color-ink-muted)]">
+                    {field.placeholder}
+                  </p>
+                ) : null}
+              </section>
+            );
+          }
 
         if (type === "textarea") {
           return (
@@ -642,18 +635,131 @@ export default function LocalForm({
         );
       })}
 
-      {error ? <p className="text-sm text-red-700">{error}</p> : null}
+        {error ? <p className="text-sm text-red-700">{error}</p> : null}
 
-      <button
-        type={preview ? "button" : "submit"}
-        disabled={status === "submitting"}
-        className="rounded-full bg-[var(--color-accent)] px-6 py-3 text-sm font-medium text-white transition hover:bg-[var(--color-accent-strong)] disabled:opacity-60"
+        <button
+          type={preview ? "button" : "submit"}
+          disabled={status === "submitting"}
+          className="rounded-full bg-[var(--color-accent)] px-6 py-3 text-sm font-medium text-white transition hover:bg-[var(--color-accent-strong)] disabled:opacity-60"
+        >
+          {status === "submitting"
+            ? "Submitting..."
+            : schema.submitLabel || "Submit"}
+        </button>
+      </form>
+
+      {status === "success" ? (
+        <SuccessModal
+          message={schema.successMessage}
+          onClose={() => setStatus("idle")}
+        />
+      ) : null}
+    </>
+  );
+}
+
+function SuccessModal({
+  message,
+  onClose,
+}: {
+  message?: string;
+  onClose: () => void;
+}) {
+  const confetti = Array.from({ length: 18 }, (_, index) => index);
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-[var(--color-ink)]/45 px-4 py-6 backdrop-blur-sm">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="form-success-title"
+        className="relative w-full max-w-lg overflow-hidden rounded-2xl border border-[var(--color-border)] bg-white p-6 text-center shadow-2xl"
       >
-        {status === "submitting"
-          ? "Submitting..."
-          : schema.submitLabel || "Submit"}
-      </button>
-    </form>
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-28 overflow-hidden">
+          {confetti.map((piece) => (
+            <span
+              key={piece}
+              className="success-confetti absolute top-[-1rem] block h-3 w-2 rounded-sm"
+              style={{
+                left: `${8 + ((piece * 47) % 84)}%`,
+                animationDelay: `${piece * 0.08}s`,
+                background:
+                  piece % 3 === 0
+                    ? "var(--color-accent)"
+                    : piece % 3 === 1
+                      ? "#f2c94c"
+                      : "#5bbf8a",
+              }}
+            />
+          ))}
+        </div>
+
+        <div className="relative">
+          <div className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-emerald-100 text-2xl font-semibold text-emerald-800">
+            ✓
+          </div>
+          <p className="mt-5 text-[11px] font-semibold uppercase tracking-[0.22em] text-[var(--color-accent)]">
+            Submission Received
+          </p>
+          <h2
+            id="form-success-title"
+            className="mt-2 font-serif text-3xl font-medium tracking-tight text-[var(--color-ink)]"
+          >
+            Thanks, we have it.
+          </h2>
+          <p className="mx-auto mt-3 max-w-sm text-sm leading-relaxed text-[var(--color-ink-muted)]">
+            {message || "Thanks. We received your information."}
+          </p>
+
+          <div className="mt-5 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] p-4 text-left text-sm leading-relaxed text-[var(--color-ink-muted)]">
+            <p className="font-semibold text-[var(--color-ink)]">
+              What happens next
+            </p>
+            <p className="mt-1">
+              Your submission is saved for the Zenfulcove team to review before
+              any stay codes or follow-up details are sent.
+            </p>
+            <p className="mt-2">
+              Need to update something? Contact us at{" "}
+              <a
+                href="mailto:contact@zenfulcove.com"
+                className="font-medium text-[var(--color-accent)] hover:text-[var(--color-accent-strong)]"
+              >
+                contact@zenfulcove.com
+              </a>
+              .
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={onClose}
+            className="mt-6 rounded-full bg-[var(--color-accent)] px-6 py-3 text-sm font-medium text-white transition hover:bg-[var(--color-accent-strong)]"
+          >
+            Done
+          </button>
+        </div>
+
+        <style>{`
+          @keyframes success-confetti-fall {
+            0% {
+              transform: translateY(-1rem) rotate(0deg);
+              opacity: 0;
+            }
+            15% {
+              opacity: 1;
+            }
+            100% {
+              transform: translateY(8rem) rotate(240deg);
+              opacity: 0;
+            }
+          }
+          .success-confetti {
+            animation: success-confetti-fall 1.4s ease-out forwards;
+          }
+        `}</style>
+      </div>
+    </div>
   );
 }
 

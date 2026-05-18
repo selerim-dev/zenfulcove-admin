@@ -159,6 +159,19 @@ export async function POST(request) {
       }
     }
 
+    if (updates.customerPortal !== undefined) {
+      updated.customerPortal = {
+        ...updated.customerPortal,
+        ...updates.customerPortal,
+      };
+      if (updates.customerPortal.navigation !== undefined) {
+        updated.customerPortal.navigation = {
+          ...updated.customerPortal.navigation,
+          ...updates.customerPortal.navigation,
+        };
+      }
+    }
+
     await setConfig(updated);
 
     return NextResponse.json({ success: true, config: updated });

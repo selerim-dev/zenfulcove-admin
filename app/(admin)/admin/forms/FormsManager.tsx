@@ -72,6 +72,9 @@ export type LocalFormSubmissionRow = {
   email: string | null;
   first_name: string | null;
   last_name: string | null;
+  phone: string | null;
+  booking_code: string | null;
+  sendgrid_synced_at: string | null;
   submitted_at: string;
   payload: Record<string, unknown> & {
     __files?: LocalFormSubmissionFile[];
@@ -82,6 +85,11 @@ type EditorState =
   | { mode: "closed" }
   | { mode: "create" }
   | { mode: "edit"; form: LocalFormRow };
+
+type SubmissionViewerState = {
+  form: LocalFormRow;
+  selectedId?: string;
+};
 
 type FieldTemplate = LocalFormField & {
   id: string;
@@ -347,6 +355,67 @@ function formatDate(value: string | null) {
   });
 }
 
+function submissionDisplayName(submission: LocalFormSubmissionRow) {
+  return [submission.first_name, submission.last_name]
+    .map((part) => String(part || "").trim())
+    .filter(Boolean)
+    .join(" ");
+}
+
+function formatPayloadValue(value: unknown) {
+  if (value === true) return "Yes";
+  if (value === false) return "No";
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item || "").trim()).filter(Boolean).join(", ");
+  }
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    if ("checkIn" in record || "checkOut" in record) {
+      return [record.checkIn, record.checkOut]
+        .map((item) => String(item || "").trim())
+        .filter(Boolean)
+        .join(" to ");
+    }
+    return JSON.stringify(value, null, 2);
+  }
+  return String(value ?? "").trim();
+}
+
+function submissionFileLabel(file: LocalFormSubmissionFile) {
+  const field = String(file.fieldName || "").toLowerCase();
+  if (file.kind === "signature" || field.includes("signature")) return "Signature";
+  if (field.includes("license") || field.includes("id")) return "License";
+  return file.fileName || "Attachment";
+}
+
+function visiblePayloadEntries(
+  form: LocalFormRow,
+  submission: LocalFormSubmissionRow
+) {
+  const payload = submission.payload || {};
+  const fields = Array.isArray(form.schema?.fields) ? form.schema.fields : [];
+  const used = new Set<string>();
+  const entries: { key: string; label: string; value: unknown }[] = [];
+
+  for (const field of fields) {
+    const key = String(field.name || "").trim();
+    if (!key || String(field.type || "").toLowerCase() === "section") continue;
+    used.add(key);
+    entries.push({
+      key,
+      label: field.label || key,
+      value: payload[key],
+    });
+  }
+
+  for (const [key, value] of Object.entries(payload)) {
+    if (key.startsWith("__") || used.has(key)) continue;
+    entries.push({ key, label: key, value });
+  }
+
+  return entries;
+}
+
 function fieldsFrom(form?: LocalFormRow) {
   const fields = form?.schema?.fields;
   if (!Array.isArray(fields) || fields.length === 0) {
@@ -438,7 +507,15 @@ function templateCount(template: FieldTemplate, fields: LocalFormField[]) {
 }
 
 function acceptsPlaceholder(type: string) {
-  return ["text", "email", "tel", "number", "date", "textarea", "section"].includes(type);
+  return [
+    "text",
+    "email",
+    "tel",
+    "number",
+    "date",
+    "textarea",
+    "section",
+  ].includes(type);
 }
 
 export default function FormsManager({
@@ -452,6 +529,8 @@ export default function FormsManager({
 }) {
   const router = useRouter();
   const [editor, setEditor] = useState<EditorState>({ mode: "closed" });
+  const [submissionViewer, setSubmissionViewer] =
+    useState<SubmissionViewerState | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [copiedFormId, setCopiedFormId] = useState<string | null>(null);
 
@@ -620,6 +699,17 @@ export default function FormsManager({
                               : "Copy Link"}
                           </button>
                         ) : null}
+                        {formStats.submissions > 0 ? (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setSubmissionViewer({ form })
+                            }
+                            className="rounded-full border border-[var(--color-border)] bg-white px-4 py-2 text-sm font-medium transition hover:border-[var(--color-accent)] hover:bg-[var(--color-bg)] hover:text-[var(--color-accent)]"
+                          >
+                            Submissions
+                          </button>
+                        ) : null}
                         <button
                           type="button"
                           onClick={() => handleDelete(form)}
@@ -642,6 +732,12 @@ export default function FormsManager({
                           <SubmissionPreview
                             key={submission.id}
                             submission={submission}
+                            onClick={() =>
+                              setSubmissionViewer({
+                                form,
+                                selectedId: submission.id,
+                              })
+                            }
                           />
                         ))}
                       </div>
@@ -653,25 +749,50 @@ export default function FormsManager({
           </div>
         )}
       </div>
+
+      {submissionViewer ? (
+        <SubmissionsModal
+          form={submissionViewer.form}
+          submissions={submissionsBySlug[submissionViewer.form.slug] || []}
+          selectedId={submissionViewer.selectedId}
+          onSelect={(selectedId) =>
+            setSubmissionViewer((current) =>
+              current ? { ...current, selectedId } : current
+            )
+          }
+          onClose={() => setSubmissionViewer(null)}
+        />
+      ) : null}
     </div>
   );
 }
 
 function SubmissionPreview({
   submission,
+  onClick,
 }: {
   submission: LocalFormSubmissionRow;
+  onClick?: () => void;
 }) {
-  const name = [submission.first_name, submission.last_name]
-    .map((part) => String(part || "").trim())
-    .filter(Boolean)
-    .join(" ");
+  const name = submissionDisplayName(submission);
   const files = Array.isArray(submission.payload?.__files)
     ? submission.payload.__files
     : [];
 
   return (
-    <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] p-3">
+    <article
+      role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onClick={onClick}
+      onKeyDown={(event) => {
+        if (!onClick) return;
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onClick();
+        }
+      }}
+      className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] p-3 text-left transition hover:border-[var(--color-accent)] hover:bg-white"
+    >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold text-[var(--color-ink)]">
@@ -684,6 +805,7 @@ function SubmissionPreview({
         {submission.email ? (
           <a
             href={`mailto:${submission.email}`}
+            onClick={(event) => event.stopPropagation()}
             className="truncate text-xs font-medium text-[var(--color-accent)]"
           >
             {submission.email}
@@ -698,13 +820,211 @@ function SubmissionPreview({
               href={file.signedUrl || "#"}
               target="_blank"
               rel="noreferrer"
+              onClick={(event) => event.stopPropagation()}
               className="rounded-full border border-[var(--color-border)] bg-white px-3 py-1 text-xs font-medium text-[var(--color-ink)] transition hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]"
             >
-              {file.kind === "signature" ? "Signature" : file.fileName}
+              {submissionFileLabel(file)}
             </a>
           ))}
         </div>
       ) : null}
+    </article>
+  );
+}
+
+function SubmissionsModal({
+  form,
+  submissions,
+  selectedId,
+  onSelect,
+  onClose,
+}: {
+  form: LocalFormRow;
+  submissions: LocalFormSubmissionRow[];
+  selectedId?: string;
+  onSelect: (selectedId: string) => void;
+  onClose: () => void;
+}) {
+  const selectedSubmission =
+    submissions.find((submission) => submission.id === selectedId) ||
+    submissions[0] ||
+    null;
+  const files = Array.isArray(selectedSubmission?.payload?.__files)
+    ? selectedSubmission.payload.__files
+    : [];
+  const payloadEntries = selectedSubmission
+    ? visiblePayloadEntries(form, selectedSubmission)
+    : [];
+
+  return (
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-[var(--color-ink)]/35 px-4 py-6">
+      <button
+        type="button"
+        aria-label="Close submissions"
+        onClick={onClose}
+        className="fixed inset-0 h-full w-full cursor-default"
+      />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={`${form.name} submissions`}
+        className="relative mx-auto grid w-full max-w-6xl overflow-hidden rounded-2xl border border-[var(--color-border)] bg-white shadow-2xl lg:grid-cols-[22rem_minmax(0,1fr)]"
+      >
+        <aside className="max-h-[82vh] overflow-y-auto border-b border-[var(--color-border)] bg-[var(--color-bg)] p-4 lg:border-b-0 lg:border-r">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--color-accent)]">
+                Submissions
+              </p>
+              <h3 className="mt-1 font-serif text-2xl font-medium tracking-tight">
+                {form.name}
+              </h3>
+              <p className="mt-1 text-xs text-[var(--color-ink-muted)]">
+                {submissions.length} total submission{submissions.length === 1 ? "" : "s"}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-[var(--color-border)] bg-white text-lg font-semibold leading-none text-[var(--color-ink-muted)] transition hover:border-red-300 hover:bg-red-50 hover:text-red-700"
+              aria-label="Close submissions"
+            >
+              ×
+            </button>
+          </div>
+
+          <div className="mt-4 space-y-2">
+            {submissions.map((submission) => {
+              const name = submissionDisplayName(submission);
+              const active = selectedSubmission?.id === submission.id;
+              return (
+                <button
+                  key={submission.id}
+                  type="button"
+                  onClick={() => onSelect(submission.id)}
+                  className={`w-full rounded-xl border p-3 text-left transition ${
+                    active
+                      ? "border-[var(--color-accent)] bg-white shadow-sm"
+                      : "border-[var(--color-border)] bg-white/70 hover:border-[var(--color-accent)]"
+                  }`}
+                >
+                  <p className="truncate text-sm font-semibold text-[var(--color-ink)]">
+                    {name || submission.email || "Submission"}
+                  </p>
+                  <p className="mt-1 text-xs text-[var(--color-ink-muted)]">
+                    {formatDate(submission.submitted_at)}
+                  </p>
+                  {submission.email ? (
+                    <p className="mt-1 truncate text-xs text-[var(--color-accent)]">
+                      {submission.email}
+                    </p>
+                  ) : null}
+                </button>
+              );
+            })}
+          </div>
+        </aside>
+
+        <section className="max-h-[82vh] overflow-y-auto p-5 md:p-6">
+          {selectedSubmission ? (
+            <div className="space-y-5">
+              <header className="flex flex-col gap-3 border-b border-[var(--color-border)] pb-4 md:flex-row md:items-start md:justify-between">
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--color-accent)]">
+                    Submission Detail
+                  </p>
+                  <h4 className="mt-1 font-serif text-2xl font-medium tracking-tight">
+                    {submissionDisplayName(selectedSubmission) ||
+                      selectedSubmission.email ||
+                      "Submission"}
+                  </h4>
+                  <p className="mt-1 text-sm text-[var(--color-ink-muted)]">
+                    Submitted {formatDate(selectedSubmission.submitted_at)}
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {files.map((file, index) => (
+                    <a
+                      key={`${file.path || file.fileName}-${index}`}
+                      href={file.signedUrl || "#"}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="rounded-full border border-[var(--color-border)] bg-white px-3 py-1.5 text-xs font-medium text-[var(--color-ink)] transition hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]"
+                    >
+                      {submissionFileLabel(file)}
+                    </a>
+                  ))}
+                </div>
+              </header>
+
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                <DetailMetric label="Email" value={selectedSubmission.email} />
+                <DetailMetric label="Phone" value={selectedSubmission.phone} />
+                <DetailMetric
+                  label="Booking Code"
+                  value={selectedSubmission.booking_code}
+                />
+                <DetailMetric
+                  label="SendGrid Sync"
+                  value={
+                    selectedSubmission.sendgrid_synced_at
+                      ? formatDate(selectedSubmission.sendgrid_synced_at)
+                      : "Not synced"
+                  }
+                />
+              </div>
+
+              <div className="space-y-3">
+                {payloadEntries.map((entry) => {
+                  const value = formatPayloadValue(entry.value);
+                  return (
+                    <div
+                      key={entry.key}
+                      className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] p-4"
+                    >
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--color-ink-muted)]">
+                        {entry.label}
+                      </p>
+                      {value ? (
+                        <p className="mt-2 whitespace-pre-line break-words text-sm leading-relaxed text-[var(--color-ink)]">
+                          {value}
+                        </p>
+                      ) : (
+                        <p className="mt-2 text-sm text-[var(--color-ink-muted)]">
+                          No response
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-dashed border-[var(--color-border)] bg-[var(--color-bg)] p-8 text-center text-sm text-[var(--color-ink-muted)]">
+              No submissions for this form yet.
+            </div>
+          )}
+        </section>
+      </div>
+    </div>
+  );
+}
+
+function DetailMetric({
+  label,
+  value,
+}: {
+  label: string;
+  value?: string | null;
+}) {
+  return (
+    <div className="rounded-xl border border-[var(--color-border)] bg-white p-3">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--color-ink-muted)]">
+        {label}
+      </p>
+      <p className="mt-1 break-words text-sm font-semibold text-[var(--color-ink)]">
+        {value || "—"}
+      </p>
     </div>
   );
 }

@@ -172,6 +172,13 @@ export default function Dashboard() {
                       messageNotifications: updated,
                     }))
                   }
+                  customerPortal={config.customerPortal}
+                  onCustomerPortalChange={(updated) =>
+                    setConfig((prev) => ({
+                      ...prev,
+                      customerPortal: updated,
+                    }))
+                  }
                 />
               )}
               {activeCategory === "vacancy" && (

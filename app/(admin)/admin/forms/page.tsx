@@ -16,6 +16,8 @@ type SubmissionRow = {
   email?: string | null;
   first_name?: string | null;
   last_name?: string | null;
+  phone?: string | null;
+  booking_code?: string | null;
   payload?: Record<string, unknown> | null;
   sendgrid_synced_at: string | null;
   submitted_at: string | null;
@@ -67,6 +69,9 @@ async function signSubmissionFiles(row: SubmissionRow) {
     email: row.email || null,
     first_name: row.first_name || null,
     last_name: row.last_name || null,
+    phone: row.phone || null,
+    booking_code: row.booking_code || null,
+    sendgrid_synced_at: row.sendgrid_synced_at || null,
     submitted_at: row.submitted_at || "",
     payload: {
       ...payload,
@@ -107,10 +112,10 @@ export default async function AdminFormsPage() {
       supabase
         .from("local_form_submissions")
         .select(
-          "id, form_slug, email, first_name, last_name, payload, sendgrid_synced_at, submitted_at"
+          "id, form_slug, email, first_name, last_name, phone, booking_code, payload, sendgrid_synced_at, submitted_at"
         )
         .order("submitted_at", { ascending: false })
-        .limit(50),
+        .limit(5000),
     ]);
 
     if (formsResp.error) {

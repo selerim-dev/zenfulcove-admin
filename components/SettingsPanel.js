@@ -7,9 +7,13 @@ export default function SettingsPanel({
   onChange,
   messageNotifications,
   onMessageNotificationsChange,
+  customerPortal,
+  onCustomerPortalChange,
 }) {
   const sg = config || {};
   const notif = messageNotifications || {};
+  const portal = customerPortal || {};
+  const portalNav = portal.navigation || {};
 
   function update(field, value) {
     onChange({ ...sg, [field]: value });
@@ -17,6 +21,16 @@ export default function SettingsPanel({
 
   function updateNotif(field, value) {
     onMessageNotificationsChange({ ...notif, [field]: value });
+  }
+
+  function updatePortalNav(field, value) {
+    onCustomerPortalChange({
+      ...portal,
+      navigation: {
+        ...portalNav,
+        [field]: value,
+      },
+    });
   }
 
   const recipientsText = Array.isArray(notif.recipients)
@@ -69,6 +83,32 @@ export default function SettingsPanel({
           onChange={(value) => update("sendgridContactListId", value)}
           helperText="Shared contact list used by vacancy promo emails and other automations."
         />
+      </div>
+
+      <h2 className="font-serif text-2xl text-forest pt-4">
+        Guest Portal Navigation
+      </h2>
+      <p className="text-sm text-forest/70">
+        Choose which links guests see in the portal sidebar.
+      </p>
+
+      <div className="bg-white rounded-xl shadow-sm border border-sand p-5 space-y-3">
+        {[
+          ["rentals", "Reserve Rentals"],
+          ["availability", "Availability"],
+          ["forms", "Published Forms"],
+          ["terms", "Terms"],
+        ].map(([key, label]) => (
+          <label key={key} className="flex items-center justify-between gap-4 rounded-lg border border-sand px-4 py-3">
+            <span className="text-sm font-medium text-forest">{label}</span>
+            <input
+              type="checkbox"
+              checked={portalNav[key] !== false}
+              onChange={(e) => updatePortalNav(key, e.target.checked)}
+              className="h-4 w-4 accent-grove"
+            />
+          </label>
+        ))}
       </div>
 
       <h2 className="font-serif text-2xl text-forest pt-4">

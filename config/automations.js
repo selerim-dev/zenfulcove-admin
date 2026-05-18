@@ -121,4 +121,12 @@ export const automationConfig = {
     // NEXT_PUBLIC_DASHBOARD_URL env var if blank.
     dashboardUrl: "",
   },
+  customerPortal: {
+    navigation: {
+      rentals: true,
+      availability: true,
+      forms: true,
+      terms: true,
+    },
+  },
 };

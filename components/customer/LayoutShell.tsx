@@ -5,10 +5,26 @@ import { usePathname } from "next/navigation";
 import Link from "next/link";
 import Sidebar from "./Sidebar";
 
+type PublishedFormNavItem = {
+  href: string;
+  label: string;
+};
+
+type CustomerPortalNavigation = {
+  rentals: boolean;
+  availability: boolean;
+  forms: boolean;
+  terms: boolean;
+};
+
 export default function LayoutShell({
   children,
+  publishedForms = [],
+  navigation,
 }: {
   children: React.ReactNode;
+  publishedForms?: PublishedFormNavItem[];
+  navigation: CustomerPortalNavigation;
 }) {
   const pathname = usePathname();
   const isLanding = pathname === "/";
@@ -58,7 +74,12 @@ export default function LayoutShell({
         />
       )}
 
-      <Sidebar open={open} onNavigate={() => setOpen(false)} />
+      <Sidebar
+        open={open}
+        publishedForms={publishedForms}
+        navigation={navigation}
+        onNavigate={() => setOpen(false)}
+      />
 
       <main className="min-w-0 flex-1 px-5 py-6 md:px-12 md:py-14">
         {children}

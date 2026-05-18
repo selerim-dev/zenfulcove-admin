@@ -3,20 +3,42 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-const items = [
-  { href: "/book", label: "Reserve Rentals" },
-  { href: "/fleet", label: "Availability" },
-  { href: "/terms", label: "Terms" },
+type CustomerPortalNavigation = {
+  rentals: boolean;
+  availability: boolean;
+  forms: boolean;
+  terms: boolean;
+};
+
+const items: {
+  key: keyof CustomerPortalNavigation;
+  href: string;
+  label: string;
+}[] = [
+  { key: "rentals", href: "/book", label: "Reserve Rentals" },
+  { key: "availability", href: "/fleet", label: "Availability" },
+  { key: "terms", href: "/terms", label: "Terms" },
 ];
+
+type PublishedFormNavItem = {
+  href: string;
+  label: string;
+};
 
 export default function Sidebar({
   open,
+  publishedForms,
+  navigation,
   onNavigate,
 }: {
   open: boolean;
+  publishedForms: PublishedFormNavItem[];
+  navigation: CustomerPortalNavigation;
   onNavigate: () => void;
 }) {
   const pathname = usePathname();
+  const visibleItems = items.filter((item) => navigation[item.key] !== false);
+  const showForms = navigation.forms !== false && publishedForms.length > 0;
 
   return (
     <aside
@@ -35,7 +57,7 @@ export default function Sidebar({
         </div>
 
         <nav className="flex w-full flex-col gap-1">
-          {items.map((it) => {
+          {visibleItems.map((it) => {
             const active = pathname.startsWith(it.href);
             return (
               <Link
@@ -53,6 +75,31 @@ export default function Sidebar({
             );
           })}
         </nav>
+
+        {showForms ? (
+          <nav className="flex w-full flex-col gap-1 border-t border-[var(--color-border)] pt-5">
+            <p className="px-3 text-[10px] font-semibold uppercase tracking-wider text-[var(--color-ink-muted)]">
+              Forms
+            </p>
+            {publishedForms.map((form) => {
+              const active = pathname === form.href;
+              return (
+                <Link
+                  key={form.href}
+                  href={form.href}
+                  onClick={onNavigate}
+                  className={`rounded-xl px-3 py-2 text-sm font-medium transition ${
+                    active
+                      ? "bg-[var(--color-accent)] text-white shadow-sm"
+                      : "text-[var(--color-ink)] hover:bg-[var(--color-bg)]"
+                  }`}
+                >
+                  {form.label}
+                </Link>
+              );
+            })}
+          </nav>
+        ) : null}
 
         <div className="mt-auto w-full space-y-5">
           <div className="border-t border-[var(--color-border)] pt-5">
