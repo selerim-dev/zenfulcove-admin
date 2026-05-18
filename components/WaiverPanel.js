@@ -3,10 +3,47 @@
 import { useEffect, useState } from "react";
 import Toggle from "./Toggle";
 
+const KNOWN_UNITS = [
+  { id: "608952", name: "Fairy House" },
+  { id: "608953", name: "Desert Rose" },
+  { id: "608954", name: "Sky Castle" },
+  { id: "608955", name: "Bird House" },
+  { id: "754651", name: "Doodle House" },
+];
+
 const DEFAULT_EMAILS = [
   { daysBeforeCheckin: 2, templateId: "", label: "Reminder (2 days before)" },
   { daysBeforeCheckin: 1, templateId: "", label: "Reminder (1 day before)" },
   { daysBeforeCheckin: 0, templateId: "", label: "Reminder (morning of)" },
+];
+
+const TEMPLATE_VARIABLES = [
+  "GuestFirstName",
+  "GuestName",
+  "Arrival",
+  "Departure",
+  "KeyCode",
+  "propertyDisplayName",
+  "wifiName",
+  "wifiPassword",
+  "reservationFormUrl",
+  "waiverUrl",
+  "accessMessageHtml",
+  "accessMessageText",
+  "dedicatedKayakText",
+  "amenitiesText",
+];
+
+const PROPERTY_MESSAGE_FIELDS = [
+  { key: "displayName", label: "Display Name", placeholder: "SKY CASTLE" },
+  { key: "directionsName", label: "Directions Name", placeholder: "SKY CASTLE" },
+  { key: "wifiName", label: "Wi-Fi Name", placeholder: "SKYCASTLE" },
+  { key: "wifiPassword", label: "Wi-Fi Password", placeholder: "Iamgrateful!" },
+  {
+    key: "kayakLockCode",
+    label: "Kayak Lock Code",
+    placeholder: "1010",
+  },
 ];
 
 export default function WaiverPanel({
@@ -26,6 +63,8 @@ export default function WaiverPanel({
     .join("\n");
   const [propertyMessageText, setPropertyMessageText] = useState("{}");
   const [propertyMessageError, setPropertyMessageError] = useState("");
+  const [lodgifyProperties, setLodgifyProperties] = useState([]);
+  const [lodgifyPropertiesStatus, setLodgifyPropertiesStatus] = useState("idle");
 
   useEffect(() => {
     setPropertyMessageText(
@@ -33,6 +72,27 @@ export default function WaiverPanel({
     );
     setPropertyMessageError("");
   }, [codeRelease.propertyMessageData]);
+
+  useEffect(() => {
+    let active = true;
+    setLodgifyPropertiesStatus("loading");
+    fetch("/api/lodgify/properties")
+      .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
+      .then(({ ok, data }) => {
+        if (!active) return;
+        if (!ok) throw new Error(data.error || "Failed to load Lodgify properties.");
+        setLodgifyProperties(Array.isArray(data.properties) ? data.properties : []);
+        setLodgifyPropertiesStatus("loaded");
+      })
+      .catch(() => {
+        if (!active) return;
+        setLodgifyPropertiesStatus("failed");
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   function updateEnabled(enabled) {
     onChange({ ...safeConfig, enabled });
@@ -74,6 +134,17 @@ export default function WaiverPanel({
     updateCodeRelease("propertyCodes", propertyCodes);
   }
 
+  function setPropertyCode(key, code) {
+    const propertyCodes = { ...(codeRelease.propertyCodes || {}) };
+    const normalizedCode = String(code || "").trim();
+    if (normalizedCode) {
+      propertyCodes[key] = normalizedCode;
+    } else {
+      delete propertyCodes[key];
+    }
+    updateCodeRelease("propertyCodes", propertyCodes);
+  }
+
   function updateJervisPropertyIds(raw) {
     const jervisPropertyIds = {};
     raw
@@ -87,6 +158,56 @@ export default function WaiverPanel({
         if (key && id) jervisPropertyIds[key] = id;
       });
     updateCodeRelease("jervisPropertyIds", jervisPropertyIds);
+  }
+
+  function setJervisPropertyId(key, id) {
+    const jervisPropertyIds = { ...(codeRelease.jervisPropertyIds || {}) };
+    const normalizedId = String(id || "").trim();
+    if (normalizedId) {
+      jervisPropertyIds[key] = normalizedId;
+    } else {
+      delete jervisPropertyIds[key];
+    }
+    updateCodeRelease("jervisPropertyIds", jervisPropertyIds);
+  }
+
+  function updatePropertyMessageField(key, field, value) {
+    const propertyMessageData = { ...(codeRelease.propertyMessageData || {}) };
+    const current =
+      propertyMessageData[key] && typeof propertyMessageData[key] === "object"
+        ? { ...propertyMessageData[key] }
+        : {};
+    const normalizedValue = String(value || "").trim();
+    if (normalizedValue) {
+      current[field] = normalizedValue;
+    } else {
+      delete current[field];
+    }
+    if (Object.keys(current).length > 0) {
+      propertyMessageData[key] = current;
+    } else {
+      delete propertyMessageData[key];
+    }
+    updateCodeRelease("propertyMessageData", propertyMessageData);
+  }
+
+  function updateCodeSource(key, source) {
+    const propertyMessageData = { ...(codeRelease.propertyMessageData || {}) };
+    const current =
+      propertyMessageData[key] && typeof propertyMessageData[key] === "object"
+        ? { ...propertyMessageData[key] }
+        : {};
+    current.codeSource = source;
+    propertyMessageData[key] = current;
+    const propertyCodes = { ...(codeRelease.propertyCodes || {}) };
+    if (source === "jervis") {
+      delete propertyCodes[key];
+    }
+    onAccessCodeReleaseChange?.({
+      ...codeRelease,
+      propertyMessageData,
+      propertyCodes,
+    });
   }
 
   function updatePropertyMessageData(raw) {
@@ -122,15 +243,77 @@ export default function WaiverPanel({
     onChange({ ...safeConfig, emails: list });
   }
 
+  function internalFormSlug() {
+    return String(safeConfig.localFormSlug || "")
+      .trim()
+      .replace(/^\/?forms\//, "");
+  }
+
+  function codeReleaseFormSlug() {
+    return String(codeRelease.localFormSlug ?? internalFormSlug())
+      .trim()
+      .replace(/^\/?forms\//, "");
+  }
+
+  function mergedPropertyRows() {
+    const rows = new Map();
+    const addRow = (property) => {
+      const name = String(property.name || "").trim();
+      const id = String(property.id || "").trim();
+      const matchingById = id
+        ? Array.from(rows.values()).find((row) => row.id === id)
+        : null;
+      if (matchingById) {
+        rows.set(matchingById.key, {
+          ...matchingById,
+          id,
+          lodgifyName: name || matchingById.lodgifyName || "",
+        });
+        return;
+      }
+      const key = name || id;
+      if (!key) return;
+      const existing = rows.get(key) || {};
+      rows.set(key, {
+        key,
+        id: id || existing.id || "",
+        name: name || existing.name || key,
+      });
+    };
+
+    KNOWN_UNITS.forEach(addRow);
+    lodgifyProperties.forEach(addRow);
+    Object.keys(codeRelease.propertyMessageData || {}).forEach((key) =>
+      addRow({ name: key })
+    );
+    Object.keys(codeRelease.propertyCodes || {}).forEach((key) =>
+      addRow({ name: key })
+    );
+    Object.keys(codeRelease.jervisPropertyIds || {}).forEach((key) =>
+      addRow({ name: key })
+    );
+
+    return Array.from(rows.values()).sort((a, b) =>
+      a.name.localeCompare(b.name)
+    );
+  }
+
+  const formSlug = internalFormSlug();
+  const formUrl = formSlug ? `/forms/${formSlug}` : "";
+  const accessFormSlug = codeReleaseFormSlug();
+  const propertyRows = mergedPropertyRows();
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="font-serif text-2xl text-forest">Form Waiver Emails</h2>
+        <h2 className="font-serif text-2xl text-forest">Waiver Reminders</h2>
         <Toggle enabled={safeConfig.enabled} onChange={updateEnabled} />
       </div>
 
       <p className="text-sm text-forest/70">
-        Waiver reminders are sent for each “days before check-in” you configure below. Use an internal form slug to send guests to Zenfulcove-hosted forms; Jotform remains as a fallback during migration.
+        Waiver reminders send 2, 1, and 0 days before check-in only when the
+        guest has not submitted the internal form. Jotform is only a fallback
+        if the internal form route is blank.
       </p>
 
       {/* Property filter — restrict to Zenfulcove properties only */}
@@ -159,7 +342,7 @@ export default function WaiverPanel({
 
       <div className="bg-white rounded-xl shadow-sm border border-sand p-5">
         <label className="block text-xs text-forest/60 uppercase tracking-wider mb-1">
-          Internal Form Slug
+          Internal Form Route
         </label>
         <input
           type="text"
@@ -169,7 +352,17 @@ export default function WaiverPanel({
           className="border border-sand rounded-lg px-3 py-2 text-sm w-full font-mono focus:outline-none focus:ring-2 focus:ring-grove/30"
         />
         <p className="text-xs text-forest/40 mt-1">
-          When set, reminders link to <span className="font-mono">/forms/[slug]</span> and check Supabase local form submissions for the booking ID.
+          {formUrl ? (
+            <>
+              Reminder templates receive{" "}
+              <span className="font-mono">waiverUrl</span> as{" "}
+              <span className="font-mono">{formUrl}</span>. The cron checks
+              Supabase internal form submissions for the booking ID before
+              sending reminders.
+            </>
+          ) : (
+            "Set this to use internal forms. If blank, the legacy Jotform URL is used."
+          )}
         </p>
       </div>
 
@@ -358,7 +551,7 @@ export default function WaiverPanel({
             </div>
             <div>
               <label className="block text-xs text-forest/60 uppercase tracking-wider mb-1">
-                Internal Form Slug
+                Internal Form Route
               </label>
               <input
                 type="text"
@@ -367,6 +560,9 @@ export default function WaiverPanel({
                 placeholder="guest-info"
                 className="border border-sand rounded-lg px-3 py-2 text-sm w-full font-mono focus:outline-none focus:ring-2 focus:ring-grove/30"
               />
+              <p className="text-xs text-forest/40 mt-1">
+                {accessFormSlug ? `/forms/${accessFormSlug}` : "Uses the waiver reminder form route."}
+              </p>
             </div>
           </div>
 
@@ -410,6 +606,25 @@ export default function WaiverPanel({
             </p>
           </div>
 
+          <div className="rounded-lg border border-sand/80 bg-cream/40 p-4">
+            <h3 className="text-sm font-semibold text-forest">
+              SendGrid Template Variables
+            </h3>
+            <p className="text-xs text-forest/50 mt-1">
+              Use these dynamic template keys in Template 1 and Template 2.
+            </p>
+            <div className="mt-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-3">
+              {TEMPLATE_VARIABLES.map((variable) => (
+                <span
+                  key={variable}
+                  className="rounded border border-sand bg-white px-2 py-1 font-mono text-forest/80"
+                >
+                  {`{{${variable}}}`}
+                </span>
+              ))}
+            </div>
+          </div>
+
           <div>
             <label className="block text-xs text-forest/60 uppercase tracking-wider mb-1">
               Property IDs
@@ -421,6 +636,196 @@ export default function WaiverPanel({
               placeholder="Leave blank for all properties"
               className="border border-sand rounded-lg px-3 py-2 text-sm w-full font-mono focus:outline-none focus:ring-2 focus:ring-grove/30"
             />
+          </div>
+
+          <div className="space-y-3">
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <h3 className="text-sm font-semibold text-forest">
+                  Property Message Settings
+                </h3>
+                <p className="text-xs text-forest/50">
+                  Seeded from Lodgify when available. Values here feed the
+                  SendGrid variables and decide whether the access code is
+                  static or generated by Jervis.
+                </p>
+              </div>
+              <span className="text-xs text-forest/40">
+                Lodgify:{" "}
+                {lodgifyPropertiesStatus === "loaded"
+                  ? `${lodgifyProperties.length} loaded`
+                  : lodgifyPropertiesStatus === "loading"
+                    ? "loading"
+                    : "using fallback units"}
+              </span>
+            </div>
+
+            <div className="space-y-4">
+              {propertyRows.map((property) => {
+                const key = property.key;
+                const messageData =
+                  codeRelease.propertyMessageData?.[key] &&
+                  typeof codeRelease.propertyMessageData[key] === "object"
+                    ? codeRelease.propertyMessageData[key]
+                    : {};
+                const staticCode = codeRelease.propertyCodes?.[key] || "";
+                const jervisId = codeRelease.jervisPropertyIds?.[key] || "";
+                const codeSource = messageData.codeSource || (staticCode ? "static" : "jervis");
+
+                return (
+                  <div
+                    key={key}
+                    className="rounded-lg border border-sand/80 bg-white p-4"
+                  >
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <h4 className="text-sm font-semibold text-forest">
+                          {property.name}
+                        </h4>
+                        {property.id ? (
+                          <p className="text-xs text-forest/40">
+                            Lodgify property ID:{" "}
+                            <span className="font-mono">{property.id}</span>
+                            {property.lodgifyName &&
+                            property.lodgifyName !== property.name
+                              ? ` · ${property.lodgifyName}`
+                              : ""}
+                          </p>
+                        ) : null}
+                      </div>
+                      <label className="text-xs text-forest/60">
+                        Code Source
+                        <select
+                          value={codeSource}
+                          onChange={(event) =>
+                            updateCodeSource(key, event.target.value)
+                          }
+                          className="mt-1 block rounded-lg border border-sand bg-white px-3 py-2 text-sm text-forest focus:outline-none focus:ring-2 focus:ring-grove/30"
+                        >
+                          <option value="jervis">Jervis dynamic</option>
+                          <option value="static">Static code</option>
+                        </select>
+                      </label>
+                    </div>
+
+                    <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      {PROPERTY_MESSAGE_FIELDS.map((field) => (
+                        <label
+                          key={field.key}
+                          className="text-xs text-forest/60"
+                        >
+                          {field.label}
+                          <input
+                            type="text"
+                            value={messageData[field.key] || ""}
+                            onChange={(event) =>
+                              updatePropertyMessageField(
+                                key,
+                                field.key,
+                                event.target.value
+                              )
+                            }
+                            placeholder={field.placeholder}
+                            className="mt-1 block w-full rounded-lg border border-sand px-3 py-2 text-sm text-forest focus:outline-none focus:ring-2 focus:ring-grove/30"
+                          />
+                        </label>
+                      ))}
+                      <label className="text-xs text-forest/60">
+                        Jervis Property ID
+                        <input
+                          type="text"
+                          value={jervisId}
+                          onChange={(event) =>
+                            setJervisPropertyId(key, event.target.value)
+                          }
+                          placeholder="33782"
+                          className="mt-1 block w-full rounded-lg border border-sand px-3 py-2 text-sm font-mono text-forest focus:outline-none focus:ring-2 focus:ring-grove/30"
+                        />
+                      </label>
+                      <label className="text-xs text-forest/60">
+                        Static Access Code
+                        <input
+                          type="text"
+                          value={staticCode}
+                          onChange={(event) =>
+                            setPropertyCode(key, event.target.value)
+                          }
+                          placeholder="Only for fixed-code units"
+                          className="mt-1 block w-full rounded-lg border border-sand px-3 py-2 text-sm font-mono text-forest focus:outline-none focus:ring-2 focus:ring-grove/30"
+                        />
+                      </label>
+                    </div>
+
+                    <div className="mt-3 grid grid-cols-1 gap-3">
+                      <label className="text-xs text-forest/60">
+                        Parking Instructions
+                        <textarea
+                          value={messageData.parkingInstructions || ""}
+                          onChange={(event) =>
+                            updatePropertyMessageField(
+                              key,
+                              "parkingInstructions",
+                              event.target.value
+                            )
+                          }
+                          placeholder="Parking - please park in front of your unit..."
+                          rows={2}
+                          className="mt-1 block w-full rounded-lg border border-sand px-3 py-2 text-sm text-forest focus:outline-none focus:ring-2 focus:ring-grove/30"
+                        />
+                      </label>
+                      <label className="text-xs text-forest/60">
+                        Dedicated Kayak Text
+                        <textarea
+                          value={messageData.dedicatedKayakText || ""}
+                          onChange={(event) =>
+                            updatePropertyMessageField(
+                              key,
+                              "dedicatedKayakText",
+                              event.target.value
+                            )
+                          }
+                          placeholder="There is one dedicated kayak for this unit..."
+                          rows={2}
+                          className="mt-1 block w-full rounded-lg border border-sand px-3 py-2 text-sm text-forest focus:outline-none focus:ring-2 focus:ring-grove/30"
+                        />
+                      </label>
+                      <label className="text-xs text-forest/60">
+                        Additional Kayak Text
+                        <textarea
+                          value={messageData.additionalKayakText || ""}
+                          onChange={(event) =>
+                            updatePropertyMessageField(
+                              key,
+                              "additionalKayakText",
+                              event.target.value
+                            )
+                          }
+                          placeholder="We have additional kayaks available..."
+                          rows={2}
+                          className="mt-1 block w-full rounded-lg border border-sand px-3 py-2 text-sm text-forest focus:outline-none focus:ring-2 focus:ring-grove/30"
+                        />
+                      </label>
+                      <label className="text-xs text-forest/60">
+                        Amenities Text
+                        <textarea
+                          value={messageData.amenitiesText || ""}
+                          onChange={(event) =>
+                            updatePropertyMessageField(
+                              key,
+                              "amenitiesText",
+                              event.target.value
+                            )
+                          }
+                          placeholder="Mention unit-specific amenities or arrival notes..."
+                          rows={2}
+                          className="mt-1 block w-full rounded-lg border border-sand px-3 py-2 text-sm text-forest focus:outline-none focus:ring-2 focus:ring-grove/30"
+                        />
+                      </label>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
