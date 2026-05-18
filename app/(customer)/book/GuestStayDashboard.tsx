@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { saveGuestBookingSession } from "@/components/customer/bookingSession";
 
 type StayResponse = {
   ok?: boolean;
@@ -120,6 +121,10 @@ export default function GuestStayDashboard({
   const [data, setData] = useState<StayResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    saveGuestBookingSession({ reservation, lastName });
+  }, [reservation, lastName]);
 
   useEffect(() => {
     let active = true;

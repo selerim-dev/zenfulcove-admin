@@ -1,4 +1,5 @@
 import CustomerAccessForm from "@/components/customer/CustomerAccessForm";
+import BookSessionRestore from "@/components/customer/BookSessionRestore";
 import GuestStayDashboard from "./GuestStayDashboard";
 
 export const dynamic = "force-dynamic";
@@ -22,6 +23,7 @@ export default async function BookPage({
 
   return (
     <div className="mx-auto max-w-4xl space-y-8">
+      <BookSessionRestore />
       <section className="overflow-hidden rounded-[28px] border border-[var(--color-border)] bg-white shadow-sm">
         <div
           className="min-h-[340px] bg-cover bg-center"

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { saveGuestBookingSession, stayHref } from "./bookingSession";
 
 export default function CustomerAccessForm({ compact = false }: { compact?: boolean }) {
   const router = useRouter();
@@ -32,22 +33,13 @@ export default function CustomerAccessForm({ compact = false }: { compact?: bool
         throw new Error(json.error || "We could not verify that booking.");
       }
 
-      sessionStorage.setItem(
-        "zc_customer_booking",
-        JSON.stringify({
-          reservation: code,
-          lastName: name,
-          cabin: json.cabin ?? "",
-          guestName: json.guestName ?? "",
-          verifiedAt: new Date().toISOString(),
-        })
-      );
-
-      const params = new URLSearchParams({
+      saveGuestBookingSession({
         reservation: code,
         lastName: name,
+        cabin: json.cabin ?? "",
+        guestName: json.guestName ?? "",
       });
-      router.push(`/book?${params.toString()}`);
+      router.push(stayHref(code, name));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Verification failed.");
     } finally {

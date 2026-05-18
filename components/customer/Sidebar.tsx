@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { savedStayHref } from "./bookingSession";
 
 type CustomerPortalNavigation = {
   rentals: boolean;
@@ -103,6 +104,7 @@ export default function Sidebar({
   onToggleCollapse: () => void;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
   const visibleItems = items.filter((item) => navigation[item.key] !== false);
   const showForms = navigation.forms !== false && publishedForms.length > 0;
 
@@ -155,7 +157,16 @@ export default function Sidebar({
               <Link
                 key={item.href}
                 href={item.href}
-                onClick={onNavigate}
+                onClick={(event) => {
+                  if (item.key === "rentals") {
+                    const href = savedStayHref();
+                    if (href !== item.href) {
+                      event.preventDefault();
+                      router.push(href);
+                    }
+                  }
+                  onNavigate();
+                }}
                 title={collapsed ? item.label : undefined}
                 className={navClass(active)}
               >

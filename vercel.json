@@ -5,7 +5,11 @@
       "schedule": "0 14 * * *"
     },
     {
-      "path": "/api/cron?automation=access-code-release",
+      "path": "/api/cron?automation=access-code-release&window=central-daylight",
+      "schedule": "0 16 * * *"
+    },
+    {
+      "path": "/api/cron?automation=access-code-release&window=central-standard",
       "schedule": "0 17 * * *"
     }
   ]
