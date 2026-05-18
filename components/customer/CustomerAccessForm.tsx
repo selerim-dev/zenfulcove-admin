@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-export default function CustomerAccessForm() {
+export default function CustomerAccessForm({ compact = false }: { compact?: boolean }) {
   const router = useRouter();
   const [reservation, setReservation] = useState("");
   const [lastName, setLastName] = useState("");
@@ -58,11 +58,19 @@ export default function CustomerAccessForm() {
   return (
     <form
       onSubmit={handleSubmit}
-      className="mt-8 grid max-w-xl gap-3 rounded-2xl border border-white/30 bg-black/20 p-4 text-white shadow-2xl backdrop-blur-sm sm:grid-cols-[1fr_1fr_auto]"
+      className={
+        compact
+          ? "grid gap-3 text-[var(--color-ink)] sm:grid-cols-[1fr_1fr_auto]"
+          : "mt-8 grid max-w-xl gap-3 rounded-2xl border border-white/30 bg-black/20 p-4 text-white shadow-2xl backdrop-blur-sm sm:grid-cols-[1fr_1fr_auto]"
+      }
       style={{ textShadow: "none" }}
     >
       <label className="block">
-        <span className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.18em] text-white/80">
+        <span
+          className={`mb-1 block text-[10px] font-semibold uppercase tracking-[0.18em] ${
+            compact ? "text-[var(--color-ink-muted)]" : "text-white/80"
+          }`}
+        >
           Booking Code
         </span>
         <input
@@ -70,11 +78,19 @@ export default function CustomerAccessForm() {
           value={reservation}
           onChange={(e) => setReservation(e.target.value)}
           autoComplete="off"
-          className="w-full rounded-xl border border-white/30 bg-white/95 px-3 py-2.5 text-sm text-[var(--color-ink)] outline-none transition focus:border-white"
+          className={`w-full rounded-xl px-3 py-2.5 text-sm text-[var(--color-ink)] outline-none transition ${
+            compact
+              ? "border border-[var(--color-border)] bg-white focus:border-[var(--color-accent)]"
+              : "border border-white/30 bg-white/95 focus:border-white"
+          }`}
         />
       </label>
       <label className="block">
-        <span className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.18em] text-white/80">
+        <span
+          className={`mb-1 block text-[10px] font-semibold uppercase tracking-[0.18em] ${
+            compact ? "text-[var(--color-ink-muted)]" : "text-white/80"
+          }`}
+        >
           Last Name
         </span>
         <input
@@ -82,7 +98,11 @@ export default function CustomerAccessForm() {
           value={lastName}
           onChange={(e) => setLastName(e.target.value)}
           autoComplete="family-name"
-          className="w-full rounded-xl border border-white/30 bg-white/95 px-3 py-2.5 text-sm text-[var(--color-ink)] outline-none transition focus:border-white"
+          className={`w-full rounded-xl px-3 py-2.5 text-sm text-[var(--color-ink)] outline-none transition ${
+            compact
+              ? "border border-[var(--color-border)] bg-white focus:border-[var(--color-accent)]"
+              : "border border-white/30 bg-white/95 focus:border-white"
+          }`}
         />
       </label>
       <button
@@ -93,7 +113,9 @@ export default function CustomerAccessForm() {
         {submitting ? "Checking" : "Open Portal"}
       </button>
       {error ? (
-        <p className="text-sm text-red-100 sm:col-span-3">{error}</p>
+        <p className={`text-sm sm:col-span-3 ${compact ? "text-red-600" : "text-red-100"}`}>
+          {error}
+        </p>
       ) : null}
     </form>
   );

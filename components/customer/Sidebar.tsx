@@ -15,8 +15,8 @@ const items: {
   href: string;
   label: string;
 }[] = [
-  { key: "rentals", href: "/book", label: "Reserve Rentals" },
-  { key: "availability", href: "/fleet", label: "Availability" },
+  { key: "rentals", href: "/book", label: "My Stay" },
+  { key: "availability", href: "/fleet", label: "Kayak Availability" },
   { key: "terms", href: "/terms", label: "Terms" },
 ];
 

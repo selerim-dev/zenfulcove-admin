@@ -94,8 +94,8 @@ export default function SettingsPanel({
 
       <div className="bg-white rounded-xl shadow-sm border border-sand p-5 space-y-3">
         {[
-          ["rentals", "Reserve Rentals"],
-          ["availability", "Availability"],
+          ["rentals", "My Stay"],
+          ["availability", "Kayak Availability"],
           ["forms", "Published Forms"],
           ["terms", "Terms"],
         ].map(([key, label]) => (
