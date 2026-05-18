@@ -64,6 +64,27 @@ export async function POST(request) {
       }
     }
 
+    if (updates.accessCodeRelease !== undefined) {
+      updated.accessCodeRelease = {
+        ...updated.accessCodeRelease,
+        ...updates.accessCodeRelease,
+      };
+      if (updates.accessCodeRelease.propertyIds !== undefined) {
+        updated.accessCodeRelease.propertyIds = Array.isArray(
+          updates.accessCodeRelease.propertyIds
+        )
+          ? updates.accessCodeRelease.propertyIds
+          : [];
+      }
+      if (updates.accessCodeRelease.propertyCodes !== undefined) {
+        updated.accessCodeRelease.propertyCodes =
+          updates.accessCodeRelease.propertyCodes &&
+          typeof updates.accessCodeRelease.propertyCodes === "object"
+            ? updates.accessCodeRelease.propertyCodes
+            : {};
+      }
+    }
+
     if (updates.popupFollowups !== undefined) {
       updated.popupFollowups = {
         ...updated.popupFollowups,
@@ -127,6 +148,20 @@ export async function POST(request) {
       if (updates.localFormClientSync.formSlugs !== undefined) {
         updated.localFormClientSync.formSlugs = Array.isArray(updates.localFormClientSync.formSlugs)
           ? updates.localFormClientSync.formSlugs
+          : [];
+      }
+    }
+
+    if (updates.jotformLocalFormImport !== undefined) {
+      updated.jotformLocalFormImport = {
+        ...updated.jotformLocalFormImport,
+        ...updates.jotformLocalFormImport,
+      };
+      if (updates.jotformLocalFormImport.mappings !== undefined) {
+        updated.jotformLocalFormImport.mappings = Array.isArray(
+          updates.jotformLocalFormImport.mappings
+        )
+          ? updates.jotformLocalFormImport.mappings
           : [];
       }
     }

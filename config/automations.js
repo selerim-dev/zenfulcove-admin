@@ -28,13 +28,26 @@ export const automationConfig = {
   waiverReminders: {
     enabled: true,
     propertyIds: [], // Lodgify property IDs to restrict to (e.g. Zenfulcove only). Empty = all properties.
-    jotformFormId: "251834442091050", // JotForm waiver form ID (same form for all emails)
+    localFormSlug: "guest-info", // Internal Zenfulcove form slug. When set, this replaces the Jotform waiver link/check.
+    jotformFormId: "251834442091050", // Legacy Jotform waiver form ID fallback during migration.
     emails: [
       // Only 2, 1, and 0 days before check-in are sent; any other days in dashboard config are ignored by cron
       { daysBeforeCheckin: 2, templateId: "d-REPLACE_ME_JOTFORM_2DAY", label: "Reminder (2 days before)" },
       { daysBeforeCheckin: 1, templateId: "d-REPLACE_ME_JOTFORM_1DAY", label: "Reminder (1 day before)" },
       { daysBeforeCheckin: 0, templateId: "d-REPLACE_ME_JOTFORM_0DAY", label: "Reminder (morning of)" },
     ],
+  },
+  accessCodeRelease: {
+    enabled: false,
+    releaseHourCentral: 11,
+    releaseMinuteCentral: 0,
+    sendgridTemplateId: "",
+    localFormSlug: "guest-info",
+    jotformFormId: "251834442091050", // fallback while historical Jotform forms are still active
+    propertyIds: [],
+    includeCancelledBookings: false,
+    propertyCodes: {},
+    jervisAccessCodeApiUrl: "",
   },
   popupFollowups: {
     enabled: false,
@@ -88,6 +101,16 @@ export const automationConfig = {
     sendgridContactListId: "e46aa43e-3f91-4965-8bbb-fcae8f9c3124",
     formSlugs: ["guest-info"],
     onlyUnsynced: false,
+  },
+  jotformLocalFormImport: {
+    enabled: false,
+    mappings: [
+      {
+        jotformFormId: "251834442091050",
+        localFormSlug: "guest-info",
+      },
+    ],
+    limit: 1000,
   },
   lodgifyClientSync: {
     enabled: false,

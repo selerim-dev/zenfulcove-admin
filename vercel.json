@@ -3,6 +3,10 @@
     {
       "path": "/api/cron",
       "schedule": "0 14 * * *"
+    },
+    {
+      "path": "/api/cron?automation=access-code-release",
+      "schedule": "0 16-23 * * *"
     }
   ]
 }

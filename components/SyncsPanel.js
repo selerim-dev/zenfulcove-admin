@@ -213,19 +213,25 @@ function SalesmateSyncCard({ config, onChange }) {
 export default function SyncsPanel({
   jotformConfig,
   localFormConfig,
+  jotformImportConfig,
   lodgifyConfig,
   salesmateConfig,
   onChange,
 }) {
   const safeJotformConfig = jotformConfig || {};
   const safeLocalFormConfig = localFormConfig || {};
+  const safeJotformImportConfig = jotformImportConfig || {};
   const safeLodgifyConfig = lodgifyConfig || {};
   const safeSalesmateConfig = salesmateConfig || {};
+  const mappingsText = (safeJotformImportConfig.mappings || [])
+    .map((mapping) => `${mapping.jotformFormId || ""}: ${mapping.localFormSlug || ""}`)
+    .join("\n");
 
   function update(patch) {
     onChange({
       jotformClientSync: safeJotformConfig,
       localFormClientSync: safeLocalFormConfig,
+      jotformLocalFormImport: safeJotformImportConfig,
       lodgifyClientSync: safeLodgifyConfig,
       salesmateFormSync: safeSalesmateConfig,
       ...patch,
@@ -238,6 +244,31 @@ export default function SyncsPanel({
 
   function updateLocalForm(field, value) {
     update({ localFormClientSync: { ...safeLocalFormConfig, [field]: value } });
+  }
+
+  function updateJotformImport(field, value) {
+    update({
+      jotformLocalFormImport: {
+        ...safeJotformImportConfig,
+        [field]: value,
+      },
+    });
+  }
+
+  function updateJotformImportMappings(raw) {
+    const mappings = raw
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => {
+        const [jotformFormId, ...slugParts] = line.split(":");
+        return {
+          jotformFormId: String(jotformFormId || "").trim(),
+          localFormSlug: slugParts.join(":").trim(),
+        };
+      })
+      .filter((mapping) => mapping.jotformFormId && mapping.localFormSlug);
+    updateJotformImport("mappings", mappings);
   }
 
   function updateLodgify(field, value) {
@@ -290,6 +321,40 @@ export default function SyncsPanel({
           <p className="text-xs text-forest/40 mt-1">
             Comma-separated form IDs. All submissions from each listed form are read on every sync run.
           </p>
+        </div>
+      </SyncCard>
+
+      <SyncCard
+        title="Jotform to Local Form Import"
+        description="One-off migration path that copies historical Jotform submissions into Supabase local form submissions. Reruns update the same imported records instead of duplicating them."
+        enabled={safeJotformImportConfig.enabled}
+        onToggle={(enabled) => updateJotformImport("enabled", enabled)}
+      >
+        <div>
+          <FieldLabel>Form Mappings</FieldLabel>
+          <textarea
+            value={mappingsText}
+            onChange={(e) => updateJotformImportMappings(e.target.value)}
+            placeholder={"251834442091050: guest-info"}
+            rows={4}
+            className="border border-sand rounded-lg px-3 py-2 text-sm w-full font-mono focus:outline-none focus:ring-2 focus:ring-grove/30"
+          />
+          <p className="text-xs text-forest/40 mt-1">
+            One mapping per line: Jotform form ID, colon, local form slug. Run
+            with the cron dry run before enabling live import.
+          </p>
+        </div>
+        <div>
+          <FieldLabel>Import Limit Per Form</FieldLabel>
+          <input
+            type="number"
+            min="1"
+            value={safeJotformImportConfig.limit || 1000}
+            onChange={(e) =>
+              updateJotformImport("limit", Number(e.target.value || 1000))
+            }
+            className="border border-sand rounded-lg px-3 py-2 text-sm w-full focus:outline-none focus:ring-2 focus:ring-grove/30"
+          />
         </div>
       </SyncCard>
 

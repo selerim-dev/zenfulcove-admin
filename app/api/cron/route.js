@@ -11,12 +11,27 @@ import {
   setSalesmateFormSyncState,
 } from "@/lib/kv";
 import { getProperties, getAvailability, getBookings, getAllBookings } from "@/lib/lodgify";
-import { getFormSubmissions, bookingHasWaiver, extractClientContact } from "@/lib/jotform";
 import {
+  getFormSubmissions,
+  bookingHasWaiver,
+  extractBookingCode,
+  extractClientContact,
+  submissionToLocalFormPayload,
+} from "@/lib/jotform";
+import {
+  bookingHasLocalFormSubmission,
   extractLocalFormContact,
+  getLocalFormBySlug,
   listLocalFormSubmissions,
   markLocalFormSubmissionsSynced,
+  upsertImportedLocalFormSubmission,
 } from "@/lib/local-forms";
+import {
+  getAccessCodeRelease,
+  markAccessCodeReleaseFailed,
+  markAccessCodeReleaseSent,
+  resolveAccessCodeForBooking,
+} from "@/lib/access-code-releases";
 import { hasSupabaseAdminEnv } from "@/lib/supabaseEnv";
 import { appendLogs, writeLastRunStatus } from "@/lib/activity-log";
 import { createSalesmateContact, validateSalesmateConfig } from "@/lib/salesmate";
@@ -50,10 +65,60 @@ function todayCentral() {
   return `${y}-${m}-${d}`;
 }
 
+function centralClock() {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Chicago",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(new Date());
+  const byType = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return {
+    date: `${byType.year}-${byType.month}-${byType.day}`,
+    hour: Number(byType.hour || 0) % 24,
+    minute: Number(byType.minute || 0),
+  };
+}
+
+function centralClockHasReached(hour, minute) {
+  const clock = centralClock();
+  const currentMinutes = clock.hour * 60 + clock.minute;
+  const releaseMinutes = Number(hour || 0) * 60 + Number(minute || 0);
+  return {
+    reached: currentMinutes >= releaseMinutes,
+    clock,
+  };
+}
+
 function addDays(dateStr, days) {
   const d = new Date(dateStr + "T12:00:00");
   d.setDate(d.getDate() + days);
   return d.toISOString().split("T")[0];
+}
+
+function publicAppBaseUrl() {
+  const configured =
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    process.env.NEXT_PUBLIC_APP_URL ||
+    process.env.NEXT_PUBLIC_DASHBOARD_URL ||
+    process.env.APP_URL;
+
+  if (configured) return String(configured).replace(/\/+$/, "");
+  if (process.env.VERCEL_URL) {
+    return `https://${process.env.VERCEL_URL}`.replace(/\/+$/, "");
+  }
+  return "https://zenfulcove-admin.vercel.app";
+}
+
+function localFormUrl(slug) {
+  try {
+    return new URL(`/forms/${slug}`, publicAppBaseUrl()).toString();
+  } catch {
+    return `https://zenfulcove-admin.vercel.app/forms/${slug}`;
+  }
 }
 
 /** Normalize any date-like value to YYYY-MM-DD for comparison. */
@@ -289,6 +354,11 @@ function parseSelectedAutomations(request) {
     "vacancy-emails": "vacancy",
     waiver: "waiver",
     "waiver-reminders": "waiver",
+    codes: "access-code-release",
+    "code-release": "access-code-release",
+    "access-code": "access-code-release",
+    "access-codes": "access-code-release",
+    "access-code-release": "access-code-release",
     popup: "popup",
     "popup-followups": "popup",
     "popup-follow-ups": "popup",
@@ -304,6 +374,10 @@ function parseSelectedAutomations(request) {
     "local-form": "local-form-sync",
     "local-form-sync": "local-form-sync",
     "local-form-client-sync": "local-form-sync",
+    "jotform-import": "jotform-local-import",
+    "jotform-local-import": "jotform-local-import",
+    "jotform-to-local": "jotform-local-import",
+    "jotform-local-form-import": "jotform-local-import",
     lodgify: "lodgify-sync",
     "lodgify-sync": "lodgify-sync",
     "lodgify-client-sync": "lodgify-sync",
@@ -559,23 +633,33 @@ async function runVacancyEmails(automationConfig, dryRunOverride) {
   return logs;
 }
 
-// ─── Automation 2: Jotform Waiver Emails ─────────────────────────────────────
-// Uses the same Jotform form for all reminders. Sent only if guest hasn't submitted yet.
+// ─── Automation 2: Form Waiver Emails ────────────────────────────────────────
+// Uses the configured internal form slug when present, with Jotform as a
+// migration fallback. Sent only if guest hasn't submitted yet.
 // When it runs is controlled by the cron schedule; days and template IDs are set per waiver in the dashboard.
 
 async function runWaiverReminders(automationConfig, dryRunOverride) {
   const isDryRun = dryRunOverride !== undefined ? dryRunOverride : DRY_RUN_ENV;
   const logs = [];
-  const config = automationConfig.waiverReminders;
+  const config = automationConfig.waiverReminders || {};
   const from = {
     email: automationConfig.sendgrid.fromEmail,
     name: automationConfig.sendgrid.fromName,
   };
+  const localFormSlug = String(config.localFormSlug || config.formSlug || "")
+    .trim()
+    .replace(/^\/?forms\//, "");
+  const jotformFormId =
+    config.jotformFormId || config.reminders?.[0]?.jotformFormId;
+  const usesLocalForm = Boolean(localFormSlug);
+  const automationName = usesLocalForm
+    ? "Internal Form Waiver Emails"
+    : "Jotform Waiver Emails";
 
   if (!config.enabled) {
     logs.push({
       timestamp: new Date().toISOString(),
-      automation: "Jotform Waiver Emails",
+      automation: automationName,
       property: "—",
       action: "Skipped (disabled)",
       status: "skipped",
@@ -583,14 +667,12 @@ async function runWaiverReminders(automationConfig, dryRunOverride) {
     return logs;
   }
 
-  const jotformFormId =
-    config.jotformFormId || config.reminders?.[0]?.jotformFormId;
-  if (!jotformFormId) {
+  if (!localFormSlug && !jotformFormId) {
     logs.push({
       timestamp: new Date().toISOString(),
-      automation: "Jotform Waiver Emails",
+      automation: automationName,
       property: "—",
-      action: "Skipped: no Jotform form ID configured",
+      action: "Skipped: no internal form slug or Jotform form ID configured",
       status: "skipped",
     });
     return logs;
@@ -603,12 +685,14 @@ async function runWaiverReminders(automationConfig, dryRunOverride) {
       arr.findIndex((x) => x.daysBeforeCheckin === r.daysBeforeCheckin) === i
   );
   const todayStr = todayCentral();
-  const waiverUrl = `https://form.jotform.com/${jotformFormId}`;
+  const waiverUrl = usesLocalForm
+    ? localFormUrl(localFormSlug)
+    : `https://form.jotform.com/${jotformFormId}`;
 
   if (reminders.length === 0) {
     logs.push({
       timestamp: new Date().toISOString(),
-      automation: "Jotform Waiver Emails",
+      automation: automationName,
       property: "—",
       action: "Skipped: no waiver reminder windows configured (emails/reminders empty)",
       status: "skipped",
@@ -616,23 +700,32 @@ async function runWaiverReminders(automationConfig, dryRunOverride) {
     return logs;
   }
 
-  // Fetch Jotform submissions once (avoids ~140 API calls per run)
-  let jotformSubmissions = [];
+  // Fetch waiver submissions once (avoids ~140 API calls per run)
+  let waiverSubmissions = [];
   try {
-    jotformSubmissions = await getFormSubmissions(jotformFormId);
+    waiverSubmissions = usesLocalForm
+      ? await listLocalFormSubmissions({
+          formSlugs: [localFormSlug],
+          limit: 10000,
+        })
+      : await getFormSubmissions(jotformFormId);
     logs.push({
       timestamp: new Date().toISOString(),
-      automation: "Jotform Waiver Emails",
+      automation: automationName,
       property: "—",
-      action: `Loaded ${jotformSubmissions.length} Jotform waiver submission(s)`,
+      action: usesLocalForm
+        ? `Loaded ${waiverSubmissions.length} internal waiver submission(s) for /forms/${localFormSlug}`
+        : `Loaded ${waiverSubmissions.length} Jotform waiver submission(s)`,
       status: "info",
     });
   } catch (err) {
     logs.push({
       timestamp: new Date().toISOString(),
-      automation: "Jotform Waiver Emails",
+      automation: automationName,
       property: "—",
-      action: `JotForm API failed — skipping all waiver emails: ${err.message}`,
+      action: usesLocalForm
+        ? `Internal form submission lookup failed — skipping all waiver emails: ${err.message}`
+        : `JotForm API failed — skipping all waiver emails: ${err.message}`,
       status: "failed",
     });
     return logs;
@@ -642,9 +735,9 @@ async function runWaiverReminders(automationConfig, dryRunOverride) {
   if (isDryRun) {
     logs.push({
       timestamp: new Date().toISOString(),
-      automation: "Jotform Waiver Emails",
+      automation: automationName,
       property: "—",
-      action: `═══ DRY RUN: Today is ${todayStr}. No emails sent. Validation: WHO would receive WHAT (compare with Lodgify + Jotform) ═══`,
+      action: `═══ DRY RUN: Today is ${todayStr}. No emails sent. Validation: WHO would receive WHAT (compare with Lodgify + ${usesLocalForm ? "internal forms" : "Jotform"}) ═══`,
       status: "info",
     });
   }
@@ -661,7 +754,7 @@ async function runWaiverReminders(automationConfig, dryRunOverride) {
 
     logs.push({
       timestamp: new Date().toISOString(),
-      automation: "Jotform Waiver Emails",
+      automation: automationName,
       property: "—",
       action: `--- Check-ins on ${targetDate} (${daysLabel}) → would send "${label}" to: ---`,
       status: "info",
@@ -704,7 +797,7 @@ async function runWaiverReminders(automationConfig, dryRunOverride) {
         if (!guestEmail) {
           logs.push({
             timestamp: new Date().toISOString(),
-            automation: "Jotform Waiver Emails",
+            automation: automationName,
             property: propertyName,
             action: isDryRun
               ? `[DRY RUN] SKIP booking ${bookingId} | no guest email`
@@ -717,7 +810,7 @@ async function runWaiverReminders(automationConfig, dryRunOverride) {
         if (!reminder.templateId || String(reminder.templateId).trim() === "") {
           logs.push({
             timestamp: new Date().toISOString(),
-            automation: "Jotform Waiver Emails",
+            automation: automationName,
             property: propertyName,
             action: `SKIP booking ${bookingId} — no SendGrid template ID for "${reminder.label || reminder.daysBeforeCheckin}-day"`,
             status: "skipped",
@@ -726,7 +819,9 @@ async function runWaiverReminders(automationConfig, dryRunOverride) {
         }
 
         try {
-          const hasWaiver = bookingHasWaiver(bookingId, jotformSubmissions);
+          const hasWaiver = usesLocalForm
+            ? bookingHasLocalFormSubmission(bookingId, waiverSubmissions)
+            : bookingHasWaiver(bookingId, waiverSubmissions);
 
           if (!hasWaiver) {
             if (!isDryRun) {
@@ -746,20 +841,20 @@ async function runWaiverReminders(automationConfig, dryRunOverride) {
 
             logs.push({
               timestamp: new Date().toISOString(),
-              automation: "Jotform Waiver Emails",
+              automation: automationName,
               property: propertyName,
               action: isDryRun
-                ? `[DRY RUN] Would send "${reminder.label || `${reminder.daysBeforeCheckin}-day`}" to ${guestEmail} | booking ${bookingId} | ${propertyName} | no Jotform waiver for booking ${bookingId}`
+                ? `[DRY RUN] Would send "${reminder.label || `${reminder.daysBeforeCheckin}-day`}" to ${guestEmail} | booking ${bookingId} | ${propertyName} | no ${usesLocalForm ? "internal form" : "Jotform"} waiver for booking ${bookingId}`
                 : `Sent ${reminder.label || `${reminder.daysBeforeCheckin}-day`} to ${guestEmail} (booking ${bookingId})`,
               status: "success",
             });
           } else {
             logs.push({
               timestamp: new Date().toISOString(),
-              automation: "Jotform Waiver Emails",
+              automation: automationName,
               property: propertyName,
               action: isDryRun
-                ? `[DRY RUN] SKIP ${guestEmail} | booking ${bookingId} | waiver already in Jotform (booking ID matched)`
+                ? `[DRY RUN] SKIP ${guestEmail} | booking ${bookingId} | waiver already in ${usesLocalForm ? "internal forms" : "Jotform"} (booking ID matched)`
                 : `Waiver already submitted for booking ${bookingId}`,
               status: "skipped",
             });
@@ -770,7 +865,7 @@ async function runWaiverReminders(automationConfig, dryRunOverride) {
             err.response?.body?.errors?.[0]?.message || err.message;
           logs.push({
             timestamp: new Date().toISOString(),
-            automation: "Jotform Waiver Emails",
+            automation: automationName,
             property: propertyName,
             action: `Failed ${reminder.label || `${reminder.daysBeforeCheckin}-day`} for booking ${bookingId}: ${detail}`,
             status: "failed",
@@ -780,9 +875,332 @@ async function runWaiverReminders(automationConfig, dryRunOverride) {
     } catch (err) {
       logs.push({
         timestamp: new Date().toISOString(),
-        automation: "Jotform Waiver Emails",
+        automation: automationName,
         property: "—",
         action: `Failed to fetch bookings for ${targetDate} (${label}): ${err.message}`,
+        status: "failed",
+      });
+    }
+  }
+
+  return logs;
+}
+
+// ─── Automation 2b: Access Code Release ─────────────────────────────────────
+// Sends the check-in access code after the configured Central time, but only
+// once the configured waiver/internal form has been submitted.
+
+async function runAccessCodeRelease(automationConfig, dryRunOverride) {
+  const isDryRun = dryRunOverride !== undefined ? dryRunOverride : DRY_RUN_ENV;
+  const logs = [];
+  const config = automationConfig.accessCodeRelease || {};
+  const waiverConfig = automationConfig.waiverReminders || {};
+  const automationName = "Access Code Release";
+  const from = {
+    email: automationConfig.sendgrid.fromEmail,
+    name: automationConfig.sendgrid.fromName,
+  };
+
+  if (!config.enabled) {
+    logs.push({
+      timestamp: new Date().toISOString(),
+      automation: automationName,
+      property: "—",
+      action: "Skipped (disabled)",
+      status: "skipped",
+    });
+    return logs;
+  }
+
+  const templateId = String(config.sendgridTemplateId || "").trim();
+  if (!templateId) {
+    logs.push({
+      timestamp: new Date().toISOString(),
+      automation: automationName,
+      property: "—",
+      action: "Skipped: no SendGrid code template ID configured",
+      status: "skipped",
+    });
+    return logs;
+  }
+
+  const releaseHour = Math.max(
+    0,
+    Math.min(23, Number(config.releaseHourCentral ?? 11))
+  );
+  const releaseMinute = Math.max(
+    0,
+    Math.min(59, Number(config.releaseMinuteCentral ?? 0))
+  );
+  const { reached, clock } = centralClockHasReached(releaseHour, releaseMinute);
+  if (!reached) {
+    logs.push({
+      timestamp: new Date().toISOString(),
+      automation: automationName,
+      property: "—",
+      action: `Skipped: current Central time is ${String(clock.hour).padStart(2, "0")}:${String(clock.minute).padStart(2, "0")}; release starts at ${String(releaseHour).padStart(2, "0")}:${String(releaseMinute).padStart(2, "0")}`,
+      status: "skipped",
+    });
+    return logs;
+  }
+
+  const localFormSlug = String(
+    config.localFormSlug || waiverConfig.localFormSlug || waiverConfig.formSlug || ""
+  )
+    .trim()
+    .replace(/^\/?forms\//, "");
+  const jotformFormId =
+    config.jotformFormId ||
+    waiverConfig.jotformFormId ||
+    waiverConfig.reminders?.[0]?.jotformFormId;
+  const usesLocalForm = Boolean(localFormSlug);
+
+  if (!usesLocalForm && !jotformFormId) {
+    logs.push({
+      timestamp: new Date().toISOString(),
+      automation: automationName,
+      property: "—",
+      action: "Skipped: no internal form slug or Jotform fallback form ID configured",
+      status: "skipped",
+    });
+    return logs;
+  }
+
+  const todayStr = todayCentral();
+  let waiverSubmissions = [];
+  try {
+    waiverSubmissions = usesLocalForm
+      ? await listLocalFormSubmissions({
+          formSlugs: [localFormSlug],
+          limit: 10000,
+        })
+      : await getFormSubmissions(jotformFormId);
+    logs.push({
+      timestamp: new Date().toISOString(),
+      automation: automationName,
+      property: "—",
+      action: usesLocalForm
+        ? `Loaded ${waiverSubmissions.length} internal form submission(s) for code gating`
+        : `Loaded ${waiverSubmissions.length} Jotform submission(s) for code gating`,
+      status: "info",
+    });
+  } catch (err) {
+    logs.push({
+      timestamp: new Date().toISOString(),
+      automation: automationName,
+      property: "—",
+      action: `Failed to load form submissions for code gating: ${err.message}`,
+      status: "failed",
+    });
+    return logs;
+  }
+
+  let bookings = [];
+  try {
+    bookings = await getBookings(todayStr, todayStr);
+  } catch (err) {
+    logs.push({
+      timestamp: new Date().toISOString(),
+      automation: automationName,
+      property: "—",
+      action: `Failed to fetch Lodgify check-ins for ${todayStr}: ${err.message}`,
+      status: "failed",
+    });
+    return logs;
+  }
+
+  bookings = bookings.filter((booking) => {
+    const arrival =
+      booking.arrival ||
+      booking.start_date ||
+      booking.checkIn ||
+      booking.checkin_date;
+    return toDateOnly(arrival) === todayStr;
+  });
+
+  const propertyIds = Array.isArray(config.propertyIds)
+    ? config.propertyIds
+    : [];
+  if (propertyIds.length > 0) {
+    bookings = bookings.filter((booking) =>
+      propertyIds.includes(
+        String(booking.property_id ?? booking.propertyId ?? "")
+      )
+    );
+  }
+
+  const seenBookingIds = new Set();
+  bookings = bookings.filter((booking) => {
+    const id = String(booking.id || "").trim();
+    if (!id || seenBookingIds.has(id)) return false;
+    seenBookingIds.add(id);
+    return true;
+  });
+
+  logs.push({
+    timestamp: new Date().toISOString(),
+    automation: automationName,
+    property: "—",
+    action: `Evaluating ${bookings.length} Lodgify check-in(s) for ${todayStr}`,
+    status: "info",
+  });
+
+  for (const booking of bookings) {
+    const contact = extractLodgifyContact(booking);
+    const bookingId = String(booking.id || contact.bookingId || "").trim();
+    const propertyId = String(booking.property_id ?? booking.propertyId ?? "");
+    const propertyName =
+      booking.property_name ||
+      booking.propertyName ||
+      contact.propertyName ||
+      "Property";
+    const guestEmail = contact.email || booking.guest?.email || booking.email || "";
+    const guestName = [contact.firstName, contact.lastName]
+      .filter(Boolean)
+      .join(" ") || booking.guest?.name || booking.guestName || "Guest";
+
+    if (isCancelledBooking(contact.bookingStatus) && config.includeCancelledBookings !== true) {
+      logs.push({
+        timestamp: new Date().toISOString(),
+        automation: automationName,
+        property: propertyName,
+        action: `Skipped booking ${bookingId}: booking is cancelled`,
+        status: "skipped",
+      });
+      continue;
+    }
+
+    if (!guestEmail) {
+      logs.push({
+        timestamp: new Date().toISOString(),
+        automation: automationName,
+        property: propertyName,
+        action: `Skipped booking ${bookingId}: no guest email`,
+        status: "skipped",
+      });
+      continue;
+    }
+
+    const existingRelease = await getAccessCodeRelease(bookingId);
+    if (existingRelease?.sent_at || existingRelease?.status === "sent") {
+      logs.push({
+        timestamp: new Date().toISOString(),
+        automation: automationName,
+        property: propertyName,
+        action: `Skipped booking ${bookingId}: access code already sent`,
+        status: "skipped",
+      });
+      continue;
+    }
+
+    const hasWaiver = usesLocalForm
+      ? bookingHasLocalFormSubmission(bookingId, waiverSubmissions)
+      : bookingHasWaiver(bookingId, waiverSubmissions);
+    if (!hasWaiver) {
+      logs.push({
+        timestamp: new Date().toISOString(),
+        automation: automationName,
+        property: propertyName,
+        action: `Blocked booking ${bookingId}: form not submitted yet`,
+        status: "skipped",
+      });
+      if (existingRelease?.access_code) {
+        await markAccessCodeReleaseFailed({
+          bookingId,
+          status: "blocked",
+          error: "Form not submitted yet.",
+        }).catch(() => {});
+      }
+      continue;
+    }
+
+    let resolved;
+    try {
+      resolved = await resolveAccessCodeForBooking(
+        {
+          bookingId,
+          propertyId,
+          propertyName,
+          guestEmail,
+          guestName,
+          checkinDate: todayStr,
+        },
+        config
+      );
+    } catch (err) {
+      logs.push({
+        timestamp: new Date().toISOString(),
+        automation: automationName,
+        property: propertyName,
+        action: `Failed booking ${bookingId}: access code lookup failed (${err.message})`,
+        status: "failed",
+      });
+      await markAccessCodeReleaseFailed({
+        bookingId,
+        error: err.message,
+      }).catch(() => {});
+      continue;
+    }
+
+    if (!resolved?.code) {
+      logs.push({
+        timestamp: new Date().toISOString(),
+        automation: automationName,
+        property: propertyName,
+        action: `Failed booking ${bookingId}: no access code available from stored codes, property fallback, or Jervis API`,
+        status: "failed",
+      });
+      continue;
+    }
+
+    if (isDryRun) {
+      logs.push({
+        timestamp: new Date().toISOString(),
+        automation: automationName,
+        property: propertyName,
+        action: `[DRY RUN] Would send access code to ${guestEmail} | booking ${bookingId} | source ${resolved.source || "unknown"}`,
+        status: "success",
+      });
+      continue;
+    }
+
+    try {
+      await sendTemplateEmail({
+        to: guestEmail,
+        templateId,
+        from,
+        data: {
+          guestName,
+          propertyName,
+          checkinDate: todayStr,
+          bookingId,
+          accessCode: resolved.code,
+          code: resolved.code,
+        },
+      });
+      await markAccessCodeReleaseSent({
+        bookingId,
+        templateId,
+        channel: "email",
+      });
+      logs.push({
+        timestamp: new Date().toISOString(),
+        automation: automationName,
+        property: propertyName,
+        action: `Sent access code to ${guestEmail} (booking ${bookingId})`,
+        status: "success",
+      });
+    } catch (err) {
+      const detail = err.response?.body?.errors?.[0]?.message || err.message;
+      await markAccessCodeReleaseFailed({
+        bookingId,
+        error: detail,
+      }).catch(() => {});
+      logs.push({
+        timestamp: new Date().toISOString(),
+        automation: automationName,
+        property: propertyName,
+        action: `Failed to send access code for booking ${bookingId}: ${detail}`,
         status: "failed",
       });
     }
@@ -2050,6 +2468,187 @@ async function runLocalFormClientSync(automationConfig, dryRunOverride) {
   return logs;
 }
 
+async function runJotformLocalFormImport(automationConfig, dryRunOverride) {
+  const isDryRun = dryRunOverride !== undefined ? dryRunOverride : DRY_RUN_ENV;
+  const logs = [];
+  const config = automationConfig.jotformLocalFormImport || {};
+  const mappings = Array.isArray(config.mappings)
+    ? config.mappings
+        .map((mapping) => ({
+          jotformFormId: String(mapping?.jotformFormId || "").trim(),
+          localFormSlug: String(mapping?.localFormSlug || "").trim(),
+        }))
+        .filter((mapping) => mapping.jotformFormId && mapping.localFormSlug)
+    : [];
+
+  if (!config.enabled) {
+    logs.push({
+      timestamp: new Date().toISOString(),
+      automation: "Jotform Local Form Import",
+      property: "—",
+      action: "Skipped (disabled)",
+      status: "skipped",
+    });
+    return logs;
+  }
+
+  if (!hasSupabaseAdminEnv()) {
+    logs.push({
+      timestamp: new Date().toISOString(),
+      automation: "Jotform Local Form Import",
+      property: "—",
+      action: "Skipped: Supabase URL/service-role key is not configured",
+      status: "skipped",
+    });
+    return logs;
+  }
+
+  if (mappings.length === 0) {
+    logs.push({
+      timestamp: new Date().toISOString(),
+      automation: "Jotform Local Form Import",
+      property: "—",
+      action: "Skipped: no Jotform-to-local form mappings configured",
+      status: "skipped",
+    });
+    return logs;
+  }
+
+  if (isDryRun) {
+    logs.push({
+      timestamp: new Date().toISOString(),
+      automation: "Jotform Local Form Import",
+      property: "—",
+      action: "═══ DRY RUN: No local form submissions will be written. Validation: WHICH Jotform submissions would be imported. ═══",
+      status: "info",
+    });
+  }
+
+  const limit = Math.max(1, Math.min(Number(config.limit) || 1000, 1000));
+
+  for (const mapping of mappings) {
+    const form = await getLocalFormBySlug(mapping.localFormSlug).catch((err) => {
+      logs.push({
+        timestamp: new Date().toISOString(),
+        automation: "Jotform Local Form Import",
+        property: mapping.localFormSlug,
+        action: `Failed to load local form /forms/${mapping.localFormSlug}: ${err.message}`,
+        status: "failed",
+      });
+      return null;
+    });
+
+    if (!form) {
+      logs.push({
+        timestamp: new Date().toISOString(),
+        automation: "Jotform Local Form Import",
+        property: mapping.localFormSlug,
+        action: `Skipped Jotform form ${mapping.jotformFormId}: local form /forms/${mapping.localFormSlug} was not found`,
+        status: "skipped",
+      });
+      continue;
+    }
+
+    let submissions = [];
+    try {
+      submissions = await getFormSubmissions(mapping.jotformFormId, { limit });
+      logs.push({
+        timestamp: new Date().toISOString(),
+        automation: "Jotform Local Form Import",
+        property: mapping.localFormSlug,
+        action: `Loaded ${submissions.length} Jotform submission(s) from form ${mapping.jotformFormId}`,
+        status: "info",
+      });
+    } catch (err) {
+      logs.push({
+        timestamp: new Date().toISOString(),
+        automation: "Jotform Local Form Import",
+        property: mapping.localFormSlug,
+        action: `Failed to fetch Jotform form ${mapping.jotformFormId}: ${err.message}`,
+        status: "failed",
+      });
+      continue;
+    }
+
+    let importedCount = 0;
+    let missingIdCount = 0;
+    for (const submission of submissions) {
+      const submissionId = String(
+        submission?.id || submission?.submissionID || ""
+      ).trim();
+      if (!submissionId) {
+        missingIdCount += 1;
+        continue;
+      }
+
+      const contact = {
+        ...extractClientContact(submission),
+        bookingCode: extractBookingCode(submission),
+      };
+      const payload = submissionToLocalFormPayload(
+        submission,
+        mapping.jotformFormId
+      );
+      const submittedAtRaw =
+        submission?.created_at ||
+        submission?.createdAt ||
+        submission?.submissionTime ||
+        "";
+      const parsedSubmittedAt = submittedAtRaw
+        ? new Date(submittedAtRaw)
+        : null;
+      const submittedAt =
+        parsedSubmittedAt && !isNaN(parsedSubmittedAt.getTime())
+          ? parsedSubmittedAt.toISOString()
+          : null;
+
+      if (isDryRun) {
+        importedCount += 1;
+        logs.push({
+          timestamp: new Date().toISOString(),
+          automation: "Jotform Local Form Import",
+          property: mapping.localFormSlug,
+          action: `[DRY RUN] Would import Jotform submission ${submissionId} to /forms/${mapping.localFormSlug} | email ${contact.email || "(missing)"} | booking ${contact.bookingCode || "(missing)"}`,
+          status: "success",
+        });
+        continue;
+      }
+
+      try {
+        await upsertImportedLocalFormSubmission({
+          form,
+          formSlug: mapping.localFormSlug,
+          contact,
+          payload,
+          externalSource: "jotform",
+          externalFormId: mapping.jotformFormId,
+          externalSubmissionId: submissionId,
+          submittedAt,
+        });
+        importedCount += 1;
+      } catch (err) {
+        logs.push({
+          timestamp: new Date().toISOString(),
+          automation: "Jotform Local Form Import",
+          property: mapping.localFormSlug,
+          action: `Failed to import Jotform submission ${submissionId}: ${err.message}`,
+          status: "failed",
+        });
+      }
+    }
+
+    logs.push({
+      timestamp: new Date().toISOString(),
+      automation: "Jotform Local Form Import",
+      property: mapping.localFormSlug,
+      action: `${isDryRun ? "Prepared" : "Imported"} ${importedCount} submission(s) from Jotform form ${mapping.jotformFormId}${missingIdCount ? `; skipped ${missingIdCount} without submission IDs` : ""}`,
+      status: "success",
+    });
+  }
+
+  return logs;
+}
+
 async function runLodgifyClientSync(automationConfig, dryRunOverride) {
   const isDryRun = dryRunOverride !== undefined ? dryRunOverride : DRY_RUN_ENV;
   const logs = [];
@@ -2479,6 +3078,11 @@ export async function POST(request) {
     allLogs.push(...waiverLogs);
   }
 
+  if (runAllAutomations || selectedAutomations.has("access-code-release")) {
+    const accessCodeLogs = await runAccessCodeRelease(automationConfig, isDryRun);
+    allLogs.push(...accessCodeLogs);
+  }
+
   if (runAllAutomations || selectedAutomations.has("popup")) {
     const popupLogs = await runPopupFollowups(automationConfig, isDryRun, popupChannelOverride);
     allLogs.push(...popupLogs);
@@ -2505,6 +3109,15 @@ export async function POST(request) {
   ) {
     const localFormSyncLogs = await runLocalFormClientSync(automationConfig, isDryRun);
     allLogs.push(...localFormSyncLogs);
+  }
+
+  if (
+    runAllAutomations ||
+    selectedAutomations.has("jotform-local-import") ||
+    selectedAutomations.has("syncs")
+  ) {
+    const importLogs = await runJotformLocalFormImport(automationConfig, isDryRun);
+    allLogs.push(...importLogs);
   }
 
   if (

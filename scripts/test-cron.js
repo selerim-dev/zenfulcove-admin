@@ -3,17 +3,22 @@
  * Test script to run the cron automation logic locally.
  *
  * ALWAYS uses dry-run: logs WHO would receive WHAT, no emails sent.
- * Compare output with Lodgify (check-in dates) + Jotform (waiver submissions).
+ * Compare output with Lodgify (check-in dates) + internal forms/Jotform
+ * waiver submissions.
  *
  * Usage:
  *   1. Start the dev server:  npm run dev
  *   2. In another terminal:   npm run test:cron
+ *
+ * Optional:
+ *   TEST_AUTOMATION=access-code-release npm run test:cron
  *
  * Requires CRON_SECRET in .env.local.
  */
 
 const baseUrl = process.env.TEST_BASE_URL || "http://localhost:3000";
 const secret = process.env.CRON_SECRET;
+const automation = String(process.env.TEST_AUTOMATION || "").trim();
 
 if (!secret) {
   console.error("❌ Missing CRON_SECRET. Add to .env.local (script loads it via npm run test:cron).");
@@ -21,7 +26,10 @@ if (!secret) {
 }
 
 async function main() {
-  console.log("🔄 Triggering cron (DRY RUN) at", baseUrl + "/api/cron");
+  const path = automation
+    ? `/api/cron?automation=${encodeURIComponent(automation)}`
+    : "/api/cron";
+  console.log("🔄 Triggering cron (DRY RUN) at", baseUrl + path);
   console.log("   No emails will be sent. Output: WHO would receive WHAT.");
   console.log("");
 
@@ -34,7 +42,7 @@ async function main() {
 
   let res;
   try {
-    res = await fetch(baseUrl + "/api/cron", {
+    res = await fetch(baseUrl + path, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${secret}`,
@@ -64,7 +72,12 @@ async function main() {
   let currentGroup = null;
 
   for (const log of logs) {
-    if (log.automation !== "Jotform Waiver Emails") continue;
+    if (
+      log.automation !== "Jotform Waiver Emails" &&
+      log.automation !== "Internal Form Waiver Emails"
+    ) {
+      continue;
+    }
     const a = log.action || "";
 
     // "--- Check-ins on 2026-03-15 (2 days from now) → would send "2 days before" to: ---"

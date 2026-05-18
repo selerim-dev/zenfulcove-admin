@@ -206,6 +206,13 @@ export default function Dashboard() {
                       waiverReminders: updated,
                     }))
                   }
+                  accessCodeRelease={config.accessCodeRelease}
+                  onAccessCodeReleaseChange={(updated) =>
+                    setConfig((prev) => ({
+                      ...prev,
+                      accessCodeRelease: updated,
+                    }))
+                  }
                 />
               )}
 
@@ -238,6 +245,7 @@ export default function Dashboard() {
                 <SyncsPanel
                   jotformConfig={config.jotformClientSync}
                   localFormConfig={config.localFormClientSync}
+                  jotformImportConfig={config.jotformLocalFormImport}
                   lodgifyConfig={config.lodgifyClientSync}
                   salesmateConfig={config.salesmateFormSync}
                   onChange={(updated) =>
@@ -245,6 +253,7 @@ export default function Dashboard() {
                       ...prev,
                       jotformClientSync: updated.jotformClientSync,
                       localFormClientSync: updated.localFormClientSync,
+                      jotformLocalFormImport: updated.jotformLocalFormImport,
                       lodgifyClientSync: updated.lodgifyClientSync,
                       salesmateFormSync: updated.salesmateFormSync,
                     }))

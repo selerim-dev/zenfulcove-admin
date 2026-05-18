@@ -8,9 +8,18 @@ const DEFAULT_EMAILS = [
   { daysBeforeCheckin: 0, templateId: "", label: "Reminder (morning of)" },
 ];
 
-export default function WaiverPanel({ config, onChange }) {
+export default function WaiverPanel({
+  config,
+  onChange,
+  accessCodeRelease,
+  onAccessCodeReleaseChange,
+}) {
   const safeConfig = config || {};
+  const codeRelease = accessCodeRelease || {};
   const emails = safeConfig.emails || safeConfig.reminders || DEFAULT_EMAILS;
+  const propertyCodesText = Object.entries(codeRelease.propertyCodes || {})
+    .map(([property, code]) => `${property}: ${code}`)
+    .join("\n");
 
   function updateEnabled(enabled) {
     onChange({ ...safeConfig, enabled });
@@ -18,6 +27,38 @@ export default function WaiverPanel({ config, onChange }) {
 
   function updateJotformFormId(value) {
     onChange({ ...safeConfig, jotformFormId: value });
+  }
+
+  function updateLocalFormSlug(value) {
+    onChange({ ...safeConfig, localFormSlug: value });
+  }
+
+  function updateCodeRelease(field, value) {
+    if (!onAccessCodeReleaseChange) return;
+    onAccessCodeReleaseChange({ ...codeRelease, [field]: value });
+  }
+
+  function updateCodeReleasePropertyIds(value) {
+    const propertyIds = value
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    updateCodeRelease("propertyIds", propertyIds);
+  }
+
+  function updatePropertyCodes(raw) {
+    const propertyCodes = {};
+    raw
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .forEach((line) => {
+        const [property, ...codeParts] = line.split(":");
+        const key = String(property || "").trim();
+        const code = codeParts.join(":").trim();
+        if (key && code) propertyCodes[key] = code;
+      });
+    updateCodeRelease("propertyCodes", propertyCodes);
   }
 
   function updateEmail(index, field, value) {
@@ -42,12 +83,12 @@ export default function WaiverPanel({ config, onChange }) {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="font-serif text-2xl text-forest">Jotform Waiver Emails</h2>
+        <h2 className="font-serif text-2xl text-forest">Form Waiver Emails</h2>
         <Toggle enabled={safeConfig.enabled} onChange={updateEnabled} />
       </div>
 
       <p className="text-sm text-forest/70">
-        Waiver reminders are sent for each “days before check-in” you configure below. Same Jotform form for all. Send time is set by the cron schedule.
+        Waiver reminders are sent for each “days before check-in” you configure below. Use an internal form slug to send guests to Zenfulcove-hosted forms; Jotform remains as a fallback during migration.
       </p>
 
       {/* Property filter — restrict to Zenfulcove properties only */}
@@ -74,10 +115,26 @@ export default function WaiverPanel({ config, onChange }) {
         </p>
       </div>
 
-      {/* Single Jotform Form ID — used for all 4 emails */}
       <div className="bg-white rounded-xl shadow-sm border border-sand p-5">
         <label className="block text-xs text-forest/60 uppercase tracking-wider mb-1">
-          Jotform Form ID
+          Internal Form Slug
+        </label>
+        <input
+          type="text"
+          value={safeConfig.localFormSlug || ""}
+          onChange={(e) => updateLocalFormSlug(e.target.value)}
+          placeholder="guest-info"
+          className="border border-sand rounded-lg px-3 py-2 text-sm w-full font-mono focus:outline-none focus:ring-2 focus:ring-grove/30"
+        />
+        <p className="text-xs text-forest/40 mt-1">
+          When set, reminders link to <span className="font-mono">/forms/[slug]</span> and check Supabase local form submissions for the booking ID.
+        </p>
+      </div>
+
+      {/* Legacy Jotform Form ID fallback */}
+      <div className="bg-white rounded-xl shadow-sm border border-sand p-5">
+        <label className="block text-xs text-forest/60 uppercase tracking-wider mb-1">
+          Legacy Jotform Form ID
         </label>
         <input
           type="text"
@@ -87,7 +144,7 @@ export default function WaiverPanel({ config, onChange }) {
           className="border border-sand rounded-lg px-3 py-2 text-sm w-full font-mono focus:outline-none focus:ring-2 focus:ring-grove/30"
         />
         <p className="text-xs text-forest/40 mt-1">
-          Same form used for all waiver reminder emails. Editable from the dashboard.
+          Used only when the internal form slug is blank, so the old Jotform reminder flow can keep running during migration.
         </p>
       </div>
 
@@ -201,6 +258,126 @@ export default function WaiverPanel({ config, onChange }) {
         </svg>
         Add Another Email
       </button>
+
+      <div className="pt-4 border-t border-sand/70 space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="font-serif text-2xl text-forest">
+              Access Code Release
+            </h2>
+            <p className="text-sm text-forest/70 mt-1">
+              Sends the stay access code once the waiver form is submitted and
+              the configured check-in-day release time has passed.
+            </p>
+          </div>
+          <Toggle
+            enabled={Boolean(codeRelease.enabled)}
+            onChange={(enabled) => updateCodeRelease("enabled", enabled)}
+          />
+        </div>
+
+        <div className="bg-white rounded-xl shadow-sm border border-sand p-5 space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-xs text-forest/60 uppercase tracking-wider mb-1">
+                Release Hour Central
+              </label>
+              <input
+                type="number"
+                min={0}
+                max={23}
+                value={codeRelease.releaseHourCentral ?? 11}
+                onChange={(e) =>
+                  updateCodeRelease(
+                    "releaseHourCentral",
+                    Math.max(0, Math.min(23, Number(e.target.value || 0)))
+                  )
+                }
+                className="border border-sand rounded-lg px-3 py-2 text-sm w-full focus:outline-none focus:ring-2 focus:ring-grove/30"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-forest/60 uppercase tracking-wider mb-1">
+                Minute
+              </label>
+              <input
+                type="number"
+                min={0}
+                max={59}
+                value={codeRelease.releaseMinuteCentral ?? 0}
+                onChange={(e) =>
+                  updateCodeRelease(
+                    "releaseMinuteCentral",
+                    Math.max(0, Math.min(59, Number(e.target.value || 0)))
+                  )
+                }
+                className="border border-sand rounded-lg px-3 py-2 text-sm w-full focus:outline-none focus:ring-2 focus:ring-grove/30"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-forest/60 uppercase tracking-wider mb-1">
+                Internal Form Slug
+              </label>
+              <input
+                type="text"
+                value={codeRelease.localFormSlug ?? safeConfig.localFormSlug ?? ""}
+                onChange={(e) => updateCodeRelease("localFormSlug", e.target.value)}
+                placeholder="guest-info"
+                className="border border-sand rounded-lg px-3 py-2 text-sm w-full font-mono focus:outline-none focus:ring-2 focus:ring-grove/30"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs text-forest/60 uppercase tracking-wider mb-1">
+              SendGrid Code Template ID
+            </label>
+            <input
+              type="text"
+              value={codeRelease.sendgridTemplateId || ""}
+              onChange={(e) =>
+                updateCodeRelease("sendgridTemplateId", e.target.value)
+              }
+              placeholder="d-xxxxxxxx"
+              className="border border-sand rounded-lg px-3 py-2 text-sm w-full font-mono focus:outline-none focus:ring-2 focus:ring-grove/30"
+            />
+            <p className="text-xs text-forest/40 mt-1">
+              Template receives guestName, propertyName, checkinDate, bookingId,
+              accessCode, and code.
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-xs text-forest/60 uppercase tracking-wider mb-1">
+              Property IDs
+            </label>
+            <input
+              type="text"
+              value={(codeRelease.propertyIds || []).join(", ")}
+              onChange={(e) => updateCodeReleasePropertyIds(e.target.value)}
+              placeholder="Leave blank for all properties"
+              className="border border-sand rounded-lg px-3 py-2 text-sm w-full font-mono focus:outline-none focus:ring-2 focus:ring-grove/30"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs text-forest/60 uppercase tracking-wider mb-1">
+              Temporary Property Codes
+            </label>
+            <textarea
+              value={propertyCodesText}
+              onChange={(e) => updatePropertyCodes(e.target.value)}
+              placeholder={"608952: 1234\nFairy House: 1234"}
+              rows={4}
+              className="border border-sand rounded-lg px-3 py-2 text-sm w-full font-mono focus:outline-none focus:ring-2 focus:ring-grove/30"
+            />
+            <p className="text-xs text-forest/40 mt-1">
+              Optional fallback until Jervis sends codes to this app. Use one
+              property ID or property name per line.
+            </p>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
