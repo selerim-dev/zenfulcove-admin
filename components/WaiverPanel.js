@@ -21,6 +21,9 @@ export default function WaiverPanel({
   const propertyCodesText = Object.entries(codeRelease.propertyCodes || {})
     .map(([property, code]) => `${property}: ${code}`)
     .join("\n");
+  const jervisPropertyIdsText = Object.entries(codeRelease.jervisPropertyIds || {})
+    .map(([property, id]) => `${property}: ${id}`)
+    .join("\n");
   const [propertyMessageText, setPropertyMessageText] = useState("{}");
   const [propertyMessageError, setPropertyMessageError] = useState("");
 
@@ -69,6 +72,21 @@ export default function WaiverPanel({
         if (key && code) propertyCodes[key] = code;
       });
     updateCodeRelease("propertyCodes", propertyCodes);
+  }
+
+  function updateJervisPropertyIds(raw) {
+    const jervisPropertyIds = {};
+    raw
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .forEach((line) => {
+        const [property, ...idParts] = line.split(":");
+        const key = String(property || "").trim();
+        const id = idParts.join(":").trim();
+        if (key && id) jervisPropertyIds[key] = id;
+      });
+    updateCodeRelease("jervisPropertyIds", jervisPropertyIds);
   }
 
   function updatePropertyMessageData(raw) {
@@ -403,6 +421,87 @@ export default function WaiverPanel({
               placeholder="Leave blank for all properties"
               className="border border-sand rounded-lg px-3 py-2 text-sm w-full font-mono focus:outline-none focus:ring-2 focus:ring-grove/30"
             />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs text-forest/60 uppercase tracking-wider mb-1">
+                Jervis API Base URL
+              </label>
+              <input
+                type="text"
+                value={codeRelease.jervisApiBaseUrl || ""}
+                onChange={(e) =>
+                  updateCodeRelease("jervisApiBaseUrl", e.target.value)
+                }
+                placeholder="https://www.jervis.systems/api/v1"
+                className="border border-sand rounded-lg px-3 py-2 text-sm w-full font-mono focus:outline-none focus:ring-2 focus:ring-grove/30"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-forest/60 uppercase tracking-wider mb-1">
+                Jervis Account UUID
+              </label>
+              <input
+                type="text"
+                value={codeRelease.jervisAccountUuid || ""}
+                onChange={(e) =>
+                  updateCodeRelease("jervisAccountUuid", e.target.value)
+                }
+                placeholder="6a08e49c-a62d-53e0-bba5-20121b2456e4"
+                className="border border-sand rounded-lg px-3 py-2 text-sm w-full font-mono focus:outline-none focus:ring-2 focus:ring-grove/30"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs text-forest/60 uppercase tracking-wider mb-1">
+                Jervis Access Start Time
+              </label>
+              <input
+                type="text"
+                value={codeRelease.jervisAccessStartTime || ""}
+                onChange={(e) =>
+                  updateCodeRelease("jervisAccessStartTime", e.target.value)
+                }
+                placeholder="15:00:00"
+                className="border border-sand rounded-lg px-3 py-2 text-sm w-full font-mono focus:outline-none focus:ring-2 focus:ring-grove/30"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-forest/60 uppercase tracking-wider mb-1">
+                Jervis Access End Time
+              </label>
+              <input
+                type="text"
+                value={codeRelease.jervisAccessEndTime || ""}
+                onChange={(e) =>
+                  updateCodeRelease("jervisAccessEndTime", e.target.value)
+                }
+                placeholder="11:00:00"
+                className="border border-sand rounded-lg px-3 py-2 text-sm w-full font-mono focus:outline-none focus:ring-2 focus:ring-grove/30"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs text-forest/60 uppercase tracking-wider mb-1">
+              Jervis Property IDs
+            </label>
+            <textarea
+              value={jervisPropertyIdsText}
+              onChange={(e) => updateJervisPropertyIds(e.target.value)}
+              placeholder={"Sky Castle: 33782\nFairy House: 33783\nBird House: 33784"}
+              rows={4}
+              className="border border-sand rounded-lg px-3 py-2 text-sm w-full font-mono focus:outline-none focus:ring-2 focus:ring-grove/30"
+            />
+            <p className="text-xs text-forest/40 mt-1">
+              Optional map from Lodgify property ID/name to Jervis property ID.
+              If blank, the backend tries to match Jervis properties by
+              platform_property_id or title. Store the token only as
+              JERVIS_API_TOKEN in Vercel.
+            </p>
           </div>
 
           <div>

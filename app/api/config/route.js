@@ -83,6 +83,13 @@ export async function POST(request) {
             ? updates.accessCodeRelease.propertyCodes
             : {};
       }
+      if (updates.accessCodeRelease.jervisPropertyIds !== undefined) {
+        updated.accessCodeRelease.jervisPropertyIds =
+          updates.accessCodeRelease.jervisPropertyIds &&
+          typeof updates.accessCodeRelease.jervisPropertyIds === "object"
+            ? updates.accessCodeRelease.jervisPropertyIds
+            : {};
+      }
       if (updates.accessCodeRelease.propertyMessageData !== undefined) {
         updated.accessCodeRelease.propertyMessageData =
           updates.accessCodeRelease.propertyMessageData &&

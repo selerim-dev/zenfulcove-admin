@@ -48,6 +48,11 @@ export const automationConfig = {
     propertyIds: [],
     includeCancelledBookings: false,
     propertyCodes: {},
+    jervisApiBaseUrl: "https://www.jervis.systems/api/v1",
+    jervisAccountUuid: "6a08e49c-a62d-53e0-bba5-20121b2456e4",
+    jervisPropertyIds: {},
+    jervisAccessStartTime: "15:00:00",
+    jervisAccessEndTime: "11:00:00",
     propertyMessageData: {
       "Sky Castle": {
         displayName: "SKY CASTLE",
