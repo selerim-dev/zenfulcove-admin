@@ -28,10 +28,11 @@ import {
 } from "@/lib/local-forms";
 import {
   getAccessCodeRelease,
-  markAccessCodeReleaseFailed,
-  markAccessCodeReleaseSent,
-  resolveAccessCodeForBooking,
 } from "@/lib/access-code-releases";
+import {
+  sendAccessCodeForBooking,
+  sendMissingFormEmailForBooking,
+} from "@/lib/access-code-messages";
 import { hasSupabaseAdminEnv } from "@/lib/supabaseEnv";
 import { appendLogs, writeLastRunStatus } from "@/lib/activity-log";
 import { createSalesmateContact, validateSalesmateConfig } from "@/lib/salesmate";
@@ -896,10 +897,6 @@ async function runAccessCodeRelease(automationConfig, dryRunOverride) {
   const config = automationConfig.accessCodeRelease || {};
   const waiverConfig = automationConfig.waiverReminders || {};
   const automationName = "Access Code Release";
-  const from = {
-    email: automationConfig.sendgrid.fromEmail,
-    name: automationConfig.sendgrid.fromName,
-  };
 
   if (!config.enabled) {
     logs.push({
@@ -1048,16 +1045,12 @@ async function runAccessCodeRelease(automationConfig, dryRunOverride) {
   for (const booking of bookings) {
     const contact = extractLodgifyContact(booking);
     const bookingId = String(booking.id || contact.bookingId || "").trim();
-    const propertyId = String(booking.property_id ?? booking.propertyId ?? "");
     const propertyName =
       booking.property_name ||
       booking.propertyName ||
       contact.propertyName ||
       "Property";
     const guestEmail = contact.email || booking.guest?.email || booking.email || "";
-    const guestName = [contact.firstName, contact.lastName]
-      .filter(Boolean)
-      .join(" ") || booking.guest?.name || booking.guestName || "Guest";
 
     if (isCancelledBooking(contact.bookingStatus) && config.includeCancelledBookings !== true) {
       logs.push({
@@ -1097,114 +1090,33 @@ async function runAccessCodeRelease(automationConfig, dryRunOverride) {
       ? bookingHasLocalFormSubmission(bookingId, waiverSubmissions)
       : bookingHasWaiver(bookingId, waiverSubmissions);
     if (!hasWaiver) {
-      logs.push({
-        timestamp: new Date().toISOString(),
-        automation: automationName,
-        property: propertyName,
-        action: `Blocked booking ${bookingId}: form not submitted yet`,
-        status: "skipped",
+      const missingResult = await sendMissingFormEmailForBooking({
+        booking,
+        automationConfig,
+        dryRun: isDryRun,
       });
-      if (existingRelease?.access_code) {
-        await markAccessCodeReleaseFailed({
-          bookingId,
-          status: "blocked",
-          error: "Form not submitted yet.",
-        }).catch(() => {});
-      }
-      continue;
-    }
-
-    let resolved;
-    try {
-      resolved = await resolveAccessCodeForBooking(
-        {
-          bookingId,
-          propertyId,
-          propertyName,
-          guestEmail,
-          guestName,
-          checkinDate: todayStr,
-          lodgifyBooking: booking,
-        },
-        config
-      );
-    } catch (err) {
       logs.push({
-        timestamp: new Date().toISOString(),
+        timestamp: missingResult.timestamp || new Date().toISOString(),
         automation: automationName,
         property: propertyName,
-        action: `Failed booking ${bookingId}: access code lookup failed (${err.message})`,
-        status: "failed",
-      });
-      await markAccessCodeReleaseFailed({
-        bookingId,
-        error: err.message,
-      }).catch(() => {});
-      continue;
-    }
-
-    if (!resolved?.code) {
-      logs.push({
-        timestamp: new Date().toISOString(),
-        automation: automationName,
-        property: propertyName,
-        action: `Failed booking ${bookingId}: no access code available from stored codes, property fallback, Lodgify booking payload, or Jervis API`,
-        status: "failed",
+        action: missingResult.action || `Blocked booking ${bookingId}: form not submitted yet`,
+        status: missingResult.status || "skipped",
       });
       continue;
     }
 
-    if (isDryRun) {
-      logs.push({
-        timestamp: new Date().toISOString(),
-        automation: automationName,
-        property: propertyName,
-        action: `[DRY RUN] Would send access code to ${guestEmail} | booking ${bookingId} | source ${resolved.source || "unknown"}`,
-        status: "success",
-      });
-      continue;
-    }
-
-    try {
-      await sendTemplateEmail({
-        to: guestEmail,
-        templateId,
-        from,
-        data: {
-          guestName,
-          propertyName,
-          checkinDate: todayStr,
-          bookingId,
-          accessCode: resolved.code,
-          code: resolved.code,
-        },
-      });
-      await markAccessCodeReleaseSent({
-        bookingId,
-        templateId,
-        channel: "email",
-      });
-      logs.push({
-        timestamp: new Date().toISOString(),
-        automation: automationName,
-        property: propertyName,
-        action: `Sent access code to ${guestEmail} (booking ${bookingId})`,
-        status: "success",
-      });
-    } catch (err) {
-      const detail = err.response?.body?.errors?.[0]?.message || err.message;
-      await markAccessCodeReleaseFailed({
-        bookingId,
-        error: detail,
-      }).catch(() => {});
-      logs.push({
-        timestamp: new Date().toISOString(),
-        automation: automationName,
-        property: propertyName,
-        action: `Failed to send access code for booking ${bookingId}: ${detail}`,
-        status: "failed",
-      });
-    }
+    const sendResult = await sendAccessCodeForBooking({
+      booking,
+      automationConfig,
+      dryRun: isDryRun,
+    });
+    logs.push({
+      timestamp: sendResult.timestamp || new Date().toISOString(),
+      automation: automationName,
+      property: propertyName,
+      action: sendResult.action || `Processed access code for booking ${bookingId}`,
+      status: sendResult.status || "info",
+    });
   }
 
   return logs;

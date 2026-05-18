@@ -83,6 +83,13 @@ export async function POST(request) {
             ? updates.accessCodeRelease.propertyCodes
             : {};
       }
+      if (updates.accessCodeRelease.propertyMessageData !== undefined) {
+        updated.accessCodeRelease.propertyMessageData =
+          updates.accessCodeRelease.propertyMessageData &&
+          typeof updates.accessCodeRelease.propertyMessageData === "object"
+            ? updates.accessCodeRelease.propertyMessageData
+            : {};
+      }
     }
 
     if (updates.popupFollowups !== undefined) {

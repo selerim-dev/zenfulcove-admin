@@ -9,6 +9,7 @@ import {
   updateLocalFormSubmissionPayload,
   uploadLocalFormFile,
 } from "@/lib/local-forms";
+import { maybeSendSameDayAccessCodeForSubmission } from "@/lib/access-code-messages";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -202,6 +203,7 @@ export async function POST(request: Request) {
   });
 
   const uploadedFiles = [];
+  let finalSubmissionPayload = submissionPayload;
   for (const upload of parsed.uploads) {
     const uploaded = await uploadLocalFormFile({
       formSlug: submission.form_slug,
@@ -233,10 +235,30 @@ export async function POST(request: Request) {
       }
     }
     await updateLocalFormSubmissionPayload(submission.id, nextPayload);
+    finalSubmissionPayload = nextPayload;
   }
 
   if (isTrustedPreview) {
     await markLocalFormSubmissionsSynced([submission.id]);
+  }
+
+  let accessCodeRelease = null;
+  if (!isTrustedPreview) {
+    try {
+      accessCodeRelease = await maybeSendSameDayAccessCodeForSubmission({
+        formSlug,
+        payload: finalSubmissionPayload,
+        contact,
+      });
+    } catch (err) {
+      accessCodeRelease = {
+        status: "failed",
+        action:
+          err instanceof Error
+            ? err.message
+            : "Failed to run same-day access code release.",
+      };
+    }
   }
 
   return NextResponse.json({
@@ -244,5 +266,6 @@ export async function POST(request: Request) {
     submissionId: submission.id,
     formSlug: submission.form_slug,
     submittedAt: submission.submitted_at,
+    accessCodeRelease,
   });
 }

@@ -41,12 +41,28 @@ export const automationConfig = {
     enabled: false,
     releaseHourCentral: 11,
     releaseMinuteCentral: 0,
-    sendgridTemplateId: "",
+    sendgridTemplateId: "", // Template 1: form is complete, include the access code.
+    missingFormTemplateId: "", // Template 2: form is not complete, send the form link again.
     localFormSlug: "guest-info",
     jotformFormId: "251834442091050", // fallback while historical Jotform forms are still active
     propertyIds: [],
     includeCancelledBookings: false,
     propertyCodes: {},
+    propertyMessageData: {
+      "Sky Castle": {
+        displayName: "SKY CASTLE",
+        directionsName: "SKY CASTLE",
+        address: "Zenfulcove, 103 Potato Smith Rd unit c, Elgin, TX 78621",
+        parkingInstructions:
+          "Parking - please park in front of your unit on the white gravel driveway.",
+        wifiName: "SKYCASTLE",
+        wifiPassword: "Iamgrateful!",
+        dedicatedKayakText:
+          "There is one Dedicated Kayak for Sky Castle guests exclusive enjoyment and located hanging up on a rack on the side of the pond close to the house, it is labeled with the words, Sky Castle. The kayak lock code is 1010.",
+        amenitiesText:
+          "If you have any questions, please let me know. I have left a journal in the unit as a gift to you. There is a gas grill on the deck for grilling, an outdoor soaking tub, private beach access, and 1 kayak for your enjoyment.",
+      },
+    },
     jervisAccessCodeApiUrl: "",
   },
   popupFollowups: {

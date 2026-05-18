@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Toggle from "./Toggle";
 
 const DEFAULT_EMAILS = [
@@ -20,6 +21,15 @@ export default function WaiverPanel({
   const propertyCodesText = Object.entries(codeRelease.propertyCodes || {})
     .map(([property, code]) => `${property}: ${code}`)
     .join("\n");
+  const [propertyMessageText, setPropertyMessageText] = useState("{}");
+  const [propertyMessageError, setPropertyMessageError] = useState("");
+
+  useEffect(() => {
+    setPropertyMessageText(
+      JSON.stringify(codeRelease.propertyMessageData || {}, null, 2)
+    );
+    setPropertyMessageError("");
+  }, [codeRelease.propertyMessageData]);
 
   function updateEnabled(enabled) {
     onChange({ ...safeConfig, enabled });
@@ -59,6 +69,20 @@ export default function WaiverPanel({
         if (key && code) propertyCodes[key] = code;
       });
     updateCodeRelease("propertyCodes", propertyCodes);
+  }
+
+  function updatePropertyMessageData(raw) {
+    setPropertyMessageText(raw);
+    try {
+      const parsed = raw.trim() ? JSON.parse(raw) : {};
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        throw new Error("Use a JSON object keyed by property name or Lodgify ID.");
+      }
+      setPropertyMessageError("");
+      updateCodeRelease("propertyMessageData", parsed);
+    } catch (err) {
+      setPropertyMessageError(err.message || "Invalid JSON.");
+    }
   }
 
   function updateEmail(index, field, value) {
@@ -330,7 +354,7 @@ export default function WaiverPanel({
 
           <div>
             <label className="block text-xs text-forest/60 uppercase tracking-wider mb-1">
-              SendGrid Code Template ID
+              Template 1: SendGrid Code Template ID
             </label>
             <input
               type="text"
@@ -342,8 +366,29 @@ export default function WaiverPanel({
               className="border border-sand rounded-lg px-3 py-2 text-sm w-full font-mono focus:outline-none focus:ring-2 focus:ring-grove/30"
             />
             <p className="text-xs text-forest/40 mt-1">
-              Template receives guestName, propertyName, checkinDate, bookingId,
-              accessCode, and code.
+              Used when the form is complete. Template receives GuestFirstName,
+              Arrival, Departure, KeyCode, wifiName, wifiPassword,
+              reservationFormUrl, and accessMessageHtml.
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-xs text-forest/60 uppercase tracking-wider mb-1">
+              Template 2: Missing Form Template ID
+            </label>
+            <input
+              type="text"
+              value={codeRelease.missingFormTemplateId || ""}
+              onChange={(e) =>
+                updateCodeRelease("missingFormTemplateId", e.target.value)
+              }
+              placeholder="d-xxxxxxxx"
+              className="border border-sand rounded-lg px-3 py-2 text-sm w-full font-mono focus:outline-none focus:ring-2 focus:ring-grove/30"
+            />
+            <p className="text-xs text-forest/40 mt-1">
+              Used on check-in day when the form is still missing. It receives
+              the same stay data, but KeyCode is blank and reservationFormUrl is
+              included.
             </p>
           </div>
 
@@ -376,6 +421,30 @@ export default function WaiverPanel({
               codes, Lodgify/Jervis payloads, or the Jervis webhook when
               available.
             </p>
+          </div>
+
+          <div>
+            <label className="block text-xs text-forest/60 uppercase tracking-wider mb-1">
+              Property Message Data
+            </label>
+            <textarea
+              value={propertyMessageText}
+              onChange={(e) => updatePropertyMessageData(e.target.value)}
+              rows={12}
+              spellCheck={false}
+              className="border border-sand rounded-lg px-3 py-2 text-xs w-full font-mono focus:outline-none focus:ring-2 focus:ring-grove/30"
+            />
+            <p className="text-xs text-forest/40 mt-1">
+              JSON keyed by property name or Lodgify property ID. Use it for
+              wifiName, wifiPassword, displayName, directionsName,
+              parkingInstructions, dedicatedKayakText, amenitiesText, and other
+              property-specific message values.
+            </p>
+            {propertyMessageError ? (
+              <p className="text-xs text-red-500 mt-1">
+                {propertyMessageError}
+              </p>
+            ) : null}
           </div>
         </div>
       </div>
