@@ -1,10 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import {
-  DEFAULT_LOCAL_FORM_TERMS,
-  optionsForLocalFormSource,
-} from "@/lib/local-form-options";
+import { optionsForLocalFormSource } from "@/lib/local-form-options";
 
 type LocalFormField = {
   name: string;
@@ -583,7 +580,7 @@ export default function LocalForm({
         }
 
         if (type === "terms") {
-          const termsText = schema.termsText || DEFAULT_LOCAL_FORM_TERMS;
+          const termsText = String(schema.termsText || "").trim();
           return (
             <div
               key={name}
@@ -596,7 +593,14 @@ export default function LocalForm({
                 <HelpNote text={helpText} />
               </div>
               <div className="max-h-52 overflow-y-auto rounded-xl border border-[var(--color-border)] bg-white p-4 text-sm leading-relaxed text-[var(--color-ink-muted)]">
-                <p className="whitespace-pre-line">{termsText}</p>
+                {termsText ? (
+                  <p className="whitespace-pre-line">{termsText}</p>
+                ) : (
+                  <p className="text-amber-800">
+                    Terms and conditions have not been configured for this
+                    form yet.
+                  </p>
+                )}
               </div>
               <label className="flex cursor-pointer items-start gap-3 text-sm text-[var(--color-ink)]">
                 <input

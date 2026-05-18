@@ -4,10 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import LocalForm from "@/components/customer/LocalForm";
-import {
-  DEFAULT_LOCAL_FORM_TERMS,
-  LOCAL_FORM_STAY_UNIT_OPTIONS,
-} from "@/lib/local-form-options";
+import { LOCAL_FORM_STAY_UNIT_OPTIONS } from "@/lib/local-form-options";
 import { archiveLocalForm, deleteLocalForm, saveLocalForm } from "./actions";
 
 type LocalFormField = {
@@ -707,7 +704,7 @@ function FormEditor({
     slug: form?.slug || "",
     description: initialSchema.subtitle || form?.description || "",
     introText: initialSchema.introText || "",
-    termsText: initialSchema.termsText || DEFAULT_LOCAL_FORM_TERMS,
+    termsText: initialSchema.termsText || "",
     submitLabel: initialSchema.submitLabel || "Submit",
     successMessage:
       initialSchema.successMessage || "Thanks. We received your information.",
@@ -742,7 +739,7 @@ function FormEditor({
       fields: activeFields,
       subtitle: settings.description,
       introText: settings.introText,
-      termsText: settings.termsText || DEFAULT_LOCAL_FORM_TERMS,
+      termsText: settings.termsText,
       submitLabel: settings.submitLabel || "Submit",
       successMessage:
         settings.successMessage || "Thanks. We received your information.",
@@ -1069,6 +1066,7 @@ function FormSettings({
                   onChange({ termsText: event.target.value })
                 }
                 rows={8}
+                placeholder="Paste the terms and conditions that should appear in forms using the terms read-through field."
                 className="form-input resize-y"
               />
             </Field>

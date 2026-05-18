@@ -2,10 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
-import {
-  DEFAULT_LOCAL_FORM_TERMS,
-  LOCAL_FORM_STAY_UNIT_OPTIONS,
-} from "@/lib/local-form-options";
+import { LOCAL_FORM_STAY_UNIT_OPTIONS } from "@/lib/local-form-options";
 import { createSupabaseAdminClient } from "@/lib/supabaseAdmin";
 
 const FIELD_TYPES = new Set([
@@ -151,7 +148,7 @@ function parseFormPayload(formData: FormData) {
       schema: {
         subtitle: description || "",
         introText: introText || "",
-        termsText: termsText || DEFAULT_LOCAL_FORM_TERMS,
+        termsText,
         submitLabel,
         successMessage,
         fields: parseFields(formData),
