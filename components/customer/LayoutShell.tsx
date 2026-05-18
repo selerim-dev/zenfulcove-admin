@@ -29,6 +29,7 @@ export default function LayoutShell({
   const pathname = usePathname();
   const isLanding = pathname === "/";
   const [open, setOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   if (isLanding) {
     return <>{children}</>;
@@ -76,9 +77,11 @@ export default function LayoutShell({
 
       <Sidebar
         open={open}
+        collapsed={sidebarCollapsed}
         publishedForms={publishedForms}
         navigation={navigation}
         onNavigate={() => setOpen(false)}
+        onToggleCollapse={() => setSidebarCollapsed((value) => !value)}
       />
 
       <main className="min-w-0 flex-1 px-5 py-6 md:px-12 md:py-14">

@@ -78,7 +78,7 @@ function InfoTile({
   helper?: string;
 }) {
   return (
-    <div className="rounded-2xl border border-[var(--color-border)] bg-white p-4 shadow-sm">
+    <div className="rounded-2xl border border-[var(--color-border)] bg-white p-4 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-[var(--color-accent)] hover:shadow-lg">
       <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--color-ink-muted)]">
         {label}
       </p>
@@ -94,20 +94,19 @@ function InfoTile({
   );
 }
 
-function Section({
-  title,
+function StayCard({
   children,
+  className = "",
 }: {
-  title: string;
   children: React.ReactNode;
+  className?: string;
 }) {
   return (
-    <section className="space-y-3">
-      <h2 className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[var(--color-ink-muted)]">
-        {title}
-      </h2>
+    <div
+      className={`rounded-3xl border border-[var(--color-border)] bg-white p-6 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-[var(--color-accent)] hover:shadow-lg ${className}`}
+    >
       {children}
-    </section>
+    </div>
   );
 }
 
@@ -233,100 +232,96 @@ export default function GuestStayDashboard({
         />
       </section>
 
-      <div className="grid gap-8 lg:grid-cols-[1fr_360px]">
-        <div className="space-y-8">
-          <Section title="Arrival">
-            <div className="rounded-3xl border border-[var(--color-border)] bg-white p-6 shadow-sm">
-              <h3 className="font-serif text-2xl font-medium tracking-tight">
-                Getting here
-              </h3>
-              <p className="mt-3 text-sm leading-relaxed text-[var(--color-ink-muted)]">
-                {stay.address}
+      <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="space-y-4">
+          <StayCard>
+            <h2 className="font-serif text-2xl font-medium tracking-tight">
+              Getting here
+            </h2>
+            <p className="mt-3 text-sm leading-relaxed text-[var(--color-ink-muted)]">
+              {stay.address}
+            </p>
+            <div className="mt-5 grid gap-3 sm:grid-cols-2">
+              <p className="rounded-2xl bg-[var(--color-bg)] p-4 text-sm leading-relaxed text-[var(--color-ink)]">
+                {stay.unitDirections}
               </p>
-              <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                <p className="rounded-2xl bg-[var(--color-bg)] p-4 text-sm leading-relaxed text-[var(--color-ink)]">
-                  {stay.unitDirections}
-                </p>
-                <p className="rounded-2xl bg-[var(--color-bg)] p-4 text-sm leading-relaxed text-[var(--color-ink)]">
-                  {stay.parkingInstructions}
-                </p>
-              </div>
-              {stay.address ? (
+              <p className="rounded-2xl bg-[var(--color-bg)] p-4 text-sm leading-relaxed text-[var(--color-ink)]">
+                {stay.parkingInstructions}
+              </p>
+            </div>
+            {stay.address ? (
+              <a
+                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(stay.address)}`}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-5 inline-flex rounded-full border border-[var(--color-border)] bg-white px-4 py-2 text-sm font-medium text-[var(--color-ink)] transition hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]"
+              >
+                Open in Maps
+              </a>
+            ) : null}
+          </StayCard>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <StayCard>
+              <h2 className="font-serif text-2xl font-medium tracking-tight">
+                Wi-Fi
+              </h2>
+              <dl className="mt-4 space-y-3">
+                <div>
+                  <dt className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--color-ink-muted)]">
+                    Network
+                  </dt>
+                  <dd className="mt-1 break-words font-mono text-lg text-[var(--color-ink)]">
+                    {stay.wifiName || "Not available"}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--color-ink-muted)]">
+                    Password
+                  </dt>
+                  <dd className="mt-1 break-words font-mono text-lg text-[var(--color-ink)]">
+                    {stay.wifiPassword || "Not available"}
+                  </dd>
+                </div>
+              </dl>
+            </StayCard>
+
+            <StayCard>
+              <h2 className="font-serif text-2xl font-medium tracking-tight">
+                Reservation form
+              </h2>
+              <p className="mt-3 text-sm leading-relaxed text-[var(--color-ink-muted)]">
+                {access?.formSubmitted
+                  ? "Your reservation form is complete."
+                  : "Complete the reservation form so access-code release can be approved."}
+              </p>
+              {stay.reservationFormUrl ? (
                 <a
-                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(stay.address)}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="mt-5 inline-flex rounded-full border border-[var(--color-border)] bg-white px-4 py-2 text-sm font-medium text-[var(--color-ink)] transition hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]"
+                  href={stay.reservationFormUrl}
+                  className="mt-5 inline-flex rounded-full bg-[var(--color-accent)] px-4 py-2 text-sm font-medium text-white transition hover:bg-[var(--color-accent-strong)]"
                 >
-                  Open in Maps
+                  Open Reservation Form
                 </a>
               ) : null}
-            </div>
-          </Section>
+            </StayCard>
+          </div>
 
-          <Section title="Stay Notes">
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="rounded-3xl border border-[var(--color-border)] bg-white p-6 shadow-sm">
-                <h3 className="font-serif text-2xl font-medium tracking-tight">
-                  Wi-Fi
-                </h3>
-                <dl className="mt-4 space-y-3">
-                  <div>
-                    <dt className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--color-ink-muted)]">
-                      Network
-                    </dt>
-                    <dd className="mt-1 font-mono text-lg text-[var(--color-ink)]">
-                      {stay.wifiName || "Not available"}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--color-ink-muted)]">
-                      Password
-                    </dt>
-                    <dd className="mt-1 font-mono text-lg text-[var(--color-ink)]">
-                      {stay.wifiPassword || "Not available"}
-                    </dd>
-                  </div>
-                </dl>
-              </div>
-
-              <div className="rounded-3xl border border-[var(--color-border)] bg-white p-6 shadow-sm">
-                <h3 className="font-serif text-2xl font-medium tracking-tight">
-                  Reservation Form
-                </h3>
-                <p className="mt-3 text-sm leading-relaxed text-[var(--color-ink-muted)]">
-                  {access?.formSubmitted
-                    ? "Your reservation form is complete."
-                    : "Complete the reservation form so access-code release can be approved."}
-                </p>
-                {stay.reservationFormUrl ? (
-                  <a
-                    href={stay.reservationFormUrl}
-                    className="mt-5 inline-flex rounded-full bg-[var(--color-accent)] px-4 py-2 text-sm font-medium text-white transition hover:bg-[var(--color-accent-strong)]"
-                  >
-                    Open Reservation Form
-                  </a>
-                ) : null}
-              </div>
+          <StayCard>
+            <h2 className="font-serif text-2xl font-medium tracking-tight">
+              Good to know
+            </h2>
+            <div className="mt-4 space-y-4 text-sm leading-relaxed text-[var(--color-ink-muted)]">
+              {[stay.amenitiesText, stay.additionalRulesText]
+                .filter(Boolean)
+                .map((text) => (
+                  <p key={text}>{text}</p>
+                ))}
             </div>
-
-            <div className="rounded-3xl border border-[var(--color-border)] bg-white p-6 shadow-sm">
-              <h3 className="font-serif text-2xl font-medium tracking-tight">
-                Good to know
-              </h3>
-              <div className="mt-4 space-y-4 text-sm leading-relaxed text-[var(--color-ink-muted)]">
-                {[stay.amenitiesText, stay.additionalRulesText]
-                  .filter(Boolean)
-                  .map((text) => (
-                    <p key={text}>{text}</p>
-                  ))}
-              </div>
-            </div>
-          </Section>
+          </StayCard>
         </div>
 
         <aside className="space-y-4 lg:sticky lg:top-8 lg:self-start">
-          <div className="rounded-3xl border border-[var(--color-border)] bg-white p-6 shadow-sm">
+          <StayCard>
             <h2 className="font-serif text-2xl font-medium tracking-tight">
               Need help?
             </h2>
@@ -339,9 +334,9 @@ export default function GuestStayDashboard({
             >
               Call or text {stay.urgentPhone || "512-273-7962"}
             </a>
-          </div>
+          </StayCard>
 
-          <div className="rounded-3xl border border-[var(--color-border)] bg-white p-6 shadow-sm">
+          <StayCard>
             <h2 className="font-serif text-2xl font-medium tracking-tight">
               Kayaks
             </h2>
@@ -354,7 +349,7 @@ export default function GuestStayDashboard({
               Online kayak checkout is currently paused while payments are
               being finalized. Reply to your guest message thread for rentals.
             </p>
-          </div>
+          </StayCard>
         </aside>
       </div>
     </div>
