@@ -34,6 +34,12 @@ const TEMPLATE_VARIABLES = [
   "amenitiesText",
 ];
 
+const ACCESS_MESSAGE_PLACEHOLDER =
+  "Greetings {{GuestFirstName}},\n\nWe are excited to welcome you to {{propertyDisplayName}}.\n\nCheck-in Date: {{Arrival}}\nCheck-out Date: {{Departure}}\n\nAccess Code: {{KeyCode}}\n\nWi-Fi: {{wifiName}}\nPassword: {{wifiPassword}}\n\n{{reservationFormUrl}}";
+
+const MISSING_FORM_MESSAGE_PLACEHOLDER =
+  "Greetings {{GuestFirstName}},\n\nYour stay at {{propertyDisplayName}} is coming up, but the reservation form has not been completed yet.\n\nPlease complete it here:\n{{reservationFormUrl}}\n\nAccess codes are released after the form is submitted.";
+
 const SIMPLE_PROPERTY_FIELDS = [
   { key: "displayName", label: "Display name", placeholder: "SKY CASTLE" },
   { key: "directionsName", label: "Sign / directions name", placeholder: "SKY CASTLE" },
@@ -221,7 +227,7 @@ function Field({ label, value, onChange, placeholder, type = "text", mono = fals
   );
 }
 
-function TextAreaField({ label, value, onChange, placeholder, rows = 3 }) {
+function TextAreaField({ label, value, onChange, placeholder, rows = 3, helper }) {
   return (
     <label className="block text-xs text-forest/60">
       <span className="uppercase tracking-wider">{label}</span>
@@ -232,6 +238,7 @@ function TextAreaField({ label, value, onChange, placeholder, rows = 3 }) {
         rows={rows}
         className="mt-1 block w-full rounded-lg border border-sand px-3 py-2 text-sm text-forest focus:outline-none focus:ring-2 focus:ring-grove/30"
       />
+      {helper ? <span className="mt-1 block text-xs text-forest/40">{helper}</span> : null}
     </label>
   );
 }
@@ -272,6 +279,11 @@ export default function WaiverPanel({
   const [lodgifyProperties, setLodgifyProperties] = useState([]);
   const [lodgifyPropertiesStatus, setLodgifyPropertiesStatus] = useState("loading");
   const [selectedPropertyKey, setSelectedPropertyKey] = useState("");
+  const [testModalOpen, setTestModalOpen] = useState(false);
+  const [testBookingId, setTestBookingId] = useState("");
+  const [testRunning, setTestRunning] = useState(false);
+  const [testResult, setTestResult] = useState(null);
+  const [testError, setTestError] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -453,14 +465,39 @@ export default function WaiverPanel({
     onChange({ ...safeConfig, emails: emails.filter((_, i) => i !== index) });
   }
 
+  async function runAccessCodeTest(dryRun) {
+    setTestRunning(true);
+    setTestError("");
+    setTestResult(null);
+    try {
+      const res = await fetch("/api/access-code-release-test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          dryRun,
+          bookingId: dryRun ? testBookingId.trim() : testBookingId.trim(),
+          waiverReminders: safeConfig,
+          accessCodeRelease: codeRelease,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Access code release test failed.");
+      setTestResult(data);
+    } catch (err) {
+      setTestError(err.message || "Access code release test failed.");
+    } finally {
+      setTestRunning(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h2 className="font-serif text-2xl text-forest">Waiver Reminders</h2>
           <p className="mt-2 max-w-3xl text-sm leading-relaxed text-forest/70">
-            This controls the guest form reminders and the check-in-day access
-            code email. Operational routing is hidden here; staff only needs the
+            This controls the guest form reminders and Lodgify access-code
+            messages. Operational routing is hidden here; staff only needs the
             form source, templates, and property-specific message values.
           </p>
         </div>
@@ -587,7 +624,7 @@ export default function WaiverPanel({
 
       <CollapsibleSection
         title="Access code release"
-        description="On check-in day, sends the code template after the release time if the form is complete. Otherwise sends the missing-form template."
+        description="Posts Lodgify booking-thread messages for tomorrow's arrivals after the release time, with a day-of final follow-up for missing forms."
         badge={codeRelease.enabled ? "Enabled" : "Disabled"}
         open={accessOpen}
         onToggle={() => setAccessOpen((value) => !value)}
@@ -597,13 +634,26 @@ export default function WaiverPanel({
             <div>
               <h4 className="text-sm font-semibold text-forest">Code release automation</h4>
               <p className="mt-1 text-xs text-forest/50">
-                The daily cron checks this release time in Central time.
+                Delivery is through Lodgify booking messages. The daily cron checks this release time in Central time.
               </p>
             </div>
-            <Toggle
-              enabled={Boolean(codeRelease.enabled)}
-              onChange={(enabled) => updateCodeRelease("enabled", enabled)}
-            />
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setTestModalOpen(true);
+                  setTestError("");
+                  setTestResult(null);
+                }}
+                className="rounded-full border border-sand bg-white px-4 py-2 text-sm font-medium text-forest transition hover:border-grove hover:text-grove"
+              >
+                Test
+              </button>
+              <Toggle
+                enabled={Boolean(codeRelease.enabled)}
+                onChange={(enabled) => updateCodeRelease("enabled", enabled)}
+              />
+            </div>
           </div>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -634,20 +684,37 @@ export default function WaiverPanel({
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <Field
-              label="Template 1: code email"
-              value={codeRelease.sendgridTemplateId || ""}
-              onChange={(value) => updateCodeRelease("sendgridTemplateId", value)}
-              placeholder="d-xxxxxxxx"
-              mono
-              helper="Sent after the selected form is complete."
+              label="Template 1 subject"
+              value={codeRelease.accessCodeSubjectTemplate || ""}
+              onChange={(value) => updateCodeRelease("accessCodeSubjectTemplate", value)}
+              placeholder="Access Code for {{propertyDisplayName}}"
+              helper="Posted to the Lodgify booking thread when the form is complete."
             />
             <Field
-              label="Template 2: missing form email"
-              value={codeRelease.missingFormTemplateId || ""}
-              onChange={(value) => updateCodeRelease("missingFormTemplateId", value)}
-              placeholder="d-xxxxxxxx"
-              mono
-              helper="Sent when the selected form is still missing."
+              label="Template 2 subject"
+              value={codeRelease.missingFormSubjectTemplate || ""}
+              onChange={(value) => updateCodeRelease("missingFormSubjectTemplate", value)}
+              placeholder="Reservation form needed for {{propertyDisplayName}}"
+              helper="Posted to the Lodgify booking thread when the form is missing."
+            />
+          </div>
+
+          <div className="grid grid-cols-1 gap-4">
+            <TextAreaField
+              label="Template 1: access code Lodgify message"
+              value={codeRelease.accessCodeMessageTemplate || ""}
+              onChange={(value) => updateCodeRelease("accessCodeMessageTemplate", value)}
+              placeholder={ACCESS_MESSAGE_PLACEHOLDER}
+              rows={8}
+              helper="Leave blank to use the built-in full access-code message."
+            />
+            <TextAreaField
+              label="Template 2: missing form / final reminder Lodgify message"
+              value={codeRelease.missingFormMessageTemplate || ""}
+              onChange={(value) => updateCodeRelease("missingFormMessageTemplate", value)}
+              placeholder={MISSING_FORM_MESSAGE_PLACEHOLDER}
+              rows={7}
+              helper="Used for the day-before missing-form message and the day-of final follow-up."
             />
           </div>
 
@@ -659,10 +726,10 @@ export default function WaiverPanel({
             >
               <div>
                 <h4 className="text-sm font-semibold text-forest">
-                  SendGrid variables
+                  Standard variables
                 </h4>
                 <p className="mt-0.5 text-xs text-forest/50">
-                  Template keys available to both access-code templates.
+                  Variables available in the Lodgify subjects and messages.
                 </p>
               </div>
               <Chevron open={variablesOpen} />
@@ -774,6 +841,76 @@ export default function WaiverPanel({
           </div>
         </div>
       </CollapsibleSection>
+
+      {testModalOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 px-4">
+          <div className="w-full max-w-2xl rounded-xl border border-sand bg-white p-5 shadow-xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h3 className="font-serif text-xl text-forest">Test Access Code Release</h3>
+                <p className="mt-1 text-sm leading-relaxed text-forest/60">
+                  Dry run checks today and tomorrow arrivals without posting to Lodgify. A live test requires a Lodgify booking ID and posts a test-prefixed message into that booking thread.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setTestModalOpen(false)}
+                className="rounded-full border border-sand px-3 py-1 text-sm text-forest/70 hover:bg-cream"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="mt-4">
+              <Field
+                label="Lodgify booking ID for focused/live test"
+                value={testBookingId}
+                onChange={setTestBookingId}
+                placeholder="20505018"
+                mono
+                helper="Optional for dry run. Required for a live Lodgify test message."
+              />
+            </div>
+
+            {testError ? <p className="mt-3 text-sm text-red-600">{testError}</p> : null}
+
+            {testResult ? (
+              <div className="mt-4 rounded-xl border border-sand bg-cream/30 p-4">
+                <div className="text-xs uppercase tracking-wider text-forest/50">
+                  Latest result: {testResult.status}
+                </div>
+                <div className="mt-3 space-y-2">
+                  {(Array.isArray(testResult.logs) ? testResult.logs : []).map((log, index) => (
+                    <div key={index} className="rounded-lg bg-white px-3 py-2 text-sm">
+                      <div className="font-medium text-forest">{log.status}</div>
+                      <div className="text-forest/70">{log.action}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={() => runAccessCodeTest(true)}
+                disabled={testRunning}
+                className="rounded-full border border-sand bg-white px-4 py-2 text-sm font-medium text-forest transition hover:border-grove hover:text-grove disabled:opacity-50"
+              >
+                {testRunning ? "Running..." : "Run Dry Run"}
+              </button>
+              <button
+                type="button"
+                onClick={() => runAccessCodeTest(false)}
+                disabled={testRunning || !testBookingId.trim()}
+                className="rounded-full bg-grove px-4 py-2 text-sm font-semibold text-white transition hover:bg-forest disabled:opacity-50"
+              >
+                {testRunning ? "Running..." : "Send Lodgify Test"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

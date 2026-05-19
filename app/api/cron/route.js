@@ -891,7 +891,7 @@ async function runWaiverReminders(automationConfig, dryRunOverride) {
 // Sends the check-in access code after the configured Central time, but only
 // once the configured waiver/internal form has been submitted.
 
-async function runAccessCodeRelease(automationConfig, dryRunOverride) {
+export async function runAccessCodeRelease(automationConfig, dryRunOverride, options = {}) {
   const isDryRun = dryRunOverride !== undefined ? dryRunOverride : DRY_RUN_ENV;
   const logs = [];
   const config = automationConfig.accessCodeRelease || {};
@@ -909,18 +909,6 @@ async function runAccessCodeRelease(automationConfig, dryRunOverride) {
     return logs;
   }
 
-  const templateId = String(config.sendgridTemplateId || "").trim();
-  if (!templateId) {
-    logs.push({
-      timestamp: new Date().toISOString(),
-      automation: automationName,
-      property: "—",
-      action: "Skipped: no SendGrid code template ID configured",
-      status: "skipped",
-    });
-    return logs;
-  }
-
   const releaseHour = Math.max(
     0,
     Math.min(23, Number(config.releaseHourCentral ?? 11))
@@ -930,7 +918,7 @@ async function runAccessCodeRelease(automationConfig, dryRunOverride) {
     Math.min(59, Number(config.releaseMinuteCentral ?? 0))
   );
   const { reached, clock } = centralClockHasReached(releaseHour, releaseMinute);
-  if (!reached) {
+  if (!reached && options.bypassReleaseTime !== true) {
     logs.push({
       timestamp: new Date().toISOString(),
       automation: automationName,
@@ -964,6 +952,19 @@ async function runAccessCodeRelease(automationConfig, dryRunOverride) {
   }
 
   const todayStr = todayCentral();
+  const targetOffsets = Array.isArray(options.targetOffsets)
+    ? options.targetOffsets
+    : [Number(config.releaseDaysBeforeCheckin ?? 1), 0];
+  const targetDates = Array.from(
+    new Set(
+      targetOffsets
+        .map((offset) => addDays(todayStr, Number(offset) || 0))
+        .filter(Boolean)
+    )
+  ).sort();
+  const targetDateSet = new Set(targetDates);
+  const stayFrom = targetDates[0] || todayStr;
+  const stayTo = targetDates[targetDates.length - 1] || todayStr;
   let waiverSubmissions = [];
   try {
     waiverSubmissions = usesLocalForm
@@ -994,13 +995,13 @@ async function runAccessCodeRelease(automationConfig, dryRunOverride) {
 
   let bookings = [];
   try {
-    bookings = await getBookings(todayStr, todayStr);
+    bookings = await getBookings(stayFrom, stayTo);
   } catch (err) {
     logs.push({
       timestamp: new Date().toISOString(),
       automation: automationName,
       property: "—",
-      action: `Failed to fetch Lodgify check-ins for ${todayStr}: ${err.message}`,
+      action: `Failed to fetch Lodgify check-ins for ${targetDates.join(", ")}: ${err.message}`,
       status: "failed",
     });
     return logs;
@@ -1012,7 +1013,7 @@ async function runAccessCodeRelease(automationConfig, dryRunOverride) {
       booking.start_date ||
       booking.checkIn ||
       booking.checkin_date;
-    return toDateOnly(arrival) === todayStr;
+    return targetDateSet.has(toDateOnly(arrival));
   });
 
   const propertyIds = Array.isArray(config.propertyIds)
@@ -1034,11 +1035,15 @@ async function runAccessCodeRelease(automationConfig, dryRunOverride) {
     return true;
   });
 
+  if (Number.isFinite(options.maxBookings)) {
+    bookings = bookings.slice(0, Math.max(0, Number(options.maxBookings)));
+  }
+
   logs.push({
     timestamp: new Date().toISOString(),
     automation: automationName,
     property: "—",
-    action: `Evaluating ${bookings.length} Lodgify check-in(s) for ${todayStr}`,
+    action: `Evaluating ${bookings.length} Lodgify check-in(s) for ${targetDates.join(", ")}`,
     status: "info",
   });
 
@@ -1094,6 +1099,8 @@ async function runAccessCodeRelease(automationConfig, dryRunOverride) {
         booking,
         automationConfig,
         dryRun: isDryRun,
+        persistState: options.persistState !== false,
+        messagePrefix: options.messagePrefix || "",
       });
       logs.push({
         timestamp: missingResult.timestamp || new Date().toISOString(),
@@ -1109,6 +1116,8 @@ async function runAccessCodeRelease(automationConfig, dryRunOverride) {
       booking,
       automationConfig,
       dryRun: isDryRun,
+      persistState: options.persistState !== false,
+      messagePrefix: options.messagePrefix || "",
     });
     logs.push({
       timestamp: sendResult.timestamp || new Date().toISOString(),

@@ -39,10 +39,19 @@ export const automationConfig = {
   },
   accessCodeRelease: {
     enabled: false,
+    deliveryChannel: "lodgify",
     releaseHourCentral: 11,
     releaseMinuteCentral: 0,
-    sendgridTemplateId: "", // Template 1: form is complete, include the access code.
-    missingFormTemplateId: "", // Template 2: form is not complete, send the form link again.
+    releaseDaysBeforeCheckin: 1, // 1 = day before arrival. Day-of final follow-up also runs.
+    immediateReleaseDaysBeforeCheckin: 1, // Form submissions for today/tomorrow release immediately.
+    sendgridTemplateId: "", // Legacy only. Access-code delivery now posts to Lodgify booking messages.
+    missingFormTemplateId: "", // Legacy only. Missing-form delivery now posts to Lodgify booking messages.
+    accessCodeSubjectTemplate: "Access Code for {{propertyDisplayName}}",
+    missingFormSubjectTemplate: "Reservation form needed for {{propertyDisplayName}}",
+    accessCodeMessageTemplate: "",
+    missingFormMessageTemplate: "",
+    lodgifyMessageType: "Owner",
+    lodgifySendNotification: true,
     localFormSlug: "guest-info",
     jotformFormId: "251834442091050", // fallback while historical Jotform forms are still active
     propertyIds: [],
