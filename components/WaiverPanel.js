@@ -266,6 +266,36 @@ function CollapsibleSection({ title, description, badge, open, onToggle, childre
   );
 }
 
+function SettingsDisclosure({ title, description, badge, open, onToggle, children }) {
+  return (
+    <div className="rounded-xl border border-sand/80 bg-white">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left"
+      >
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <h4 className="text-sm font-semibold text-forest">{title}</h4>
+            {badge ? (
+              <span className="rounded-full border border-sand bg-cream px-2 py-0.5 text-[11px] font-medium text-forest/60">
+                {badge}
+              </span>
+            ) : null}
+          </div>
+          {description ? (
+            <p className="mt-0.5 text-xs leading-relaxed text-forest/50">{description}</p>
+          ) : null}
+        </div>
+        <span className="rounded-full border border-sand p-1.5 text-forest/60">
+          <Chevron open={open} />
+        </span>
+      </button>
+      {open ? <div className="border-t border-sand/70 p-4">{children}</div> : null}
+    </div>
+  );
+}
+
 function Field({ label, value, onChange, placeholder, type = "text", mono = false, helper }) {
   return (
     <label className="block text-xs text-forest/60">
@@ -404,7 +434,11 @@ export default function WaiverPanel({
   const [formMode, setFormMode] = useState(currentFormSlug ? "internal" : "jotform");
   const [remindersOpen, setRemindersOpen] = useState(true);
   const [accessOpen, setAccessOpen] = useState(true);
+  const [deliverySettingsOpen, setDeliverySettingsOpen] = useState(true);
+  const [accessTemplateOpen, setAccessTemplateOpen] = useState(false);
+  const [missingTemplateOpen, setMissingTemplateOpen] = useState(false);
   const [variablesOpen, setVariablesOpen] = useState(false);
+  const [propertySettingsOpen, setPropertySettingsOpen] = useState(false);
   const [lodgifyProperties, setLodgifyProperties] = useState([]);
   const [lodgifyPropertiesStatus, setLodgifyPropertiesStatus] = useState("loading");
   const [selectedPropertyKey, setSelectedPropertyKey] = useState("");
@@ -594,7 +628,7 @@ export default function WaiverPanel({
     onChange({ ...safeConfig, emails: emails.filter((_, i) => i !== index) });
   }
 
-  async function runAccessCodeTest(dryRun) {
+  async function runAccessCodeTest(dryRun, options = {}) {
     setTestRunning(true);
     setTestError("");
     setTestResult(null);
@@ -604,7 +638,10 @@ export default function WaiverPanel({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           dryRun,
-          bookingId: dryRun ? testBookingId.trim() : testBookingId.trim(),
+          sample: Boolean(options.sample),
+          samplePropertyName: selectedProperty?.name || "",
+          samplePropertyId: selectedProperty?.id || "",
+          bookingId: testBookingId.trim(),
           waiverReminders: safeConfig,
           accessCodeRelease: codeRelease,
         }),
@@ -759,139 +796,146 @@ export default function WaiverPanel({
         onToggle={() => setAccessOpen((value) => !value)}
       >
         <div className="space-y-5">
-          <div className="flex items-center justify-between rounded-xl border border-sand/80 bg-cream/30 p-4">
-            <div>
-              <h4 className="text-sm font-semibold text-forest">Code release automation</h4>
-              <p className="mt-1 text-xs text-forest/50">
-                Delivery is through Lodgify booking messages. The daily cron checks this release time in Central time.
-              </p>
+          <SettingsDisclosure
+            title="Delivery and testing"
+            description="Controls whether the daily access-code release is active, when it runs, and how test messages are handled."
+            badge={codeRelease.enabled ? "Enabled" : "Disabled"}
+            open={deliverySettingsOpen}
+            onToggle={() => setDeliverySettingsOpen((value) => !value)}
+          >
+            <div className="space-y-4">
+              <div className="flex flex-col gap-4 rounded-xl bg-cream/30 p-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h4 className="text-sm font-semibold text-forest">Code release automation</h4>
+                  <p className="mt-1 text-xs text-forest/50">
+                    Delivery is through Lodgify booking messages. The cron checks this release time in Central time.
+                  </p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTestModalOpen(true);
+                      setTestError("");
+                      setTestResult(null);
+                    }}
+                    className="rounded-full border border-sand bg-white px-4 py-2 text-sm font-medium text-forest transition hover:border-grove hover:text-grove"
+                  >
+                    Test
+                  </button>
+                  <Toggle
+                    enabled={Boolean(codeRelease.enabled)}
+                    onChange={(enabled) => updateCodeRelease("enabled", enabled)}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <Field
+                  label="Release hour Central"
+                  type="number"
+                  value={codeRelease.releaseHourCentral ?? 11}
+                  onChange={(value) =>
+                    updateCodeRelease(
+                      "releaseHourCentral",
+                      Math.max(0, Math.min(23, Number(value || 0)))
+                    )
+                  }
+                  helper="24-hour time. 15 means 3 PM."
+                />
+                <Field
+                  label="Release minute"
+                  type="number"
+                  value={codeRelease.releaseMinuteCentral ?? 0}
+                  onChange={(value) =>
+                    updateCodeRelease(
+                      "releaseMinuteCentral",
+                      Math.max(0, Math.min(59, Number(value || 0)))
+                    )
+                  }
+                />
+              </div>
             </div>
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={() => {
-                  setTestModalOpen(true);
-                  setTestError("");
-                  setTestResult(null);
-                }}
-                className="rounded-full border border-sand bg-white px-4 py-2 text-sm font-medium text-forest transition hover:border-grove hover:text-grove"
-              >
-                Test
-              </button>
-              <Toggle
-                enabled={Boolean(codeRelease.enabled)}
-                onChange={(enabled) => updateCodeRelease("enabled", enabled)}
+          </SettingsDisclosure>
+
+          <SettingsDisclosure
+            title="Template 1: access code message"
+            description="Posted to the Lodgify booking thread when the selected form is complete."
+            badge={codeRelease.accessCodeMessageTemplate ? "Custom" : "Default"}
+            open={accessTemplateOpen}
+            onToggle={() => setAccessTemplateOpen((value) => !value)}
+          >
+            <div className="space-y-4">
+              <Field
+                label="Subject"
+                value={codeRelease.accessCodeSubjectTemplate || ""}
+                onChange={(value) => updateCodeRelease("accessCodeSubjectTemplate", value)}
+                placeholder="Access Code for {{propertyDisplayName}}"
+                helper="Supports the same variables as the message body."
+              />
+              <RichMessageField
+                label="Lodgify message"
+                value={codeRelease.accessCodeMessageTemplate || ""}
+                onChange={(value) => updateCodeRelease("accessCodeMessageTemplate", value)}
+                placeholder={ACCESS_MESSAGE_PLACEHOLDER}
+                rows={8}
+                helper="Leave blank to use the built-in full access-code message."
               />
             </div>
-          </div>
+          </SettingsDisclosure>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field
-              label="Release hour Central"
-              type="number"
-              value={codeRelease.releaseHourCentral ?? 11}
-              onChange={(value) =>
-                updateCodeRelease(
-                  "releaseHourCentral",
-                  Math.max(0, Math.min(23, Number(value || 0)))
-                )
-              }
-              helper="24-hour time. 15 means 3 PM."
-            />
-            <Field
-              label="Release minute"
-              type="number"
-              value={codeRelease.releaseMinuteCentral ?? 0}
-              onChange={(value) =>
-                updateCodeRelease(
-                  "releaseMinuteCentral",
-                  Math.max(0, Math.min(59, Number(value || 0)))
-                )
-              }
-            />
-          </div>
-
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <Field
-              label="Template 1 subject"
-              value={codeRelease.accessCodeSubjectTemplate || ""}
-              onChange={(value) => updateCodeRelease("accessCodeSubjectTemplate", value)}
-              placeholder="Access Code for {{propertyDisplayName}}"
-              helper="Posted to the Lodgify booking thread when the form is complete."
-            />
-            <Field
-              label="Template 2 subject"
-              value={codeRelease.missingFormSubjectTemplate || ""}
-              onChange={(value) => updateCodeRelease("missingFormSubjectTemplate", value)}
-              placeholder="Reservation form needed for {{propertyDisplayName}}"
-              helper="Posted to the Lodgify booking thread when the form is missing."
-            />
-          </div>
-
-          <div className="grid grid-cols-1 gap-4">
-            <RichMessageField
-              label="Template 1: access code Lodgify message"
-              value={codeRelease.accessCodeMessageTemplate || ""}
-              onChange={(value) => updateCodeRelease("accessCodeMessageTemplate", value)}
-              placeholder={ACCESS_MESSAGE_PLACEHOLDER}
-              rows={8}
-              helper="Leave blank to use the built-in full access-code message."
-            />
-            <RichMessageField
-              label="Template 2: missing form / final reminder Lodgify message"
-              value={codeRelease.missingFormMessageTemplate || ""}
-              onChange={(value) => updateCodeRelease("missingFormMessageTemplate", value)}
-              placeholder={MISSING_FORM_MESSAGE_PLACEHOLDER}
-              rows={7}
-              helper="Used for the day-before missing-form message and the day-of final follow-up."
-            />
-          </div>
-
-          <div className="rounded-xl border border-sand/80">
-            <button
-              type="button"
-              onClick={() => setVariablesOpen((value) => !value)}
-              className="flex w-full items-center justify-between px-4 py-3 text-left"
-            >
-              <div>
-                <h4 className="text-sm font-semibold text-forest">
-                  Standard variables
-                </h4>
-                <p className="mt-0.5 text-xs text-forest/50">
-                  Variables available in the Lodgify subjects and messages.
-                </p>
-              </div>
-              <Chevron open={variablesOpen} />
-            </button>
-            {variablesOpen ? (
-              <div className="grid grid-cols-2 gap-2 border-t border-sand/70 p-4 text-xs sm:grid-cols-3">
-                {TEMPLATE_VARIABLES.map((variable) => (
-                  <span
-                    key={variable}
-                    className="rounded border border-sand bg-white px-2 py-1 font-mono text-forest/80"
-                  >
-                    {`{{${variable}}}`}
-                  </span>
-                ))}
-              </div>
-            ) : null}
-          </div>
-
-          <div className="rounded-xl border border-sand/80 bg-white p-4">
-            <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-              <div>
-                <h4 className="text-sm font-semibold text-forest">
-                  Property message settings
-                </h4>
-                <p className="mt-1 text-xs text-forest/50">
-                  Choose one property and edit only the values that appear in
-                  guest messages and the guest portal.
-                </p>
-              </div>
-              <span className="text-xs text-forest/40">{propertyStatusLabel}</span>
+          <SettingsDisclosure
+            title="Template 2: missing form message"
+            description="Posted through Lodgify when the form is missing, including the final follow-up."
+            badge={codeRelease.missingFormMessageTemplate ? "Custom" : "Default"}
+            open={missingTemplateOpen}
+            onToggle={() => setMissingTemplateOpen((value) => !value)}
+          >
+            <div className="space-y-4">
+              <Field
+                label="Subject"
+                value={codeRelease.missingFormSubjectTemplate || ""}
+                onChange={(value) => updateCodeRelease("missingFormSubjectTemplate", value)}
+                placeholder="Reservation form needed for {{propertyDisplayName}}"
+                helper="Supports the same variables as the message body."
+              />
+              <RichMessageField
+                label="Lodgify message"
+                value={codeRelease.missingFormMessageTemplate || ""}
+                onChange={(value) => updateCodeRelease("missingFormMessageTemplate", value)}
+                placeholder={MISSING_FORM_MESSAGE_PLACEHOLDER}
+                rows={7}
+                helper="Used for the day-before missing-form message and the day-of final follow-up."
+              />
             </div>
+          </SettingsDisclosure>
 
-            <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-[minmax(220px,320px)_1fr]">
+          <SettingsDisclosure
+            title="Standard variables"
+            description="Variables available in the Lodgify subjects and messages."
+            open={variablesOpen}
+            onToggle={() => setVariablesOpen((value) => !value)}
+          >
+            <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-3">
+              {TEMPLATE_VARIABLES.map((variable) => (
+                <span
+                  key={variable}
+                  className="rounded border border-sand bg-white px-2 py-1 font-mono text-forest/80"
+                >
+                  {`{{${variable}}}`}
+                </span>
+              ))}
+            </div>
+          </SettingsDisclosure>
+
+          <SettingsDisclosure
+            title="Property message settings"
+            description="Choose one property and edit the values used in guest messages and the guest portal."
+            badge={propertyStatusLabel}
+            open={propertySettingsOpen}
+            onToggle={() => setPropertySettingsOpen((value) => !value)}
+          >
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-[minmax(220px,320px)_1fr]">
               <label className="block text-xs uppercase tracking-wider text-forest/60">
                 Property
                 <select
@@ -967,7 +1011,7 @@ export default function WaiverPanel({
                 </div>
               </div>
             </div>
-          </div>
+          </SettingsDisclosure>
         </div>
       </CollapsibleSection>
 
@@ -978,7 +1022,7 @@ export default function WaiverPanel({
               <div>
                 <h3 className="font-serif text-xl text-forest">Test Access Code Release</h3>
                 <p className="mt-1 text-sm leading-relaxed text-forest/60">
-                  Dry run checks today and tomorrow arrivals without posting to Lodgify. A live test requires a Lodgify booking ID and posts a test-prefixed message into that booking thread.
+                  Sample preview renders both Lodgify messages without using Lodgify. Dry run checks today and tomorrow arrivals without posting. A live test requires a Lodgify booking ID and posts a test-prefixed message into that booking thread.
                 </p>
               </div>
               <button
@@ -1050,6 +1094,14 @@ export default function WaiverPanel({
             ) : null}
 
             <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={() => runAccessCodeTest(true, { sample: true })}
+                disabled={testRunning}
+                className="rounded-full border border-sand bg-white px-4 py-2 text-sm font-medium text-forest transition hover:border-grove hover:text-grove disabled:opacity-50"
+              >
+                {testRunning ? "Running..." : "Preview Sample"}
+              </button>
               <button
                 type="button"
                 onClick={() => runAccessCodeTest(true)}
