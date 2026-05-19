@@ -68,6 +68,9 @@ const DEFAULT_PREVIEW_VALUES = {
   accessMessageHtml: "<strong>Sample access message</strong>",
 };
 
+const MESSAGE_PREVIEW_CLASS =
+  "whitespace-pre-wrap break-words text-sm leading-relaxed text-forest [&_a]:text-grove [&_a]:underline [&_a]:underline-offset-2 [&_li]:my-1 [&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-6 [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-6";
+
 const FORMATTING_BUTTONS = [
   { label: "B", title: "Bold", before: "<strong>", after: "</strong>", fallback: "bold text" },
   { label: "I", title: "Italic", before: "<em>", after: "</em>", fallback: "italic text" },
@@ -192,24 +195,11 @@ function applyPreviewVariables(value, previewValues = {}) {
   );
 }
 
-function previewParagraphHtml(paragraph) {
-  const trimmed = paragraph.trim();
-  if (!trimmed) return "";
-  if (/^<(p|ul|ol)\b/i.test(trimmed)) {
-    return trimmed.replace(/\n(?=\s*<li\b)/g, "").replace(/\n/g, "<br />");
-  }
-  return `<p>${trimmed.replace(/\n/g, "<br />")}</p>`;
-}
-
 function messagePreviewHtml(value, previewValues = {}) {
   const raw = applyPreviewVariables(value, previewValues).trim();
   if (!raw) return "";
   const hasHtml = /<\/?(a|br|em|i|li|ol|p|strong|b|u|ul)\b/i.test(raw);
-  const safe = hasHtml ? sanitizePreviewHtml(raw) : escapePreviewHtml(raw);
-  return safe
-    .split(/\n{2,}/)
-    .map(previewParagraphHtml)
-    .join("");
+  return hasHtml ? sanitizePreviewHtml(raw) : escapePreviewHtml(raw);
 }
 
 function buildPreviewValues({ selectedProperty, selectedMessageData, currentFormSlug }) {
@@ -481,7 +471,7 @@ function RichMessageField({
             Lodgify preview
           </div>
           <div
-            className="prose prose-sm max-w-none text-sm leading-relaxed text-forest"
+            className={MESSAGE_PREVIEW_CLASS}
             dangerouslySetInnerHTML={{ __html: previewHtml }}
           />
         </div>
@@ -1175,9 +1165,12 @@ export default function WaiverPanel({
                             Message preview
                           </summary>
                           <div
-                            className="mt-2 break-words text-sm leading-relaxed text-forest"
+                            className={`mt-2 ${MESSAGE_PREVIEW_CLASS}`}
                             dangerouslySetInnerHTML={{
-                              __html: messagePreviewHtml(log.templateData.lodgifyMessageText),
+                              __html: messagePreviewHtml(
+                                log.templateData.lodgifyMessageHtml ||
+                                  log.templateData.lodgifyMessageText
+                              ),
                             }}
                           />
                         </details>
