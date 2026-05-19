@@ -40,6 +40,34 @@ const ACCESS_MESSAGE_PLACEHOLDER =
 const MISSING_FORM_MESSAGE_PLACEHOLDER =
   "Greetings {{GuestFirstName}},\n\nYour stay at {{propertyDisplayName}} is coming up, but the reservation form has not been completed yet.\n\nPlease complete it here:\n{{reservationFormUrl}}\n\nAccess codes are released after the form is submitted.";
 
+const DEFAULT_PREVIEW_VALUES = {
+  GuestFirstName: "Sample",
+  GuestName: "Sample Guest",
+  GuestLastName: "Guest",
+  guestFirstName: "Sample",
+  guestName: "Sample Guest",
+  guestLastName: "Guest",
+  Arrival: "2026-05-20",
+  Departure: "2026-05-22",
+  checkinDate: "2026-05-20",
+  checkoutDate: "2026-05-22",
+  KeyCode: "1234",
+  accessCode: "1234",
+  code: "1234",
+  propertyDisplayName: "SKY CASTLE",
+  propertyName: "Sky Castle",
+  unitName: "Sky Castle",
+  UnitName: "Sky Castle",
+  wifiName: "SKYCASTLE",
+  wifiPassword: "Iamgrateful!",
+  reservationFormUrl: "/forms/welcome-to-zenfulcove",
+  waiverUrl: "/forms/welcome-to-zenfulcove",
+  dedicatedKayakText: "There is one dedicated kayak for Sky Castle guests. The kayak lock code is 1010.",
+  amenitiesText: "There is a gas grill on the deck, an outdoor soaking tub, private beach access, and one kayak for your enjoyment.",
+  accessMessageText: "Sample access message text",
+  accessMessageHtml: "<strong>Sample access message</strong>",
+};
+
 const FORMATTING_BUTTONS = [
   { label: "B", title: "Bold", before: "<strong>", after: "</strong>", fallback: "bold text" },
   { label: "I", title: "Italic", before: "<em>", after: "</em>", fallback: "italic text" },
@@ -145,16 +173,68 @@ function sanitizePreviewHtml(value) {
   );
 }
 
-function messagePreviewHtml(value) {
-  const raw = String(value || "").trim();
-  if (!raw) return "";
-  if (/<\/?(a|br|em|i|li|ol|p|strong|b|u|ul)\b/i.test(raw)) {
-    return sanitizePreviewHtml(raw);
+function previewValueForVariable(variable, previewValues = {}) {
+  const key = String(variable || "").trim();
+  const lowerCamel = key ? `${key.charAt(0).toLowerCase()}${key.slice(1)}` : "";
+  const direct =
+    previewValues[key] ??
+    previewValues[lowerCamel] ??
+    DEFAULT_PREVIEW_VALUES[key] ??
+    DEFAULT_PREVIEW_VALUES[lowerCamel];
+  return direct === undefined || direct === null || direct === ""
+    ? `Sample ${key}`
+    : String(direct);
+}
+
+function applyPreviewVariables(value, previewValues = {}) {
+  return String(value || "").replace(/\{\{\s*([A-Za-z0-9_]+)\s*\}\}/g, (_, variable) =>
+    previewValueForVariable(variable, previewValues)
+  );
+}
+
+function previewParagraphHtml(paragraph) {
+  const trimmed = paragraph.trim();
+  if (!trimmed) return "";
+  if (/^<(p|ul|ol)\b/i.test(trimmed)) {
+    return trimmed.replace(/\n(?=\s*<li\b)/g, "").replace(/\n/g, "<br />");
   }
-  return raw
+  return `<p>${trimmed.replace(/\n/g, "<br />")}</p>`;
+}
+
+function messagePreviewHtml(value, previewValues = {}) {
+  const raw = applyPreviewVariables(value, previewValues).trim();
+  if (!raw) return "";
+  const hasHtml = /<\/?(a|br|em|i|li|ol|p|strong|b|u|ul)\b/i.test(raw);
+  const safe = hasHtml ? sanitizePreviewHtml(raw) : escapePreviewHtml(raw);
+  return safe
     .split(/\n{2,}/)
-    .map((paragraph) => `<p>${escapePreviewHtml(paragraph).replace(/\n/g, "<br />")}</p>`)
+    .map(previewParagraphHtml)
     .join("");
+}
+
+function buildPreviewValues({ selectedProperty, selectedMessageData, currentFormSlug }) {
+  const formUrl = currentFormSlug ? `/forms/${currentFormSlug}` : DEFAULT_PREVIEW_VALUES.reservationFormUrl;
+  const propertyDisplayName =
+    selectedMessageData.displayName ||
+    selectedMessageData.propertyDisplayName ||
+    selectedProperty?.name ||
+    DEFAULT_PREVIEW_VALUES.propertyDisplayName;
+  const propertyName = selectedProperty?.name || propertyDisplayName;
+
+  return {
+    ...DEFAULT_PREVIEW_VALUES,
+    propertyDisplayName,
+    propertyName,
+    unitName: propertyName,
+    UnitName: propertyName,
+    wifiName: selectedMessageData.wifiName || DEFAULT_PREVIEW_VALUES.wifiName,
+    wifiPassword: selectedMessageData.wifiPassword || DEFAULT_PREVIEW_VALUES.wifiPassword,
+    reservationFormUrl: formUrl,
+    waiverUrl: formUrl,
+    dedicatedKayakText:
+      selectedMessageData.dedicatedKayakText || DEFAULT_PREVIEW_VALUES.dedicatedKayakText,
+    amenitiesText: selectedMessageData.amenitiesText || DEFAULT_PREVIEW_VALUES.amenitiesText,
+  };
 }
 
 function findMapEntry(map, property) {
@@ -330,10 +410,18 @@ function TextAreaField({ label, value, onChange, placeholder, rows = 3, helper }
   );
 }
 
-function RichMessageField({ label, value, onChange, placeholder, rows = 7, helper }) {
+function RichMessageField({
+  label,
+  value,
+  onChange,
+  placeholder,
+  rows = 7,
+  helper,
+  previewValues,
+}) {
   const textareaRef = useRef(null);
   const currentValue = value ?? "";
-  const previewHtml = messagePreviewHtml(currentValue);
+  const previewHtml = messagePreviewHtml(currentValue, previewValues);
 
   function insertFormatting(format) {
     const textarea = textareaRef.current;
@@ -524,6 +612,11 @@ export default function WaiverPanel({
   const selectedStaticCode = selectedCodeEntry?.value || "";
   const selectedCodeSource =
     selectedMessageData.codeSource || (selectedStaticCode ? "static" : "jervis");
+  const previewValues = buildPreviewValues({
+    selectedProperty,
+    selectedMessageData,
+    currentFormSlug,
+  });
   const reminderFormUrl = currentFormSlug ? `/forms/${currentFormSlug}` : "";
   const activeReminderCount = emails.filter((email) => email.templateId).length;
   const propertyStatusLabel =
@@ -880,6 +973,7 @@ export default function WaiverPanel({
                 placeholder={ACCESS_MESSAGE_PLACEHOLDER}
                 rows={8}
                 helper="Leave blank to use the built-in full access-code message."
+                previewValues={previewValues}
               />
             </div>
           </SettingsDisclosure>
@@ -906,6 +1000,7 @@ export default function WaiverPanel({
                 placeholder={MISSING_FORM_MESSAGE_PLACEHOLDER}
                 rows={7}
                 helper="Used for the day-before missing-form message and the day-of final follow-up."
+                previewValues={previewValues}
               />
             </div>
           </SettingsDisclosure>
@@ -1016,8 +1111,8 @@ export default function WaiverPanel({
       </CollapsibleSection>
 
       {testModalOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 px-4">
-          <div className="w-full max-w-2xl rounded-xl border border-sand bg-white p-5 shadow-xl">
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/30 px-4 py-6">
+          <div className="max-h-[calc(100vh-3rem)] w-full max-w-3xl overflow-y-auto rounded-xl border border-sand bg-white p-5 shadow-xl">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <h3 className="font-serif text-xl text-forest">Test Access Code Release</h3>
@@ -1048,7 +1143,7 @@ export default function WaiverPanel({
             {testError ? <p className="mt-3 text-sm text-red-600">{testError}</p> : null}
 
             {testResult ? (
-              <div className="mt-4 rounded-xl border border-sand bg-cream/30 p-4">
+              <div className="mt-4 max-h-[55vh] overflow-y-auto rounded-xl border border-sand bg-cream/30 p-4">
                 <div className="text-xs uppercase tracking-wider text-forest/50">
                   Latest result: {testResult.status}
                 </div>
@@ -1075,12 +1170,12 @@ export default function WaiverPanel({
                         </div>
                       ) : null}
                       {log.templateData?.lodgifyMessageText ? (
-                        <details className="mt-2 rounded-md border border-sand/70 bg-cream/30 p-2">
+                        <details className="mt-2 max-h-80 overflow-y-auto rounded-md border border-sand/70 bg-cream/30 p-2">
                           <summary className="cursor-pointer text-[11px] uppercase tracking-wider text-forest/50">
                             Message preview
                           </summary>
                           <div
-                            className="mt-2 text-sm leading-relaxed text-forest"
+                            className="mt-2 break-words text-sm leading-relaxed text-forest"
                             dangerouslySetInnerHTML={{
                               __html: messagePreviewHtml(log.templateData.lodgifyMessageText),
                             }}
