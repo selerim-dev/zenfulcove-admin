@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Toggle from "./Toggle";
 
 const KNOWN_UNITS = [
@@ -39,6 +39,14 @@ const ACCESS_MESSAGE_PLACEHOLDER =
 
 const MISSING_FORM_MESSAGE_PLACEHOLDER =
   "Greetings {{GuestFirstName}},\n\nYour stay at {{propertyDisplayName}} is coming up, but the reservation form has not been completed yet.\n\nPlease complete it here:\n{{reservationFormUrl}}\n\nAccess codes are released after the form is submitted.";
+
+const FORMATTING_BUTTONS = [
+  { label: "B", title: "Bold", before: "<strong>", after: "</strong>", fallback: "bold text" },
+  { label: "I", title: "Italic", before: "<em>", after: "</em>", fallback: "italic text" },
+  { label: "U", title: "Underline", before: "<u>", after: "</u>", fallback: "underlined text" },
+  { label: "Bullets", title: "Bullet list", block: "<ul>\n  <li>First item</li>\n  <li>Second item</li>\n</ul>" },
+  { label: "Link", title: "Link", before: '<a href="https://example.com">', after: "</a>", fallback: "link text" },
+];
 
 const SIMPLE_PROPERTY_FIELDS = [
   { key: "displayName", label: "Display name", placeholder: "SKY CASTLE" },
@@ -98,6 +106,55 @@ function normalizeLookupKey(value) {
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "");
+}
+
+function escapePreviewHtml(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function sanitizePreviewHtml(value) {
+  const safeTags = new Set([
+    "a",
+    "br",
+    "em",
+    "i",
+    "li",
+    "ol",
+    "p",
+    "strong",
+    "b",
+    "u",
+    "ul",
+  ]);
+  return String(value || "").replace(
+    /<\/?([a-z][a-z0-9]*)\b([^>]*)>/gi,
+    (tag, rawName, rawAttrs = "") => {
+      const name = rawName.toLowerCase();
+      if (!safeTags.has(name)) return escapePreviewHtml(tag);
+      if (tag.startsWith("</")) return `</${name}>`;
+      if (name !== "a") return `<${name}>`;
+
+      const hrefMatch = rawAttrs.match(/\shref=(["'])(.*?)\1/i);
+      const href = hrefMatch?.[2]?.trim() || "";
+      const isSafeHref = /^(https?:|mailto:|tel:|\/)/i.test(href);
+      return isSafeHref ? `<a href="${escapePreviewHtml(href)}">` : "<a>";
+    }
+  );
+}
+
+function messagePreviewHtml(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  if (/<\/?(a|br|em|i|li|ol|p|strong|b|u|ul)\b/i.test(raw)) {
+    return sanitizePreviewHtml(raw);
+  }
+  return raw
+    .split(/\n{2,}/)
+    .map((paragraph) => `<p>${escapePreviewHtml(paragraph).replace(/\n/g, "<br />")}</p>`)
+    .join("");
 }
 
 function findMapEntry(map, property) {
@@ -240,6 +297,78 @@ function TextAreaField({ label, value, onChange, placeholder, rows = 3, helper }
       />
       {helper ? <span className="mt-1 block text-xs text-forest/40">{helper}</span> : null}
     </label>
+  );
+}
+
+function RichMessageField({ label, value, onChange, placeholder, rows = 7, helper }) {
+  const textareaRef = useRef(null);
+  const currentValue = value ?? "";
+  const previewHtml = messagePreviewHtml(currentValue);
+
+  function insertFormatting(format) {
+    const textarea = textareaRef.current;
+    const source = currentValue;
+    const start = textarea?.selectionStart ?? source.length;
+    const end = textarea?.selectionEnd ?? source.length;
+    const selected = source.slice(start, end);
+    let insert = format.block || "";
+    let nextCursorStart = start;
+    let nextCursorEnd = start + insert.length;
+
+    if (!insert) {
+      const replacement = selected || format.fallback || "text";
+      insert = `${format.before || ""}${replacement}${format.after || ""}`;
+      nextCursorStart = start + String(format.before || "").length;
+      nextCursorEnd = nextCursorStart + replacement.length;
+    }
+
+    const nextValue = `${source.slice(0, start)}${insert}${source.slice(end)}`;
+    onChange(nextValue);
+    window.requestAnimationFrame(() => {
+      textarea?.focus();
+      textarea?.setSelectionRange(nextCursorStart, nextCursorEnd);
+    });
+  }
+
+  return (
+    <div className="block text-xs text-forest/60">
+      <span className="uppercase tracking-wider">{label}</span>
+      <div className="mt-1 rounded-lg border border-sand bg-white">
+        <div className="flex flex-wrap gap-1 border-b border-sand/80 bg-cream/40 p-2">
+          {FORMATTING_BUTTONS.map((format) => (
+            <button
+              key={format.title}
+              type="button"
+              title={format.title}
+              onClick={() => insertFormatting(format)}
+              className="rounded-md border border-sand bg-white px-2.5 py-1 text-xs font-semibold text-forest transition hover:border-grove hover:text-grove"
+            >
+              {format.label}
+            </button>
+          ))}
+        </div>
+        <textarea
+          ref={textareaRef}
+          value={currentValue}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder={placeholder}
+          rows={rows}
+          className="block w-full rounded-b-lg border-0 px-3 py-2 text-sm text-forest focus:outline-none focus:ring-2 focus:ring-grove/30"
+        />
+      </div>
+      {helper ? <span className="mt-1 block text-xs text-forest/40">{helper}</span> : null}
+      {previewHtml ? (
+        <div className="mt-3 rounded-lg border border-sand bg-cream/30 p-3">
+          <div className="mb-2 text-[11px] uppercase tracking-wider text-forest/50">
+            Lodgify preview
+          </div>
+          <div
+            className="prose prose-sm max-w-none text-sm leading-relaxed text-forest"
+            dangerouslySetInnerHTML={{ __html: previewHtml }}
+          />
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -559,7 +688,7 @@ export default function WaiverPanel({
 
       <CollapsibleSection
         title="Reminder emails"
-        description="Sent 2, 1, and 0 days before check-in when the guest has not completed the selected form."
+        description="Uses SendGrid templates for pre-arrival form reminders. Configure the send offsets below."
         badge={`${activeReminderCount}/${emails.length} templates set`}
         open={remindersOpen}
         onToggle={() => setRemindersOpen((value) => !value)}
@@ -624,7 +753,7 @@ export default function WaiverPanel({
 
       <CollapsibleSection
         title="Access code release"
-        description="Posts Lodgify booking-thread messages for tomorrow's arrivals after the release time, with a day-of final follow-up for missing forms."
+        description="Uses Lodgify booking-thread messages for gated access-code release, missing-form notices, immediate releases after form submission, and dry-run/live testing."
         badge={codeRelease.enabled ? "Enabled" : "Disabled"}
         open={accessOpen}
         onToggle={() => setAccessOpen((value) => !value)}
@@ -700,7 +829,7 @@ export default function WaiverPanel({
           </div>
 
           <div className="grid grid-cols-1 gap-4">
-            <TextAreaField
+            <RichMessageField
               label="Template 1: access code Lodgify message"
               value={codeRelease.accessCodeMessageTemplate || ""}
               onChange={(value) => updateCodeRelease("accessCodeMessageTemplate", value)}
@@ -708,7 +837,7 @@ export default function WaiverPanel({
               rows={8}
               helper="Leave blank to use the built-in full access-code message."
             />
-            <TextAreaField
+            <RichMessageField
               label="Template 2: missing form / final reminder Lodgify message"
               value={codeRelease.missingFormMessageTemplate || ""}
               onChange={(value) => updateCodeRelease("missingFormMessageTemplate", value)}
@@ -884,6 +1013,36 @@ export default function WaiverPanel({
                     <div key={index} className="rounded-lg bg-white px-3 py-2 text-sm">
                       <div className="font-medium text-forest">{log.status}</div>
                       <div className="text-forest/70">{log.action}</div>
+                      {log.deliveryChannel || log.decision || log.bookingId ? (
+                        <div className="mt-2 flex flex-wrap gap-2 text-[11px] uppercase tracking-wider text-forest/50">
+                          {log.deliveryChannel ? <span>{log.deliveryChannel}</span> : null}
+                          {log.decision ? <span>{log.decision}</span> : null}
+                          {log.bookingId ? <span>Booking {log.bookingId}</span> : null}
+                        </div>
+                      ) : null}
+                      {log.templateData?.lodgifyMessageSubject ? (
+                        <div className="mt-2 rounded-md border border-sand/70 bg-cream/30 p-2">
+                          <div className="text-[11px] uppercase tracking-wider text-forest/50">
+                            Subject
+                          </div>
+                          <div className="mt-1 text-forest">
+                            {log.templateData.lodgifyMessageSubject}
+                          </div>
+                        </div>
+                      ) : null}
+                      {log.templateData?.lodgifyMessageText ? (
+                        <details className="mt-2 rounded-md border border-sand/70 bg-cream/30 p-2">
+                          <summary className="cursor-pointer text-[11px] uppercase tracking-wider text-forest/50">
+                            Message preview
+                          </summary>
+                          <div
+                            className="mt-2 text-sm leading-relaxed text-forest"
+                            dangerouslySetInnerHTML={{
+                              __html: messagePreviewHtml(log.templateData.lodgifyMessageText),
+                            }}
+                          />
+                        </details>
+                      ) : null}
                     </div>
                   ))}
                 </div>

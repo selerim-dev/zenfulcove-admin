@@ -134,6 +134,10 @@ export async function POST(request) {
         property: booking.property_name || booking.propertyName || "—",
         action: sendResult.action,
         status: sendResult.status,
+        ...(sendResult.decision ? { decision: sendResult.decision } : {}),
+        ...(sendResult.deliveryChannel ? { deliveryChannel: sendResult.deliveryChannel } : {}),
+        ...(sendResult.bookingId ? { bookingId: sendResult.bookingId } : {}),
+        ...(sendResult.templateData ? { templateData: sendResult.templateData } : {}),
       },
     ];
 

@@ -1108,6 +1108,10 @@ export async function runAccessCodeRelease(automationConfig, dryRunOverride, opt
         property: propertyName,
         action: missingResult.action || `Blocked booking ${bookingId}: form not submitted yet`,
         status: missingResult.status || "skipped",
+        ...(missingResult.decision ? { decision: missingResult.decision } : {}),
+        ...(missingResult.deliveryChannel ? { deliveryChannel: missingResult.deliveryChannel } : {}),
+        ...(missingResult.bookingId ? { bookingId: missingResult.bookingId } : {}),
+        ...(missingResult.templateData ? { templateData: missingResult.templateData } : {}),
       });
       continue;
     }
@@ -1125,6 +1129,10 @@ export async function runAccessCodeRelease(automationConfig, dryRunOverride, opt
       property: propertyName,
       action: sendResult.action || `Processed access code for booking ${bookingId}`,
       status: sendResult.status || "info",
+      ...(sendResult.decision ? { decision: sendResult.decision } : {}),
+      ...(sendResult.deliveryChannel ? { deliveryChannel: sendResult.deliveryChannel } : {}),
+      ...(sendResult.bookingId ? { bookingId: sendResult.bookingId } : {}),
+      ...(sendResult.templateData ? { templateData: sendResult.templateData } : {}),
     });
   }
 
