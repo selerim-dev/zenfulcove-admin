@@ -30,8 +30,10 @@ import {
   getAccessCodeRelease,
 } from "@/lib/access-code-releases";
 import {
+  isDelayedAccessCodeBooking,
   sendAccessCodeForBooking,
-  sendMissingFormEmailForBooking,
+  sendCheckinInfoForBooking,
+  sendWaiverReminderForBooking,
 } from "@/lib/access-code-messages";
 import { hasSupabaseAdminEnv } from "@/lib/supabaseEnv";
 import { appendLogs, writeLastRunStatus } from "@/lib/activity-log";
@@ -100,28 +102,6 @@ function addDays(dateStr, days) {
   return d.toISOString().split("T")[0];
 }
 
-function publicAppBaseUrl() {
-  const configured =
-    process.env.NEXT_PUBLIC_SITE_URL ||
-    process.env.NEXT_PUBLIC_APP_URL ||
-    process.env.NEXT_PUBLIC_DASHBOARD_URL ||
-    process.env.APP_URL;
-
-  if (configured) return String(configured).replace(/\/+$/, "");
-  if (process.env.VERCEL_URL) {
-    return `https://${process.env.VERCEL_URL}`.replace(/\/+$/, "");
-  }
-  return "https://zenfulcove-admin.vercel.app";
-}
-
-function localFormUrl(slug) {
-  try {
-    return new URL(`/forms/${slug}`, publicAppBaseUrl()).toString();
-  } catch {
-    return `https://zenfulcove-admin.vercel.app/forms/${slug}`;
-  }
-}
-
 /** Normalize any date-like value to YYYY-MM-DD for comparison. */
 function toDateOnly(val) {
   if (val == null) return "";
@@ -170,18 +150,6 @@ function parseCentralDateField(value) {
   const parsed = new Date(raw);
   if (isNaN(parsed.getTime())) return "";
   return parsed.toISOString().split("T")[0];
-}
-
-function parseSentTemplateIds(value) {
-  if (!value) return [];
-  return String(value)
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
-function stringifySentTemplateIds(templateIds) {
-  return Array.from(new Set(templateIds.map((id) => String(id || "").trim()).filter(Boolean))).join(",");
 }
 
 function mergeClientContact(existing, incoming) {
@@ -360,6 +328,10 @@ function parseSelectedAutomations(request) {
     "access-code": "access-code-release",
     "access-codes": "access-code-release",
     "access-code-release": "access-code-release",
+    "access-code-day-of": "access-code-day-of",
+    "day-of-code": "access-code-day-of",
+    "day-of-access-code": "access-code-day-of",
+    "code-only": "access-code-day-of",
     popup: "popup",
     "popup-followups": "popup",
     "popup-follow-ups": "popup",
@@ -634,19 +606,16 @@ async function runVacancyEmails(automationConfig, dryRunOverride) {
   return logs;
 }
 
-// ─── Automation 2: Form Waiver Emails ────────────────────────────────────────
+// ─── Automation 2: Form Waiver Lodgify Messages ──────────────────────────────
 // Uses the configured internal form slug when present, with Jotform as a
 // migration fallback. Sent only if guest hasn't submitted yet.
-// When it runs is controlled by the cron schedule; days and template IDs are set per waiver in the dashboard.
+// When it runs is controlled by the cron schedule; reminder offsets and message
+// copy are configured in the dashboard.
 
 async function runWaiverReminders(automationConfig, dryRunOverride) {
   const isDryRun = dryRunOverride !== undefined ? dryRunOverride : DRY_RUN_ENV;
   const logs = [];
   const config = automationConfig.waiverReminders || {};
-  const from = {
-    email: automationConfig.sendgrid.fromEmail,
-    name: automationConfig.sendgrid.fromName,
-  };
   const localFormSlug = String(config.localFormSlug || config.formSlug || "")
     .trim()
     .replace(/^\/?forms\//, "");
@@ -654,8 +623,8 @@ async function runWaiverReminders(automationConfig, dryRunOverride) {
     config.jotformFormId || config.reminders?.[0]?.jotformFormId;
   const usesLocalForm = Boolean(localFormSlug);
   const automationName = usesLocalForm
-    ? "Internal Form Waiver Emails"
-    : "Jotform Waiver Emails";
+    ? "Internal Form Waiver Lodgify Messages"
+    : "Jotform Waiver Lodgify Messages";
 
   if (!config.enabled) {
     logs.push({
@@ -686,9 +655,6 @@ async function runWaiverReminders(automationConfig, dryRunOverride) {
       arr.findIndex((x) => x.daysBeforeCheckin === r.daysBeforeCheckin) === i
   );
   const todayStr = todayCentral();
-  const waiverUrl = usesLocalForm
-    ? localFormUrl(localFormSlug)
-    : `https://form.jotform.com/${jotformFormId}`;
 
   if (reminders.length === 0) {
     logs.push({
@@ -738,7 +704,7 @@ async function runWaiverReminders(automationConfig, dryRunOverride) {
       timestamp: new Date().toISOString(),
       automation: automationName,
       property: "—",
-      action: `═══ DRY RUN: Today is ${todayStr}. No emails sent. Validation: WHO would receive WHAT (compare with Lodgify + ${usesLocalForm ? "internal forms" : "Jotform"}) ═══`,
+      action: `═══ DRY RUN: Today is ${todayStr}. No Lodgify waiver reminder messages sent. Validation: WHO would receive WHAT (compare with Lodgify + ${usesLocalForm ? "internal forms" : "Jotform"}) ═══`,
       status: "info",
     });
   }
@@ -757,7 +723,7 @@ async function runWaiverReminders(automationConfig, dryRunOverride) {
       timestamp: new Date().toISOString(),
       automation: automationName,
       property: "—",
-      action: `--- Check-ins on ${targetDate} (${daysLabel}) → would send "${label}" to: ---`,
+      action: `--- Check-ins on ${targetDate} (${daysLabel}) → would post Lodgify reminder "${label}" to: ---`,
       status: "info",
     });
 
@@ -789,35 +755,9 @@ async function runWaiverReminders(automationConfig, dryRunOverride) {
       });
 
       for (const booking of bookings) {
-        const guestEmail = booking.guest?.email || booking.email;
-        const guestName = booking.guest?.name || booking.guestName || "Guest";
         const bookingId = String(booking.id);
         const propertyName =
           booking.property_name || booking.propertyName || "Property";
-
-        if (!guestEmail) {
-          logs.push({
-            timestamp: new Date().toISOString(),
-            automation: automationName,
-            property: propertyName,
-            action: isDryRun
-              ? `[DRY RUN] SKIP booking ${bookingId} | no guest email`
-              : `No email for booking ${bookingId} — skipped (${reminder.daysBeforeCheckin}-day)`,
-            status: "skipped",
-          });
-          continue;
-        }
-
-        if (!reminder.templateId || String(reminder.templateId).trim() === "") {
-          logs.push({
-            timestamp: new Date().toISOString(),
-            automation: automationName,
-            property: propertyName,
-            action: `SKIP booking ${bookingId} — no SendGrid template ID for "${reminder.label || reminder.daysBeforeCheckin}-day"`,
-            status: "skipped",
-          });
-          continue;
-        }
 
         try {
           const hasWaiver = usesLocalForm
@@ -825,29 +765,29 @@ async function runWaiverReminders(automationConfig, dryRunOverride) {
             : bookingHasWaiver(bookingId, waiverSubmissions);
 
           if (!hasWaiver) {
-            if (!isDryRun) {
-              await sendTemplateEmail({
-                to: guestEmail,
-                templateId: reminder.templateId,
-                from,
-                data: {
-                  guestName,
-                  propertyName,
-                  checkinDate: targetDate,
-                  bookingId,
-                  waiverUrl,
-                },
-              });
-            }
-
+            const reminderResult = await sendWaiverReminderForBooking({
+              booking,
+              automationConfig,
+              reminder,
+              dryRun: isDryRun,
+              fallback: {
+                bookingId,
+                propertyName,
+                checkinDate: targetDate,
+              },
+            });
             logs.push({
-              timestamp: new Date().toISOString(),
+              timestamp: reminderResult.timestamp || new Date().toISOString(),
               automation: automationName,
               property: propertyName,
-              action: isDryRun
-                ? `[DRY RUN] Would send "${reminder.label || `${reminder.daysBeforeCheckin}-day`}" to ${guestEmail} | booking ${bookingId} | ${propertyName} | no ${usesLocalForm ? "internal form" : "Jotform"} waiver for booking ${bookingId}`
-                : `Sent ${reminder.label || `${reminder.daysBeforeCheckin}-day`} to ${guestEmail} (booking ${bookingId})`,
-              status: "success",
+              action:
+                reminderResult.action ||
+                `Processed Lodgify waiver reminder "${reminder.label || `${reminder.daysBeforeCheckin}-day`}" for booking ${bookingId}`,
+              status: reminderResult.status || "info",
+              ...(reminderResult.decision ? { decision: reminderResult.decision } : {}),
+              ...(reminderResult.deliveryChannel ? { deliveryChannel: reminderResult.deliveryChannel } : {}),
+              ...(reminderResult.bookingId ? { bookingId: reminderResult.bookingId } : {}),
+              ...(reminderResult.templateData ? { templateData: reminderResult.templateData } : {}),
             });
           } else {
             logs.push({
@@ -855,20 +795,19 @@ async function runWaiverReminders(automationConfig, dryRunOverride) {
               automation: automationName,
               property: propertyName,
               action: isDryRun
-                ? `[DRY RUN] SKIP ${guestEmail} | booking ${bookingId} | waiver already in ${usesLocalForm ? "internal forms" : "Jotform"} (booking ID matched)`
+                ? `[DRY RUN] SKIP booking ${bookingId} | waiver already in ${usesLocalForm ? "internal forms" : "Jotform"} (booking ID matched)`
                 : `Waiver already submitted for booking ${bookingId}`,
               status: "skipped",
             });
           }
         } catch (err) {
-          // SendGrid errors include response.body with the actual reason (rate limit, unverified sender, etc.)
           const detail =
             err.response?.body?.errors?.[0]?.message || err.message;
           logs.push({
             timestamp: new Date().toISOString(),
             automation: automationName,
             property: propertyName,
-            action: `Failed ${reminder.label || `${reminder.daysBeforeCheckin}-day`} for booking ${bookingId}: ${detail}`,
+            action: `Failed Lodgify waiver reminder ${reminder.label || `${reminder.daysBeforeCheckin}-day`} for booking ${bookingId}: ${detail}`,
             status: "failed",
           });
         }
@@ -896,7 +835,7 @@ export async function runAccessCodeRelease(automationConfig, dryRunOverride, opt
   const logs = [];
   const config = automationConfig.accessCodeRelease || {};
   const waiverConfig = automationConfig.waiverReminders || {};
-  const automationName = "Access Code Release";
+  const automationName = options.automationName || "Access Code Release";
 
   if (!config.enabled) {
     logs.push({
@@ -911,11 +850,11 @@ export async function runAccessCodeRelease(automationConfig, dryRunOverride, opt
 
   const releaseHour = Math.max(
     0,
-    Math.min(23, Number(config.releaseHourCentral ?? 11))
+    Math.min(23, Number(options.releaseHourCentral ?? config.releaseHourCentral ?? 15))
   );
   const releaseMinute = Math.max(
     0,
-    Math.min(59, Number(config.releaseMinuteCentral ?? 0))
+    Math.min(59, Number(options.releaseMinuteCentral ?? config.releaseMinuteCentral ?? 0))
   );
   const { reached, clock } = centralClockHasReached(releaseHour, releaseMinute);
   if (!reached && options.bypassReleaseTime !== true) {
@@ -954,7 +893,7 @@ export async function runAccessCodeRelease(automationConfig, dryRunOverride, opt
   const todayStr = todayCentral();
   const targetOffsets = Array.isArray(options.targetOffsets)
     ? options.targetOffsets
-    : [Number(config.releaseDaysBeforeCheckin ?? 1), 0];
+    : [Number(config.releaseDaysBeforeCheckin ?? 1)];
   const targetDates = Array.from(
     new Set(
       targetOffsets
@@ -1055,7 +994,14 @@ export async function runAccessCodeRelease(automationConfig, dryRunOverride, opt
       booking.propertyName ||
       contact.propertyName ||
       "Property";
-    const guestEmail = contact.email || booking.guest?.email || booking.email || "";
+    const delayedAccess = isDelayedAccessCodeBooking({
+      booking,
+      automationConfig,
+      fallback: {
+        bookingId,
+        propertyName,
+      },
+    });
 
     if (isCancelledBooking(contact.bookingStatus) && config.includeCancelledBookings !== true) {
       logs.push({
@@ -1068,12 +1014,12 @@ export async function runAccessCodeRelease(automationConfig, dryRunOverride, opt
       continue;
     }
 
-    if (!guestEmail) {
+    if (options.delayedOnly === true && !delayedAccess) {
       logs.push({
         timestamp: new Date().toISOString(),
         automation: automationName,
         property: propertyName,
-        action: `Skipped booking ${bookingId}: no guest email`,
+        action: `Skipped booking ${bookingId}: property does not use delayed day-of code release`,
         status: "skipped",
       });
       continue;
@@ -1095,34 +1041,41 @@ export async function runAccessCodeRelease(automationConfig, dryRunOverride, opt
       ? bookingHasLocalFormSubmission(bookingId, waiverSubmissions)
       : bookingHasWaiver(bookingId, waiverSubmissions);
     if (!hasWaiver) {
-      const missingResult = await sendMissingFormEmailForBooking({
-        booking,
-        automationConfig,
-        dryRun: isDryRun,
-        persistState: options.persistState !== false,
-        messagePrefix: options.messagePrefix || "",
-      });
       logs.push({
-        timestamp: missingResult.timestamp || new Date().toISOString(),
+        timestamp: new Date().toISOString(),
         automation: automationName,
         property: propertyName,
-        action: missingResult.action || `Blocked booking ${bookingId}: form not submitted yet`,
-        status: missingResult.status || "skipped",
-        ...(missingResult.decision ? { decision: missingResult.decision } : {}),
-        ...(missingResult.deliveryChannel ? { deliveryChannel: missingResult.deliveryChannel } : {}),
-        ...(missingResult.bookingId ? { bookingId: missingResult.bookingId } : {}),
-        ...(missingResult.templateData ? { templateData: missingResult.templateData } : {}),
+        action: `Skipped booking ${bookingId}: selected form is not submitted; 11 AM waiver reminders handle missing-form messages`,
+        status: "skipped",
       });
       continue;
     }
 
-    const sendResult = await sendAccessCodeForBooking({
-      booking,
-      automationConfig,
-      dryRun: isDryRun,
-      persistState: options.persistState !== false,
-      messagePrefix: options.messagePrefix || "",
-    });
+    const sendResult =
+      options.messageKind === "code-only"
+        ? await sendAccessCodeForBooking({
+            booking,
+            automationConfig,
+            dryRun: isDryRun,
+            persistState: options.persistState !== false,
+            messagePrefix: options.messagePrefix || "",
+            messageKind: "code-only",
+          })
+        : delayedAccess
+          ? await sendCheckinInfoForBooking({
+              booking,
+              automationConfig,
+              dryRun: isDryRun,
+              persistState: options.persistState !== false,
+              messagePrefix: options.messagePrefix || "",
+            })
+          : await sendAccessCodeForBooking({
+              booking,
+              automationConfig,
+              dryRun: isDryRun,
+              persistState: options.persistState !== false,
+              messagePrefix: options.messagePrefix || "",
+            });
     logs.push({
       timestamp: sendResult.timestamp || new Date().toISOString(),
       automation: automationName,
@@ -1137,6 +1090,23 @@ export async function runAccessCodeRelease(automationConfig, dryRunOverride, opt
   }
 
   return logs;
+}
+
+export async function runDayOfDelayedAccessCodeRelease(
+  automationConfig,
+  dryRunOverride,
+  options = {}
+) {
+  const config = automationConfig.accessCodeRelease || {};
+  return runAccessCodeRelease(automationConfig, dryRunOverride, {
+    ...options,
+    automationName: "Day-of Access Code Release",
+    targetOffsets: [0],
+    releaseHourCentral: config.dayOfCodeReleaseHourCentral ?? 11,
+    releaseMinuteCentral: config.dayOfCodeReleaseMinuteCentral ?? 0,
+    delayedOnly: true,
+    messageKind: "code-only",
+  });
 }
 
 // ─── Automation 3: Popup Follow Ups ─────────────────────────────────────────
@@ -2990,6 +2960,38 @@ export async function POST(request) {
   const selectedAutomations = parseSelectedAutomations(request);
   const popupChannelOverride = parsePopupChannelOverride(request);
   const runAllAutomations = selectedAutomations.size === 0;
+  const centralHourParam = request.nextUrl?.searchParams?.get("centralHour");
+  const centralHourGate =
+    centralHourParam === null || centralHourParam === undefined || centralHourParam === ""
+      ? null
+      : Number(centralHourParam);
+
+  if (
+    !isDryRun &&
+    centralHourGate !== null &&
+    Number.isFinite(centralHourGate)
+  ) {
+    const clock = centralClock();
+    if (clock.hour !== centralHourGate) {
+      const logs = [
+        {
+          timestamp: new Date().toISOString(),
+          automation: "Cron Window",
+          property: "—",
+          action: `Skipped: current Central hour is ${String(clock.hour).padStart(2, "0")}; this cron is gated to ${String(centralHourGate).padStart(2, "0")}:00 Central`,
+          status: "skipped",
+        },
+      ];
+      await appendLogs(logs);
+      await writeLastRunStatus("SUCCESS");
+      return NextResponse.json({
+        status: "SUCCESS",
+        timestamp: new Date().toISOString(),
+        logsCount: logs.length,
+        logs,
+      });
+    }
+  }
 
   if (isDryRun) {
     const todayStr = today();
@@ -3011,6 +3013,14 @@ export async function POST(request) {
   if (runAllAutomations || selectedAutomations.has("access-code-release")) {
     const accessCodeLogs = await runAccessCodeRelease(automationConfig, isDryRun);
     allLogs.push(...accessCodeLogs);
+  }
+
+  if (runAllAutomations || selectedAutomations.has("access-code-day-of")) {
+    const dayOfAccessCodeLogs = await runDayOfDelayedAccessCodeRelease(
+      automationConfig,
+      isDryRun
+    );
+    allLogs.push(...dayOfAccessCodeLogs);
   }
 
   if (runAllAutomations || selectedAutomations.has("popup")) {

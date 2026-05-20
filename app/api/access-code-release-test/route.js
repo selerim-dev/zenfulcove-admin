@@ -8,8 +8,10 @@ import {
 } from "@/lib/local-forms";
 import { bookingHasWaiver, getFormSubmissions } from "@/lib/jotform";
 import {
+  isDelayedAccessCodeBooking,
   sendAccessCodeForBooking,
-  sendMissingFormEmailForBooking,
+  sendCheckinInfoForBooking,
+  sendWaiverReminderForBooking,
 } from "@/lib/access-code-messages";
 import { runAccessCodeRelease } from "@/app/api/cron/route";
 
@@ -49,6 +51,22 @@ function resultLog(sendResult, property) {
     ...(sendResult.bookingId ? { bookingId: sendResult.bookingId } : {}),
     ...(sendResult.templateData ? { templateData: sendResult.templateData } : {}),
   };
+}
+
+function reminderForTest(automationConfig) {
+  const reminders = automationConfig.waiverReminders?.emails ||
+    automationConfig.waiverReminders?.reminders ||
+    [];
+  return (
+    reminders.find((reminder) => Number(reminder?.daysBeforeCheckin) === 1) ||
+    reminders[0] ||
+    {
+      daysBeforeCheckin: 1,
+      label: "Reminder 2",
+      subjectTemplate: "Reservation form needed for {{propertyDisplayName}}",
+      messageTemplate: "",
+    }
+  );
 }
 
 async function formIsCompleteForBooking(automationConfig, bookingId) {
@@ -108,15 +126,36 @@ export async function POST(request) {
         },
       };
 
-      const accessResult = await sendAccessCodeForBooking({
+      const delayedAccess = isDelayedAccessCodeBooking({
         booking: sampleBooking,
         automationConfig,
-        dryRun: true,
-        persistState: false,
       });
-      const missingResult = await sendMissingFormEmailForBooking({
+      const accessResult = delayedAccess
+        ? await sendCheckinInfoForBooking({
+            booking: sampleBooking,
+            automationConfig,
+            dryRun: true,
+            persistState: false,
+          })
+        : await sendAccessCodeForBooking({
+            booking: sampleBooking,
+            automationConfig,
+            dryRun: true,
+            persistState: false,
+          });
+      const codeOnlyResult = delayedAccess
+        ? await sendAccessCodeForBooking({
+            booking: sampleBooking,
+            automationConfig,
+            dryRun: true,
+            persistState: false,
+            messageKind: "code-only",
+          })
+        : null;
+      const reminderResult = await sendWaiverReminderForBooking({
         booking: sampleBooking,
         automationConfig,
+        reminder: reminderForTest(automationConfig),
         dryRun: true,
         persistState: false,
       });
@@ -129,7 +168,8 @@ export async function POST(request) {
           status: "info",
         },
         resultLog(accessResult, samplePropertyName),
-        resultLog(missingResult, samplePropertyName),
+        ...(codeOnlyResult ? [resultLog(codeOnlyResult, samplePropertyName)] : []),
+        resultLog(reminderResult, samplePropertyName),
       ];
       const hasFailed = logs.some((log) => log.status === "failed");
       return NextResponse.json({
@@ -171,18 +211,31 @@ export async function POST(request) {
     const hasForm = await formIsCompleteForBooking(automationConfig, bookingId);
     const messagePrefix = dryRun
       ? ""
-      : "[TEST ONLY - Zenfulcove internal access-code flow]\n\n";
+      : "[TEST ONLY - Zenfulcove internal waiver flow]\n\n";
+    const delayedAccess = isDelayedAccessCodeBooking({
+      booking,
+      automationConfig,
+    });
     const sendResult = hasForm
-      ? await sendAccessCodeForBooking({
+      ? delayedAccess
+        ? await sendCheckinInfoForBooking({
+            booking,
+            automationConfig,
+            dryRun,
+            persistState: false,
+            messagePrefix,
+          })
+        : await sendAccessCodeForBooking({
+            booking,
+            automationConfig,
+            dryRun,
+            persistState: false,
+            messagePrefix,
+          })
+      : await sendWaiverReminderForBooking({
           booking,
           automationConfig,
-          dryRun,
-          persistState: false,
-          messagePrefix,
-        })
-      : await sendMissingFormEmailForBooking({
-          booking,
-          automationConfig,
+          reminder: reminderForTest(automationConfig),
           dryRun,
           persistState: false,
           messagePrefix,
@@ -194,8 +247,10 @@ export async function POST(request) {
         automation: "Access Code Release Test",
         property: booking.property_name || booking.propertyName || "—",
         action: hasForm
-          ? `Booking ${bookingId} has the selected form; testing access-code Lodgify message.`
-          : `Booking ${bookingId} is missing the selected form; testing missing-form Lodgify message.`,
+          ? delayedAccess
+            ? `Booking ${bookingId} has the selected form; testing delayed-property no-code check-in Lodgify message.`
+            : `Booking ${bookingId} has the selected form; testing access-code Lodgify message.`
+          : `Booking ${bookingId} is missing the selected form; testing Lodgify waiver reminder message.`,
         status: "info",
       },
       resultLog(sendResult, booking.property_name || booking.propertyName || "—"),

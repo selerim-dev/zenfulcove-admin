@@ -156,7 +156,11 @@ export default function Dashboard() {
           </main>
         ) : (
           <main className="flex-1 overflow-y-auto">
-            <div className="mx-auto w-full max-w-5xl space-y-6 px-4 py-6 md:px-8 md:py-8">
+            <div
+              className={`mx-auto w-full space-y-6 px-4 py-6 md:px-8 md:py-8 ${
+                activeCategory === "waiver" ? "max-w-none" : "max-w-5xl"
+              }`}
+            >
           {config && activeCategory !== "messages" && (
             <>
               {activeCategory === "settings" && (

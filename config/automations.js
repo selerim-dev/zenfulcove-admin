@@ -31,24 +31,34 @@ export const automationConfig = {
     localFormSlug: "guest-info", // Internal Zenfulcove form slug. When set, this replaces the Jotform waiver link/check.
     jotformFormId: "251834442091050", // Legacy Jotform waiver form ID fallback during migration.
     emails: [
-      // Only 2, 1, and 0 days before check-in are sent; any other days in dashboard config are ignored by cron
-      { daysBeforeCheckin: 2, templateId: "d-REPLACE_ME_JOTFORM_2DAY", label: "Reminder (2 days before)" },
-      { daysBeforeCheckin: 1, templateId: "d-REPLACE_ME_JOTFORM_1DAY", label: "Reminder (1 day before)" },
-      { daysBeforeCheckin: 0, templateId: "d-REPLACE_ME_JOTFORM_0DAY", label: "Reminder (morning of)" },
+      // These are Lodgify booking-thread messages sent by the 11 AM Central cron.
+      { daysBeforeCheckin: 2, subjectTemplate: "Reservation form needed for {{propertyDisplayName}}", messageTemplate: "", label: "Reminder 1" },
+      { daysBeforeCheckin: 1, subjectTemplate: "Reservation form needed for {{propertyDisplayName}}", messageTemplate: "", label: "Reminder 2" },
+      { daysBeforeCheckin: 0, subjectTemplate: "Reservation form needed for {{propertyDisplayName}}", messageTemplate: "", label: "Reminder 3" },
     ],
   },
   accessCodeRelease: {
     enabled: false,
+    waiverLodgifyScheduleVersion: 2,
     deliveryChannel: "lodgify",
-    releaseHourCentral: 11,
+    releaseHourCentral: 15,
     releaseMinuteCentral: 0,
-    releaseDaysBeforeCheckin: 1, // 1 = day before arrival. Day-of final follow-up also runs.
-    immediateReleaseDaysBeforeCheckin: 1, // Form submissions for today/tomorrow release immediately.
+    releaseDaysBeforeCheckin: 1, // 1 = day before arrival.
+    immediateReleaseDaysBeforeCheckin: 1, // Today releases immediately. Tomorrow releases immediately after the 3 PM release threshold.
+    dayOfCodeReleaseHourCentral: 11,
+    dayOfCodeReleaseMinuteCentral: 0,
+    delayedAccessCodePropertyNames: ["Doodle House", "Desert Rose"],
+    delayedAccessCodePropertyIds: [],
     sendgridTemplateId: "", // Legacy only. Access-code delivery now posts to Lodgify booking messages.
     missingFormTemplateId: "", // Legacy only. Missing-form delivery now posts to Lodgify booking messages.
     accessCodeSubjectTemplate: "Access Code for {{propertyDisplayName}}",
+    checkinInfoSubjectTemplate: "Check-in information for {{propertyDisplayName}}",
+    codeOnlySubjectTemplate: "Access code for {{propertyDisplayName}}",
     missingFormSubjectTemplate: "Reservation form needed for {{propertyDisplayName}}",
     accessCodeMessageTemplate: "",
+    checkinInfoMessageTemplate: "",
+    codeOnlyMessageTemplate:
+      "Greetings {{GuestFirstName}},\n\nYour access code for {{propertyDisplayName}} is {{KeyCode}}.\n\nThis code will only work during your reservation time.",
     missingFormMessageTemplate: "",
     lodgifyMessageType: "Owner",
     lodgifySendNotification: true,

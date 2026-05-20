@@ -11,10 +11,27 @@ const KNOWN_UNITS = [
   { id: "754651", name: "Doodle House" },
 ];
 
+const DEFAULT_DELAYED_ACCESS_PROPERTY_NAMES = ["Doodle House", "Desert Rose"];
+
 const DEFAULT_EMAILS = [
-  { daysBeforeCheckin: 2, templateId: "", label: "Reminder (2 days before)" },
-  { daysBeforeCheckin: 1, templateId: "", label: "Reminder (1 day before)" },
-  { daysBeforeCheckin: 0, templateId: "", label: "Reminder (morning of)" },
+  {
+    daysBeforeCheckin: 2,
+    subjectTemplate: "Reservation form needed for {{propertyDisplayName}}",
+    messageTemplate: "",
+    label: "Reminder 1",
+  },
+  {
+    daysBeforeCheckin: 1,
+    subjectTemplate: "Reservation form needed for {{propertyDisplayName}}",
+    messageTemplate: "",
+    label: "Reminder 2",
+  },
+  {
+    daysBeforeCheckin: 0,
+    subjectTemplate: "Reservation form needed for {{propertyDisplayName}}",
+    messageTemplate: "",
+    label: "Reminder 3",
+  },
 ];
 
 const TEMPLATE_VARIABLES = [
@@ -23,22 +40,23 @@ const TEMPLATE_VARIABLES = [
   "Arrival",
   "Departure",
   "KeyCode",
+  "bookingId",
   "propertyDisplayName",
-  "wifiName",
-  "wifiPassword",
   "reservationFormUrl",
   "waiverUrl",
-  "accessMessageHtml",
-  "accessMessageText",
-  "dedicatedKayakText",
-  "amenitiesText",
 ];
 
 const ACCESS_MESSAGE_PLACEHOLDER =
-  "Greetings {{GuestFirstName}},\n\nWe are excited to welcome you to {{propertyDisplayName}}.\n\nCheck-in Date: {{Arrival}}\nCheck-out Date: {{Departure}}\n\nAccess Code: {{KeyCode}}\n\nWi-Fi: {{wifiName}}\nPassword: {{wifiPassword}}\n\n{{reservationFormUrl}}";
+  "Greetings {{GuestFirstName}},\n\nWe are excited to welcome you to {{propertyDisplayName}}.\n\nCheck-in Date: {{Arrival}}\nCheck-out Date: {{Departure}}\n\nAccess Code: {{KeyCode}}";
 
-const MISSING_FORM_MESSAGE_PLACEHOLDER =
-  "Greetings {{GuestFirstName}},\n\nYour stay at {{propertyDisplayName}} is coming up, but the reservation form has not been completed yet.\n\nPlease complete it here:\n{{reservationFormUrl}}\n\nAccess codes are released after the form is submitted.";
+const CHECKIN_INFO_MESSAGE_PLACEHOLDER =
+  "Greetings {{GuestFirstName}},\n\nWe are excited to welcome you to {{propertyDisplayName}}.\n\nCheck-in Date: {{Arrival}}\nCheck-out Date: {{Departure}}\n\nYour access code will be sent on the morning of check-in.";
+
+const CODE_ONLY_MESSAGE_PLACEHOLDER =
+  "Greetings {{GuestFirstName}},\n\nYour access code for {{propertyDisplayName}} is {{KeyCode}}.\n\nThis code will only work during your reservation time.";
+
+const REMINDER_MESSAGE_PLACEHOLDER =
+  "Greetings {{GuestFirstName}},\n\nYour stay at {{propertyDisplayName}} is coming up. Please complete the reservation form before arrival so we can release your access information.\n\nReservation Form: {{reservationFormUrl}}\n\nAccess codes are only released once the form is submitted.";
 
 const DEFAULT_PREVIEW_VALUES = {
   GuestFirstName: "Sample",
@@ -77,53 +95,6 @@ const FORMATTING_BUTTONS = [
   { label: "U", title: "Underline", before: "<u>", after: "</u>", fallback: "underlined text" },
   { label: "Bullets", title: "Bullet list", block: "<ul>\n  <li>First item</li>\n  <li>Second item</li>\n</ul>" },
   { label: "Link", title: "Link", before: '<a href="https://example.com">', after: "</a>", fallback: "link text" },
-];
-
-const SIMPLE_PROPERTY_FIELDS = [
-  { key: "displayName", label: "Display name", placeholder: "SKY CASTLE" },
-  { key: "directionsName", label: "Sign / directions name", placeholder: "SKY CASTLE" },
-  { key: "wifiName", label: "Wi-Fi network", placeholder: "SKYCASTLE" },
-  { key: "wifiPassword", label: "Wi-Fi password", placeholder: "Iamgrateful!" },
-  { key: "kayakLockCode", label: "Kayak lock code", placeholder: "1010" },
-];
-
-const LONG_PROPERTY_FIELDS = [
-  {
-    key: "unitDirections",
-    label: "Arrival directions",
-    placeholder: 'Once you are at Zenfulcove, follow the signs to the "SKY CASTLE"',
-    rows: 2,
-  },
-  {
-    key: "parkingInstructions",
-    label: "Parking instructions",
-    placeholder: "Parking - please park in front of your unit on the white gravel driveway.",
-    rows: 2,
-  },
-  {
-    key: "dedicatedKayakText",
-    label: "Dedicated kayak text",
-    placeholder: "There is one dedicated kayak for this unit...",
-    rows: 3,
-  },
-  {
-    key: "additionalKayakText",
-    label: "Additional kayak text",
-    placeholder: "We have additional kayaks available...",
-    rows: 3,
-  },
-  {
-    key: "amenitiesText",
-    label: "Amenities text",
-    placeholder: "Mention unit-specific amenities or arrival notes...",
-    rows: 3,
-  },
-  {
-    key: "additionalRulesText",
-    label: "Additional rules text",
-    placeholder: "Add unit-specific notes or leave blank to use the default.",
-    rows: 3,
-  },
 ];
 
 function normalizeFormSlug(value) {
@@ -259,6 +230,52 @@ function findMapEntry(map, property) {
   return null;
 }
 
+function configuredList(value, fallback = []) {
+  if (Array.isArray(value)) {
+    const items = value.map((item) => String(item || "").trim()).filter(Boolean);
+    return items.length ? items : fallback;
+  }
+  const raw = String(value || "").trim();
+  if (!raw) return fallback;
+  return raw.split(",").map((item) => item.trim()).filter(Boolean);
+}
+
+function delayedAccessPropertyNames(codeRelease = {}) {
+  return configuredList(
+    codeRelease.delayedAccessCodePropertyNames,
+    DEFAULT_DELAYED_ACCESS_PROPERTY_NAMES
+  );
+}
+
+function isDelayedAccessProperty(property, messageData = {}, codeRelease = {}) {
+  if (messageData.delayAccessCodeUntilCheckinDay === true) return true;
+  if (messageData.delayAccessCodeUntilCheckinDay === false) return false;
+
+  const delayedIds = configuredList(codeRelease.delayedAccessCodePropertyIds);
+  const propertyId = String(property?.id || "").trim();
+  if (propertyId && delayedIds.includes(propertyId)) return true;
+
+  const delayedNames = delayedAccessPropertyNames(codeRelease).map(normalizeLookupKey);
+  const candidates = [
+    property?.name,
+    property?.key,
+    messageData.displayName,
+    messageData.propertyDisplayName,
+    messageData.directionsName,
+  ]
+    .map(normalizeLookupKey)
+    .filter(Boolean);
+
+  return candidates.some((candidate) =>
+    delayedNames.some(
+      (delayed) =>
+        candidate === delayed ||
+        candidate.includes(delayed) ||
+        delayed.includes(candidate)
+    )
+  );
+}
+
 function Chevron({ open }) {
   return (
     <svg
@@ -338,7 +355,7 @@ function CollapsibleSection({ title, description, badge, open, onToggle, childre
 
 function SettingsDisclosure({ title, description, badge, open, onToggle, children }) {
   return (
-    <div className="rounded-xl border border-sand/80 bg-white">
+    <div className="rounded-lg border border-sand/80 bg-white">
       <button
         type="button"
         onClick={onToggle}
@@ -366,6 +383,53 @@ function SettingsDisclosure({ title, description, badge, open, onToggle, childre
   );
 }
 
+function VariablesPopover() {
+  return (
+    <div className="group relative">
+      <button
+        type="button"
+        title="Standard variables"
+        className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-sand bg-white font-mono text-[13px] font-semibold text-forest transition hover:border-grove hover:text-grove focus:outline-none focus:ring-2 focus:ring-grove/30"
+      >
+        {"{}"}
+      </button>
+      <div className="invisible absolute right-0 top-10 z-20 w-[min(22rem,calc(100vw-2rem))] rounded-lg border border-sand bg-white p-3 opacity-0 shadow-lg transition group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100">
+        <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-forest/50">
+          Variables
+        </div>
+        <div className="grid grid-cols-1 gap-1.5 text-xs sm:grid-cols-2">
+          {TEMPLATE_VARIABLES.map((variable) => (
+            <span
+              key={variable}
+              className="rounded border border-sand/80 bg-cream/30 px-2 py-1 font-mono text-forest/80"
+            >
+              {`{{${variable}}}`}
+            </span>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function InfoTooltip({ label, children }) {
+  return (
+    <span className="group relative inline-flex align-middle">
+      <span
+        role="img"
+        aria-label={label}
+        title={label}
+        className="inline-flex h-6 w-6 cursor-help items-center justify-center rounded-full border border-sand bg-white text-[11px] font-bold text-forest/60 transition group-hover:border-grove group-hover:text-grove"
+      >
+        i
+      </span>
+      <span className="pointer-events-none invisible absolute left-1/2 top-8 z-30 w-[min(20rem,calc(100vw-2rem))] -translate-x-1/2 rounded-lg border border-sand bg-white px-3 py-2 text-left text-xs font-normal leading-relaxed text-forest/70 opacity-0 shadow-lg transition group-hover:visible group-hover:opacity-100">
+        {children}
+      </span>
+    </span>
+  );
+}
+
 function Field({ label, value, onChange, placeholder, type = "text", mono = false, helper }) {
   return (
     <label className="block text-xs text-forest/60">
@@ -384,18 +448,19 @@ function Field({ label, value, onChange, placeholder, type = "text", mono = fals
   );
 }
 
-function TextAreaField({ label, value, onChange, placeholder, rows = 3, helper }) {
+function InlineField({ label, value, onChange, placeholder, type = "text", mono = false }) {
   return (
     <label className="block text-xs text-forest/60">
       <span className="uppercase tracking-wider">{label}</span>
-      <textarea
+      <input
+        type={type}
         value={value ?? ""}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
-        rows={rows}
-        className="mt-1 block w-full rounded-lg border border-sand px-3 py-2 text-sm text-forest focus:outline-none focus:ring-2 focus:ring-grove/30"
+        className={`mt-1 h-10 w-full rounded-lg border border-sand px-3 text-sm text-forest focus:outline-none focus:ring-2 focus:ring-grove/30 ${
+          mono ? "font-mono" : ""
+        }`}
       />
-      {helper ? <span className="mt-1 block text-xs text-forest/40">{helper}</span> : null}
     </label>
   );
 }
@@ -442,18 +507,21 @@ function RichMessageField({
     <div className="block text-xs text-forest/60">
       <span className="uppercase tracking-wider">{label}</span>
       <div className="mt-1 rounded-lg border border-sand bg-white">
-        <div className="flex flex-wrap gap-1 border-b border-sand/80 bg-cream/40 p-2">
-          {FORMATTING_BUTTONS.map((format) => (
-            <button
-              key={format.title}
-              type="button"
-              title={format.title}
-              onClick={() => insertFormatting(format)}
-              className="rounded-md border border-sand bg-white px-2.5 py-1 text-xs font-semibold text-forest transition hover:border-grove hover:text-grove"
-            >
-              {format.label}
-            </button>
-          ))}
+        <div className="flex items-center justify-between gap-2 border-b border-sand/80 bg-cream/40 p-2">
+          <div className="flex flex-wrap gap-1">
+            {FORMATTING_BUTTONS.map((format) => (
+              <button
+                key={format.title}
+                type="button"
+                title={format.title}
+                onClick={() => insertFormatting(format)}
+                className="rounded-md border border-sand bg-white px-2.5 py-1 text-xs font-semibold text-forest transition hover:border-grove hover:text-grove"
+              >
+                {format.label}
+              </button>
+            ))}
+          </div>
+          <VariablesPopover />
         </div>
         <textarea
           ref={textareaRef}
@@ -514,9 +582,9 @@ export default function WaiverPanel({
   const [accessOpen, setAccessOpen] = useState(true);
   const [deliverySettingsOpen, setDeliverySettingsOpen] = useState(true);
   const [accessTemplateOpen, setAccessTemplateOpen] = useState(false);
-  const [missingTemplateOpen, setMissingTemplateOpen] = useState(false);
-  const [variablesOpen, setVariablesOpen] = useState(false);
   const [propertySettingsOpen, setPropertySettingsOpen] = useState(false);
+  const [propertyMessageOpen, setPropertyMessageOpen] = useState(false);
+  const [dayOfCodeMessageOpen, setDayOfCodeMessageOpen] = useState(false);
   const [lodgifyProperties, setLodgifyProperties] = useState([]);
   const [lodgifyPropertiesStatus, setLodgifyPropertiesStatus] = useState("loading");
   const [selectedPropertyKey, setSelectedPropertyKey] = useState("");
@@ -600,15 +668,27 @@ export default function WaiverPanel({
       ? selectedMessageEntry.value
       : {};
   const selectedStaticCode = selectedCodeEntry?.value || "";
-  const selectedCodeSource =
-    selectedMessageData.codeSource || (selectedStaticCode ? "static" : "jervis");
+  const selectedDelayedAccess = isDelayedAccessProperty(
+    selectedProperty,
+    selectedMessageData,
+    codeRelease
+  );
   const previewValues = buildPreviewValues({
     selectedProperty,
     selectedMessageData,
     currentFormSlug,
   });
+  const checkinInfoPreviewValues = selectedDelayedAccess
+    ? { ...previewValues, KeyCode: "", accessCode: "", code: "" }
+    : previewValues;
+  const codeOnlyPreviewValues = {
+    ...previewValues,
+    KeyCode: selectedStaticCode || DEFAULT_PREVIEW_VALUES.KeyCode,
+    accessCode: selectedStaticCode || DEFAULT_PREVIEW_VALUES.accessCode,
+    code: selectedStaticCode || DEFAULT_PREVIEW_VALUES.code,
+  };
   const reminderFormUrl = currentFormSlug ? `/forms/${currentFormSlug}` : "";
-  const activeReminderCount = emails.filter((email) => email.templateId).length;
+  const activeReminderCount = emails.length;
   const propertyStatusLabel =
     lodgifyPropertiesStatus === "loaded"
       ? `${lodgifyProperties.length} Lodgify loaded`
@@ -675,25 +755,6 @@ export default function WaiverPanel({
     updateCodeRelease("propertyCodes", propertyCodes);
   }
 
-  function updateCodeSource(key, source) {
-    const propertyMessageData = { ...(codeRelease.propertyMessageData || {}) };
-    const current =
-      propertyMessageData[key] && typeof propertyMessageData[key] === "object"
-        ? { ...propertyMessageData[key] }
-        : {};
-    current.codeSource = source;
-    propertyMessageData[key] = current;
-
-    const propertyCodes = { ...(codeRelease.propertyCodes || {}) };
-    if (source === "jervis") delete propertyCodes[key];
-
-    onAccessCodeReleaseChange?.({
-      ...codeRelease,
-      propertyMessageData,
-      propertyCodes,
-    });
-  }
-
   function updateEmail(index, field, value) {
     const list = [...emails];
     list[index] = { ...list[index], [field]: value };
@@ -703,7 +764,15 @@ export default function WaiverPanel({
   function addEmail() {
     onChange({
       ...safeConfig,
-      emails: [...emails, { daysBeforeCheckin: 1, templateId: "", label: "Reminder" }],
+      emails: [
+        ...emails,
+        {
+          daysBeforeCheckin: 1,
+          subjectTemplate: "Reservation form needed for {{propertyDisplayName}}",
+          messageTemplate: "",
+          label: "Reminder",
+        },
+      ],
     });
   }
 
@@ -807,9 +876,9 @@ export default function WaiverPanel({
       </Card>
 
       <CollapsibleSection
-        title="Reminder emails"
-        description="Uses SendGrid templates for pre-arrival form reminders. Configure the send offsets below."
-        badge={`${activeReminderCount}/${emails.length} templates set`}
+        title="Reminder messages"
+        description="Uses Lodgify booking-thread messages for guests who have not completed the selected form. The scheduled cron posts these at 11 AM Central."
+        badge={`${activeReminderCount} reminders`}
         open={remindersOpen}
         onToggle={() => setRemindersOpen((value) => !value)}
       >
@@ -843,19 +912,28 @@ export default function WaiverPanel({
                   helper="0 = morning of stay"
                 />
                 <Field
-                  label="SendGrid template ID"
-                  value={email.templateId || ""}
-                  onChange={(value) => updateEmail(index, "templateId", value)}
-                  placeholder="d-xxxxxxxx"
-                  mono
+                  label="Subject"
+                  value={email.subjectTemplate || ""}
+                  onChange={(value) => updateEmail(index, "subjectTemplate", value)}
+                  placeholder="Reservation form needed for {{propertyDisplayName}}"
+                  helper="Supports standard variables."
                 />
               </div>
-              <div className="mt-3">
+              <div className="mt-3 grid grid-cols-1 gap-4">
                 <Field
                   label="Label"
                   value={email.label || ""}
                   onChange={(value) => updateEmail(index, "label", value)}
-                  placeholder="2 days before"
+                  placeholder="Reminder 1"
+                />
+                <RichMessageField
+                  label="Lodgify message"
+                  value={email.messageTemplate || ""}
+                  onChange={(value) => updateEmail(index, "messageTemplate", value)}
+                  placeholder={REMINDER_MESSAGE_PLACEHOLDER}
+                  rows={7}
+                  helper="Leave blank to use the built-in reminder copy."
+                  previewValues={previewValues}
                 />
               </div>
             </div>
@@ -873,7 +951,7 @@ export default function WaiverPanel({
 
       <CollapsibleSection
         title="Access code release"
-        description="Uses Lodgify booking-thread messages for gated access-code release, missing-form notices, immediate releases after form submission, and dry-run/live testing."
+        description="Uses Lodgify booking-thread messages for gated access-code release. Normal properties release codes at 3 PM Central the day before check-in. Doodle House and Desert Rose send no-code check-in info then, and a code-only message at 11 AM on check-in day."
         badge={codeRelease.enabled ? "Enabled" : "Disabled"}
         open={accessOpen}
         onToggle={() => setAccessOpen((value) => !value)}
@@ -891,7 +969,7 @@ export default function WaiverPanel({
                 <div>
                   <h4 className="text-sm font-semibold text-forest">Code release automation</h4>
                   <p className="mt-1 text-xs text-forest/50">
-                    Delivery is through Lodgify booking messages. The cron checks this release time in Central time.
+                    Delivery is through Lodgify booking messages. The access-code cron only releases completed forms at this Central time.
                   </p>
                 </div>
                 <div className="flex items-center gap-3">
@@ -917,7 +995,7 @@ export default function WaiverPanel({
                 <Field
                   label="Release hour Central"
                   type="number"
-                  value={codeRelease.releaseHourCentral ?? 11}
+                  value={codeRelease.releaseHourCentral ?? 15}
                   onChange={(value) =>
                     updateCodeRelease(
                       "releaseHourCentral",
@@ -942,8 +1020,8 @@ export default function WaiverPanel({
           </SettingsDisclosure>
 
           <SettingsDisclosure
-            title="Template 1: access code message"
-            description="Posted to the Lodgify booking thread when the selected form is complete."
+            title="Fallback access code message"
+            description="Used only when a selected property does not have its own access-code message."
             badge={codeRelease.accessCodeMessageTemplate ? "Custom" : "Default"}
             open={accessTemplateOpen}
             onToggle={() => setAccessTemplateOpen((value) => !value)}
@@ -969,132 +1047,216 @@ export default function WaiverPanel({
           </SettingsDisclosure>
 
           <SettingsDisclosure
-            title="Template 2: missing form message"
-            description="Posted through Lodgify when the form is missing, including the final follow-up."
-            badge={codeRelease.missingFormMessageTemplate ? "Custom" : "Default"}
-            open={missingTemplateOpen}
-            onToggle={() => setMissingTemplateOpen((value) => !value)}
-          >
-            <div className="space-y-4">
-              <Field
-                label="Subject"
-                value={codeRelease.missingFormSubjectTemplate || ""}
-                onChange={(value) => updateCodeRelease("missingFormSubjectTemplate", value)}
-                placeholder="Reservation form needed for {{propertyDisplayName}}"
-                helper="Supports the same variables as the message body."
-              />
-              <RichMessageField
-                label="Lodgify message"
-                value={codeRelease.missingFormMessageTemplate || ""}
-                onChange={(value) => updateCodeRelease("missingFormMessageTemplate", value)}
-                placeholder={MISSING_FORM_MESSAGE_PLACEHOLDER}
-                rows={7}
-                helper="Used for the day-before missing-form message and the day-of final follow-up."
-                previewValues={previewValues}
-              />
-            </div>
-          </SettingsDisclosure>
-
-          <SettingsDisclosure
-            title="Standard variables"
-            description="Variables available in the Lodgify subjects and messages."
-            open={variablesOpen}
-            onToggle={() => setVariablesOpen((value) => !value)}
-          >
-            <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-3">
-              {TEMPLATE_VARIABLES.map((variable) => (
-                <span
-                  key={variable}
-                  className="rounded border border-sand bg-white px-2 py-1 font-mono text-forest/80"
-                >
-                  {`{{${variable}}}`}
-                </span>
-              ))}
-            </div>
-          </SettingsDisclosure>
-
-          <SettingsDisclosure
             title="Property message settings"
-            description="Choose one property and edit the values used in guest messages and the guest portal."
+            description="Choose one property and write the Lodgify message for that property."
             badge={propertyStatusLabel}
             open={propertySettingsOpen}
             onToggle={() => setPropertySettingsOpen((value) => !value)}
           >
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-[minmax(220px,320px)_1fr]">
-              <label className="block text-xs uppercase tracking-wider text-forest/60">
-                Property
-                <select
-                  value={selectedKey}
-                  onChange={(event) => setSelectedPropertyKey(event.target.value)}
-                  className="mt-1 block w-full rounded-lg border border-sand bg-white px-3 py-2 text-sm text-forest focus:outline-none focus:ring-2 focus:ring-grove/30"
-                >
-                  {propertyRows.map((property) => (
-                    <option key={property.key} value={property.key}>
-                      {property.name}
-                    </option>
-                  ))}
-                </select>
-                {selectedProperty?.id ? (
-                  <span className="mt-1 block text-xs normal-case tracking-normal text-forest/40">
-                    Lodgify ID {selectedProperty.id}
-                  </span>
-                ) : null}
-              </label>
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 items-start gap-4 border-b border-sand/70 pb-4 xl:grid-cols-[minmax(240px,360px)_auto_minmax(160px,220px)_1fr]">
+                <label className="block text-xs uppercase tracking-wider text-forest/60">
+                  Property
+                  <select
+                    value={selectedKey}
+                    onChange={(event) => setSelectedPropertyKey(event.target.value)}
+                    className="mt-1 block w-full rounded-lg border border-sand bg-white px-3 py-2 text-sm text-forest focus:outline-none focus:ring-2 focus:ring-grove/30"
+                  >
+                    {propertyRows.map((property) => (
+                      <option key={property.key} value={property.key}>
+                        {property.name}
+                      </option>
+                    ))}
+                  </select>
+                  {selectedProperty?.id ? (
+                    <span className="mt-1 block text-xs normal-case tracking-normal text-forest/40">
+                      Lodgify ID {selectedProperty.id}
+                    </span>
+                  ) : null}
+                </label>
 
-              <div className="rounded-xl bg-cream/40 p-4">
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  {SIMPLE_PROPERTY_FIELDS.map((field) => (
-                    <Field
-                      key={field.key}
-                      label={field.label}
-                      value={selectedMessageData[field.key] || ""}
-                      onChange={(value) =>
-                        updatePropertyMessageField(selectedConfigKey, field.key, value)
-                      }
-                      placeholder={field.placeholder}
-                    />
-                  ))}
+                <div>
+                  <div className="text-xs uppercase tracking-wider text-forest/60">
+                    Release behavior
+                  </div>
+                  <div className="mt-1 flex min-h-10 items-center gap-2">
+                    <span className="inline-flex h-10 items-center rounded-full border border-sand bg-cream/40 px-3 text-xs font-semibold text-forest/70">
+                      {selectedDelayedAccess
+                        ? "No-code 3 PM; code 11 AM"
+                        : "Dynamic code at 3 PM"}
+                    </span>
+                    <InfoTooltip label="Release behavior details">
+                      {selectedDelayedAccess
+                        ? "This property uses a fixed code. The full welcome/check-in message is sent without the code at 3 PM the day before, then a short code-only message sends at 11 AM on check-in day."
+                        : "The access code is generated through Jervis and included in this property's 3 PM day-before Lodgify message."}
+                    </InfoTooltip>
+                  </div>
+                </div>
 
-                  <label className="block text-xs uppercase tracking-wider text-forest/60">
-                    Access code
-                    <select
-                      value={selectedCodeSource}
-                      onChange={(event) =>
-                        updateCodeSource(selectedConfigKey, event.target.value)
-                      }
-                      className="mt-1 block w-full rounded-lg border border-sand bg-white px-3 py-2 text-sm text-forest focus:outline-none focus:ring-2 focus:ring-grove/30"
-                    >
-                      <option value="jervis">Generated dynamically</option>
-                      <option value="static">Fixed code</option>
-                    </select>
-                  </label>
+                {selectedDelayedAccess ? (
+                  <InlineField
+                    label="Day-of fixed code"
+                    value={selectedStaticCode}
+                    onChange={(value) => setPropertyCode(selectedCodeKey, value)}
+                    placeholder="1968"
+                    mono
+                  />
+                ) : (
+                  <div className="hidden xl:block" />
+                )}
 
-                  {selectedCodeSource === "static" ? (
-                    <Field
-                      label="Fixed access code"
-                      value={selectedStaticCode}
-                      onChange={(value) => setPropertyCode(selectedCodeKey, value)}
-                      placeholder="1968"
-                      mono
-                    />
+                <div className="flex min-h-10 items-end xl:justify-end">
+                  {selectedDelayedAccess ? (
+                    <InfoTooltip label="Delayed code message guidance">
+                      Keep <code>{"{{KeyCode}}"}</code> out of the day-before welcome message. Use <code>{"{{KeyCode}}"}</code> only in the 11 AM day-of code message.
+                    </InfoTooltip>
                   ) : null}
                 </div>
-
-                <div className="mt-4 grid grid-cols-1 gap-3">
-                  {LONG_PROPERTY_FIELDS.map((field) => (
-                    <TextAreaField
-                      key={field.key}
-                      label={field.label}
-                      value={selectedMessageData[field.key] || ""}
-                      onChange={(value) =>
-                        updatePropertyMessageField(selectedConfigKey, field.key, value)
-                      }
-                      placeholder={field.placeholder}
-                      rows={field.rows}
-                    />
-                  ))}
-                </div>
               </div>
+
+              <div className="border-b border-sand/70 pb-4">
+                <button
+                  type="button"
+                  onClick={() => setPropertyMessageOpen((value) => !value)}
+                  className="flex w-full items-center justify-between gap-4 py-2 text-left"
+                >
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h5 className="text-sm font-semibold text-forest">
+                        {selectedDelayedAccess
+                          ? "Day-before welcome message"
+                          : "Property access-code message"}
+                      </h5>
+                      {selectedDelayedAccess ? (
+                        <InfoTooltip label="Day-before message guidance">
+                          This message is sent at 3 PM the day before check-in after the selected form is complete. It should not include <code>{"{{KeyCode}}"}</code>.
+                        </InfoTooltip>
+                      ) : null}
+                    </div>
+                    <p className="mt-1 text-xs leading-relaxed text-forest/50">
+                      {selectedDelayedAccess
+                        ? "Full welcome/check-in message."
+                        : "Lodgify message for the selected property."}
+                    </p>
+                  </div>
+                  <span className="flex items-center gap-2">
+                    <span className="hidden rounded-full border border-sand bg-cream px-3 py-1 text-xs text-forest/60 sm:inline-flex">
+                      {selectedProperty?.name || "Selected property"}
+                    </span>
+                    <span className="rounded-full border border-sand p-1.5 text-forest/60">
+                      <Chevron open={propertyMessageOpen} />
+                    </span>
+                  </span>
+                </button>
+
+                {propertyMessageOpen ? (
+                  <div className="mt-3 space-y-4">
+                    <Field
+                      label="Subject"
+                      value={selectedMessageData.accessCodeSubjectTemplate || ""}
+                      onChange={(value) =>
+                        updatePropertyMessageField(
+                          selectedConfigKey,
+                          "accessCodeSubjectTemplate",
+                          value
+                        )
+                      }
+                      placeholder={
+                        selectedDelayedAccess
+                          ? "Check-in information for {{propertyDisplayName}}"
+                          : "Access Code for {{propertyDisplayName}}"
+                      }
+                    />
+                    <RichMessageField
+                      label="Lodgify message"
+                      value={selectedMessageData.accessCodeMessageTemplate || ""}
+                      onChange={(value) =>
+                        updatePropertyMessageField(
+                          selectedConfigKey,
+                          "accessCodeMessageTemplate",
+                          value
+                        )
+                      }
+                      placeholder={
+                        selectedDelayedAccess
+                          ? CHECKIN_INFO_MESSAGE_PLACEHOLDER
+                          : ACCESS_MESSAGE_PLACEHOLDER
+                      }
+                      rows={12}
+                      helper={
+                        selectedDelayedAccess
+                          ? "Leave blank to use the built-in no-code check-in information message."
+                          : "Leave blank to use the fallback access-code message."
+                      }
+                      previewValues={
+                        selectedDelayedAccess ? checkinInfoPreviewValues : previewValues
+                      }
+                    />
+                  </div>
+                ) : null}
+              </div>
+
+              {selectedDelayedAccess ? (
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => setDayOfCodeMessageOpen((value) => !value)}
+                    className="flex w-full items-center justify-between gap-4 py-2 text-left"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h5 className="text-sm font-semibold text-forest">
+                          Day-of code message
+                        </h5>
+                        <span className="rounded-full border border-sand bg-cream px-2.5 py-0.5 text-[11px] font-medium text-forest/60">
+                          Code-only
+                        </span>
+                        <InfoTooltip label="Day-of code message guidance">
+                          Sent at 11 AM Central on check-in day after the selected form is complete. This should be short and should include <code>{"{{KeyCode}}"}</code>.
+                        </InfoTooltip>
+                      </div>
+                      <p className="mt-1 text-xs leading-relaxed text-forest/50">
+                        Short message with the fixed code for this property.
+                      </p>
+                    </div>
+                    <span className="rounded-full border border-sand p-1.5 text-forest/60">
+                      <Chevron open={dayOfCodeMessageOpen} />
+                    </span>
+                  </button>
+
+                  {dayOfCodeMessageOpen ? (
+                    <div className="mt-3 space-y-4">
+                      <Field
+                        label="Subject"
+                        value={selectedMessageData.codeOnlySubjectTemplate || ""}
+                        onChange={(value) =>
+                          updatePropertyMessageField(
+                            selectedConfigKey,
+                            "codeOnlySubjectTemplate",
+                            value
+                          )
+                        }
+                        placeholder="Access code for {{propertyDisplayName}}"
+                      />
+                      <RichMessageField
+                        label="Lodgify message"
+                        value={selectedMessageData.codeOnlyMessageTemplate || ""}
+                        onChange={(value) =>
+                          updatePropertyMessageField(
+                            selectedConfigKey,
+                            "codeOnlyMessageTemplate",
+                            value
+                          )
+                        }
+                        placeholder={CODE_ONLY_MESSAGE_PLACEHOLDER}
+                        rows={6}
+                        helper="Leave blank to use the built-in short code-only message."
+                        previewValues={codeOnlyPreviewValues}
+                      />
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
           </SettingsDisclosure>
         </div>
@@ -1107,7 +1269,7 @@ export default function WaiverPanel({
               <div>
                 <h3 className="font-serif text-xl text-forest">Test Access Code Release</h3>
                 <p className="mt-1 text-sm leading-relaxed text-forest/60">
-                  Sample preview renders both Lodgify messages without using Lodgify. Dry run checks today and tomorrow arrivals without posting. A live test requires a Lodgify booking ID and posts a test-prefixed message into that booking thread.
+                  Sample preview renders the selected property release messages and a waiver reminder without using Lodgify. For Doodle House and Desert Rose it shows both the no-code welcome and code-only message. Dry run checks the sweep without posting. A live test requires a Lodgify booking ID and posts a test-prefixed message into that booking thread.
                 </p>
               </div>
               <button

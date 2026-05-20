@@ -1,16 +1,24 @@
 {
   "crons": [
     {
-      "path": "/api/cron",
+      "path": "/api/cron?automation=vacancy,popup,event-popup,syncs",
       "schedule": "0 14 * * *"
     },
     {
-      "path": "/api/cron?automation=access-code-release&window=central-daylight",
+      "path": "/api/cron?automation=waiver,access-code-day-of&centralHour=11",
       "schedule": "0 16 * * *"
     },
     {
-      "path": "/api/cron?automation=access-code-release&window=central-standard",
+      "path": "/api/cron?automation=waiver,access-code-day-of&centralHour=11",
       "schedule": "0 17 * * *"
+    },
+    {
+      "path": "/api/cron?automation=access-code-release&centralHour=15",
+      "schedule": "0 20 * * *"
+    },
+    {
+      "path": "/api/cron?automation=access-code-release&centralHour=15",
+      "schedule": "0 21 * * *"
     }
   ]
 }
