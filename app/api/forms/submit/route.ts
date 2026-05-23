@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
+import { appendLogs } from "@/lib/activity-log";
 import { hasSupabaseAdminEnv } from "@/lib/supabaseEnv";
 import {
   createLocalFormSubmission,
@@ -19,6 +20,8 @@ type UploadedInput = {
   file: File;
   kind: "file" | "image" | "signature";
 };
+
+type SubmittedContact = ReturnType<typeof extractSubmittedContact>;
 
 function parseSchemaFields(form: { schema?: unknown }) {
   const schema = form.schema && typeof form.schema === "object" ? form.schema : {};
@@ -137,8 +140,105 @@ async function readRequest(request: Request) {
   };
 }
 
+type ParsedSubmission = Awaited<ReturnType<typeof readRequest>>;
+
+function safeLogValue(value: unknown, maxLength = 120) {
+  return String(value ?? "")
+    .trim()
+    .slice(0, maxLength);
+}
+
+function bookingCodeFromPayload(payload?: Record<string, unknown>) {
+  if (!payload) return "";
+  for (const key of [
+    "bookingCode",
+    "bookingId",
+    "booking_id",
+    "confirmationCode",
+    "reservationId",
+  ]) {
+    const value = safeLogValue(payload[key], 80);
+    if (value) return value;
+  }
+  return "";
+}
+
+function maskEmail(email?: string) {
+  const value = safeLogValue(email, 160);
+  const [local, domain] = value.split("@");
+  if (!local || !domain) return "";
+  return `${local.slice(0, 2)}***@${domain}`;
+}
+
+function summarizeUploads(uploads: UploadedInput[] = []) {
+  const totalBytes = uploads.reduce((sum, upload) => sum + upload.file.size, 0);
+  return {
+    count: uploads.length,
+    totalBytes,
+    fields: uploads.map((upload) => ({
+      fieldName: upload.fieldName,
+      kind: upload.kind,
+      size: upload.file.size,
+      contentType: upload.file.type || "application/octet-stream",
+    })),
+  };
+}
+
+async function recordSubmitLog({
+  status,
+  action,
+  formSlug,
+  parsed,
+  contact,
+  submissionId,
+  httpStatus,
+  error,
+}: {
+  status: "success" | "failed" | "info";
+  action: string;
+  formSlug?: string;
+  parsed?: ParsedSubmission;
+  contact?: SubmittedContact;
+  submissionId?: string;
+  httpStatus?: number;
+  error?: unknown;
+}) {
+  const payload = parsed?.payload || {};
+  const errorMessage =
+    error instanceof Error ? error.message : error ? safeLogValue(error) : "";
+
+  try {
+    await appendLogs([
+      {
+        timestamp: new Date().toISOString(),
+        automation: "Internal Form Submit",
+        property: formSlug || parsed?.formSlug || "unknown form",
+        action,
+        status,
+        formSlug: formSlug || parsed?.formSlug || "",
+        source: parsed?.source || "",
+        preview: Boolean(parsed?.preview),
+        bookingCode: bookingCodeFromPayload(payload),
+        email: maskEmail(contact?.email || safeLogValue(payload.email)),
+        submissionId: submissionId || "",
+        httpStatus: httpStatus || null,
+        error: errorMessage,
+        uploads: summarizeUploads(parsed?.uploads),
+      },
+    ]);
+  } catch (logErr) {
+    const message = logErr instanceof Error ? logErr.message : String(logErr);
+    console.warn("[forms-submit] Failed to write submit activity log:", message);
+  }
+}
+
 export async function POST(request: Request) {
   if (!hasSupabaseAdminEnv()) {
+    await recordSubmitLog({
+      status: "failed",
+      action: "Form submit rejected: local form database is not configured.",
+      httpStatus: 503,
+    });
     return NextResponse.json(
       { error: "Local form database is not configured yet." },
       { status: 503 }
@@ -148,12 +248,24 @@ export async function POST(request: Request) {
   let parsed: Awaited<ReturnType<typeof readRequest>>;
   try {
     parsed = await readRequest(request);
-  } catch {
+  } catch (err) {
+    await recordSubmitLog({
+      status: "failed",
+      action: "Form submit rejected: invalid request payload.",
+      httpStatus: 400,
+      error: err,
+    });
     return NextResponse.json({ error: "Invalid form submission." }, { status: 400 });
   }
 
   const formSlug = parsed.formSlug;
   if (!formSlug) {
+    await recordSubmitLog({
+      status: "failed",
+      action: "Form submit rejected: missing form slug.",
+      parsed,
+      httpStatus: 400,
+    });
     return NextResponse.json({ error: "Form slug is required." }, { status: 400 });
   }
 
@@ -164,6 +276,13 @@ export async function POST(request: Request) {
 
   const form = await getLocalFormBySlug(formSlug);
   if (!form || (form.is_active === false && !isTrustedPreview)) {
+    await recordSubmitLog({
+      status: "failed",
+      action: "Form submit rejected: form not found or inactive.",
+      formSlug,
+      parsed,
+      httpStatus: 404,
+    });
     return NextResponse.json({ error: "Form not found." }, { status: 404 });
   }
 
@@ -174,12 +293,27 @@ export async function POST(request: Request) {
     uploads: parsed.uploads,
   });
   if (requiredError) {
+    await recordSubmitLog({
+      status: "failed",
+      action: `Form submit rejected: ${requiredError}`,
+      formSlug,
+      parsed,
+      httpStatus: 400,
+    });
     return NextResponse.json({ error: requiredError }, { status: 400 });
   }
 
   const contact = extractSubmittedContact({ payload: parsed.payload });
 
   if (contact.email && !EMAIL_RE.test(contact.email)) {
+    await recordSubmitLog({
+      status: "failed",
+      action: "Form submit rejected: invalid email address.",
+      formSlug,
+      parsed,
+      contact,
+      httpStatus: 400,
+    });
     return NextResponse.json(
       { error: "Enter a valid email address." },
       { status: 400 }
@@ -194,12 +328,22 @@ export async function POST(request: Request) {
       });
     }
   } catch (err) {
+    const message =
+      err instanceof Error
+        ? err.message
+        : "One of the uploaded files could not be accepted.";
+    await recordSubmitLog({
+      status: "failed",
+      action: `Form submit rejected: ${message}`,
+      formSlug,
+      parsed,
+      contact,
+      httpStatus: 400,
+      error: err,
+    });
     return NextResponse.json(
       {
-        error:
-          err instanceof Error
-            ? err.message
-            : "One of the uploaded files could not be accepted.",
+        error: message,
       },
       { status: 400 }
     );
@@ -260,10 +404,20 @@ export async function POST(request: Request) {
       finalSubmissionPayload = nextPayload;
     }
   } catch (err) {
+    const message =
+      err instanceof Error ? err.message : "Could not submit the form.";
+    await recordSubmitLog({
+      status: "failed",
+      action: `Form submit failed after validation: ${message}`,
+      formSlug,
+      parsed,
+      contact,
+      httpStatus: 500,
+      error: err,
+    });
     return NextResponse.json(
       {
-        error:
-          err instanceof Error ? err.message : "Could not submit the form.",
+        error: message,
       },
       { status: 500 }
     );
@@ -289,8 +443,27 @@ export async function POST(request: Request) {
             ? err.message
             : "Failed to run same-day access code release.",
       };
+      await recordSubmitLog({
+        status: "failed",
+        action: `Form submitted, but access-code release failed: ${accessCodeRelease.action}`,
+        formSlug,
+        parsed,
+        contact,
+        submissionId: submission.id,
+        error: err,
+      });
     }
   }
+
+  await recordSubmitLog({
+    status: "success",
+    action: "Internal form submitted successfully.",
+    formSlug,
+    parsed,
+    contact,
+    submissionId: submission.id,
+    httpStatus: 200,
+  });
 
   return NextResponse.json({
     ok: true,
