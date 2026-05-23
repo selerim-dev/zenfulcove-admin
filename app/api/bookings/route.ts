@@ -259,7 +259,8 @@ export async function POST(req: Request) {
   }
 
   if (!isComplimentary) {
-    const stripe = createStripeClient();
+    const stripeMode = getKayakStripeMode();
+    const stripe = createStripeClient(stripeMode);
     const baseUrl = getAppBaseUrl(req);
     const successUrl = `${baseUrl}/book/confirmation/${inserted.id}?session_id={CHECKOUT_SESSION_ID}`;
     const cancelToken = createBookingCancelToken({
@@ -282,7 +283,9 @@ export async function POST(req: Request) {
       kayakId: kayak.id,
       referenceCode: inserted.reference_code,
     };
-    const priceData = kayak.stripe_product_id
+    const useStoredStripeProduct =
+      stripeMode === "live" && Boolean(kayak.stripe_product_id);
+    const priceData = useStoredStripeProduct
       ? {
           currency: "usd",
           unit_amount: amountCents,
