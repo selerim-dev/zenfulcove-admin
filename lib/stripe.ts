@@ -1,36 +1,84 @@
 import Stripe from "stripe";
 
-let cachedStripe: Stripe | null = null;
+type KayakStripeMode = "test" | "live";
+
+const cachedStripeClients: Partial<Record<KayakStripeMode, Stripe>> = {};
+
+function truthyEnv(value: string | undefined) {
+  return ["1", "true", "yes", "on"].includes(
+    String(value || "").trim().toLowerCase()
+  );
+}
+
+export function getKayakStripeMode(): KayakStripeMode {
+  const mode = String(process.env.KAYAK_STRIPE_MODE || "test")
+    .trim()
+    .toLowerCase();
+  if (mode === "live") return "live";
+  if (mode === "test") return "test";
+  throw new Error("KAYAK_STRIPE_MODE must be either test or live.");
+}
+
+export function isKayakPaidCheckoutEnabled() {
+  return truthyEnv(process.env.KAYAK_PAID_CHECKOUT_ENABLED);
+}
+
+function stripeSecretKey(mode = getKayakStripeMode()) {
+  if (mode === "live") {
+    return process.env.STRIPE_LIVE_SECRET_KEY || process.env.STRIPE_SECRET_KEY;
+  }
+  return process.env.STRIPE_TEST_SECRET_KEY || process.env.STRIPE_SECRET_KEY;
+}
+
+function stripeWebhookSecret(mode = getKayakStripeMode()) {
+  if (mode === "live") {
+    return (
+      process.env.STRIPE_LIVE_WEBHOOK_SECRET ||
+      process.env.STRIPE_WEBHOOK_SECRET
+    );
+  }
+  return (
+    process.env.STRIPE_TEST_WEBHOOK_SECRET || process.env.STRIPE_WEBHOOK_SECRET
+  );
+}
 
 export function hasStripeSecretEnv() {
-  return Boolean(process.env.STRIPE_SECRET_KEY);
+  return Boolean(stripeSecretKey());
 }
 
 export function hasStripeWebhookEnv() {
-  return Boolean(process.env.STRIPE_WEBHOOK_SECRET);
+  return Boolean(stripeWebhookSecret());
 }
 
-export function createStripeClient() {
-  const secretKey = process.env.STRIPE_SECRET_KEY;
+export function createStripeClient(mode = getKayakStripeMode()) {
+  const secretKey = stripeSecretKey(mode);
   if (!secretKey) {
-    throw new Error("STRIPE_SECRET_KEY is not set.");
+    throw new Error(
+      mode === "live"
+        ? "STRIPE_LIVE_SECRET_KEY is not set."
+        : "STRIPE_TEST_SECRET_KEY is not set."
+    );
   }
 
-  if (!cachedStripe) {
-    cachedStripe = new Stripe(secretKey, {
+  if (!cachedStripeClients[mode]) {
+    cachedStripeClients[mode] = new Stripe(secretKey, {
       apiVersion: "2026-04-22.dahlia",
       typescript: true,
       maxNetworkRetries: 2,
     });
   }
 
-  return cachedStripe;
+  return cachedStripeClients[mode];
 }
 
-export function getStripeWebhookSecret() {
-  const secret = process.env.STRIPE_WEBHOOK_SECRET;
+export function getStripeWebhookSecret(mode = getKayakStripeMode()) {
+  const secret = stripeWebhookSecret(mode);
   if (!secret) {
-    throw new Error("STRIPE_WEBHOOK_SECRET is not set.");
+    throw new Error(
+      mode === "live"
+        ? "STRIPE_LIVE_WEBHOOK_SECRET is not set."
+        : "STRIPE_TEST_WEBHOOK_SECRET is not set."
+    );
   }
   return secret;
 }

@@ -7,8 +7,10 @@ import { propertyTimeToUtc, todayIso } from "@/lib/dates";
 import { fetchReservationById, LodgifyError } from "@/lib/customer/lodgify";
 import {
   createStripeClient,
+  getKayakStripeMode,
   getAppBaseUrl,
   hasStripeSecretEnv,
+  isKayakPaidCheckoutEnabled,
 } from "@/lib/stripe";
 import { createBookingCancelToken } from "@/lib/bookingCancelToken";
 
@@ -164,11 +166,21 @@ export async function POST(req: Request) {
   const amountCents = isComplimentary ? 0 : kayak.daily_rate_cents;
   const status = isComplimentary ? "confirmed" : "pending";
 
-  if (!isComplimentary && !hasStripeSecretEnv()) {
+  if (!isComplimentary && !isKayakPaidCheckoutEnabled()) {
     return NextResponse.json(
       {
         error:
-          "Payment checkout is not configured yet. Add STRIPE_SECRET_KEY before accepting paid rentals.",
+          "Online paid kayak checkout is currently paused. Please contact Zenfulcove staff to book an additional rental.",
+      },
+      { status: 503 }
+    );
+  }
+
+  if (!isComplimentary && !hasStripeSecretEnv()) {
+    const stripeMode = getKayakStripeMode();
+    return NextResponse.json(
+      {
+        error: `Payment checkout is not configured for ${stripeMode} mode yet.`,
       },
       { status: 503 }
     );
