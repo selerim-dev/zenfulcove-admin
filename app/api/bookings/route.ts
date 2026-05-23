@@ -148,7 +148,7 @@ export async function POST(req: Request) {
   const supabase = createSupabaseAdminClient();
   const { data: kayak, error: kayakError } = await supabase
     .from("kayaks")
-    .select("id, code, name, daily_rate_cents, is_active")
+    .select("*")
     .eq("id", body.kayakId)
     .maybeSingle();
 
@@ -282,6 +282,20 @@ export async function POST(req: Request) {
       kayakId: kayak.id,
       referenceCode: inserted.reference_code,
     };
+    const priceData = kayak.stripe_product_id
+      ? {
+          currency: "usd",
+          unit_amount: amountCents,
+          product: kayak.stripe_product_id,
+        }
+      : {
+          currency: "usd",
+          unit_amount: amountCents,
+          product_data: {
+            name: `${kayak.name} rental`,
+            description: `${cabin} · ${body.dateIso}`,
+          },
+        };
 
     try {
       const session = await stripe.checkout.sessions.create(
@@ -296,14 +310,7 @@ export async function POST(req: Request) {
           line_items: [
             {
               quantity: 1,
-              price_data: {
-                currency: "usd",
-                unit_amount: amountCents,
-                product_data: {
-                  name: `${kayak.name} rental`,
-                  description: `${cabin} · ${body.dateIso}`,
-                },
-              },
+              price_data: priceData,
             },
           ],
         },

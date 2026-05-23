@@ -24,6 +24,7 @@ type KayakWritable = {
   capacity: number;
   length_feet: number;
   daily_rate_cents: number;
+  stripe_product_id: string | null;
   color: string;
   is_active: boolean;
 };
@@ -34,6 +35,7 @@ function parseKayakFields(formData: FormData): KayakWritable {
   const capacity = Number(formData.get("capacity"));
   const lengthFeet = Number(formData.get("length_feet"));
   const dailyDollars = Number(formData.get("daily_rate"));
+  const stripeProductId = String(formData.get("stripe_product_id") ?? "").trim();
   const isActive = formData.get("is_active") === "on";
   const color = String(formData.get("color") ?? "");
 
@@ -48,6 +50,9 @@ function parseKayakFields(formData: FormData): KayakWritable {
   if (!Number.isFinite(dailyDollars) || dailyDollars < 0) {
     throw new Error("Daily rate must be zero or positive.");
   }
+  if (stripeProductId && !/^prod_[A-Za-z0-9]+$/.test(stripeProductId)) {
+    throw new Error("Stripe Product ID must start with prod_.");
+  }
   if (!allowedColors.has(color)) {
     throw new Error("Pick a valid color.");
   }
@@ -58,6 +63,7 @@ function parseKayakFields(formData: FormData): KayakWritable {
     capacity,
     length_feet: lengthFeet,
     daily_rate_cents: Math.round(dailyDollars * 100),
+    stripe_product_id: stripeProductId || null,
     color,
     is_active: isActive,
   };

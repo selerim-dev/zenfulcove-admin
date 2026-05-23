@@ -128,6 +128,15 @@ export default function KayakForm({
           className="form-input"
         />
       </Field>
+      <Field label="Stripe Product ID">
+        <input
+          name="stripe_product_id"
+          type="text"
+          defaultValue={kayak?.stripe_product_id ?? ""}
+          placeholder="prod_..."
+          className="form-input font-mono"
+        />
+      </Field>
       <Field label="Color">
         <ColorPicker name="color" defaultValue={kayak?.color ?? "#2563eb"} />
       </Field>

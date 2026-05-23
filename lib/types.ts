@@ -5,6 +5,7 @@ export type Kayak = {
   capacity: number;
   length_feet: number | null;
   daily_rate_cents: number;
+  stripe_product_id: string | null;
   color: string;
   image_url: string | null;
   is_active: boolean;
