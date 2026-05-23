@@ -75,11 +75,6 @@ export default function FleetCalendar({
                       </div>
                       <div className="min-w-0">
                         <div className="truncate font-medium">{k.name}</div>
-                        {k.code && (
-                          <div className="text-[11px] text-[var(--color-ink-muted)]">
-                            {k.code}
-                          </div>
-                        )}
                       </div>
                     </div>
                   </td>
