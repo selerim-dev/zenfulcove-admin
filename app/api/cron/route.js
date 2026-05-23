@@ -34,6 +34,7 @@ import {
   sendAccessCodeForBooking,
   sendCheckinInfoForBooking,
   sendWaiverReminderForBooking,
+  waiverReminderFormSource,
 } from "@/lib/access-code-messages";
 import { hasSupabaseAdminEnv } from "@/lib/supabaseEnv";
 import { appendLogs, writeLastRunStatus } from "@/lib/activity-log";
@@ -620,11 +621,13 @@ async function runWaiverReminders(automationConfig, dryRunOverride) {
     .trim()
     .replace(/^\/?forms\//, "");
   const jotformFormId =
-    config.jotformFormId || config.reminders?.[0]?.jotformFormId;
-  const usesLocalForm = Boolean(localFormSlug);
+    config.jotformFormId ||
+    config.emails?.[0]?.jotformFormId ||
+    config.reminders?.[0]?.jotformFormId;
+  const usesLocalForm = waiverReminderFormSource(config) === "internal";
   const automationName = usesLocalForm
     ? "Internal Form Waiver Lodgify Messages"
-    : "Jotform Waiver Lodgify Messages";
+    : "Jotform Waiver Emails";
 
   if (!config.enabled) {
     logs.push({
@@ -637,12 +640,23 @@ async function runWaiverReminders(automationConfig, dryRunOverride) {
     return logs;
   }
 
-  if (!localFormSlug && !jotformFormId) {
+  if (usesLocalForm && !localFormSlug) {
     logs.push({
       timestamp: new Date().toISOString(),
       automation: automationName,
       property: "—",
-      action: "Skipped: no internal form slug or Jotform form ID configured",
+      action: "Skipped: no internal form slug configured",
+      status: "skipped",
+    });
+    return logs;
+  }
+
+  if (!usesLocalForm && !jotformFormId) {
+    logs.push({
+      timestamp: new Date().toISOString(),
+      automation: automationName,
+      property: "—",
+      action: "Skipped: no Jotform form ID configured",
       status: "skipped",
     });
     return logs;
@@ -704,7 +718,7 @@ async function runWaiverReminders(automationConfig, dryRunOverride) {
       timestamp: new Date().toISOString(),
       automation: automationName,
       property: "—",
-      action: `═══ DRY RUN: Today is ${todayStr}. No Lodgify waiver reminder messages sent. Validation: WHO would receive WHAT (compare with Lodgify + ${usesLocalForm ? "internal forms" : "Jotform"}) ═══`,
+      action: `═══ DRY RUN: Today is ${todayStr}. No ${usesLocalForm ? "Lodgify waiver reminder messages" : "SendGrid waiver emails"} sent. Validation: WHO would receive WHAT (compare with Lodgify + ${usesLocalForm ? "internal forms" : "Jotform"}) ═══`,
       status: "info",
     });
   }
@@ -723,7 +737,7 @@ async function runWaiverReminders(automationConfig, dryRunOverride) {
       timestamp: new Date().toISOString(),
       automation: automationName,
       property: "—",
-      action: `--- Check-ins on ${targetDate} (${daysLabel}) → would post Lodgify reminder "${label}" to: ---`,
+      action: `--- Check-ins on ${targetDate} (${daysLabel}) → would ${usesLocalForm ? "post Lodgify reminder" : "send"} "${label}" to: ---`,
       status: "info",
     });
 
@@ -786,6 +800,7 @@ async function runWaiverReminders(automationConfig, dryRunOverride) {
               status: reminderResult.status || "info",
               ...(reminderResult.decision ? { decision: reminderResult.decision } : {}),
               ...(reminderResult.deliveryChannel ? { deliveryChannel: reminderResult.deliveryChannel } : {}),
+              ...(reminderResult.templateId ? { templateId: reminderResult.templateId } : {}),
               ...(reminderResult.bookingId ? { bookingId: reminderResult.bookingId } : {}),
               ...(reminderResult.templateData ? { templateData: reminderResult.templateData } : {}),
             });
@@ -876,15 +891,27 @@ export async function runAccessCodeRelease(automationConfig, dryRunOverride, opt
   const jotformFormId =
     config.jotformFormId ||
     waiverConfig.jotformFormId ||
+    waiverConfig.emails?.[0]?.jotformFormId ||
     waiverConfig.reminders?.[0]?.jotformFormId;
-  const usesLocalForm = Boolean(localFormSlug);
+  const usesLocalForm = waiverReminderFormSource(waiverConfig) === "internal";
+
+  if (usesLocalForm && !localFormSlug) {
+    logs.push({
+      timestamp: new Date().toISOString(),
+      automation: automationName,
+      property: "—",
+      action: "Skipped: no internal form slug configured",
+      status: "skipped",
+    });
+    return logs;
+  }
 
   if (!usesLocalForm && !jotformFormId) {
     logs.push({
       timestamp: new Date().toISOString(),
       automation: automationName,
       property: "—",
-      action: "Skipped: no internal form slug or Jotform fallback form ID configured",
+      action: "Skipped: no Jotform fallback form ID configured",
       status: "skipped",
     });
     return logs;

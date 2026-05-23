@@ -74,24 +74,30 @@ async function main() {
   for (const log of logs) {
     if (
       log.automation !== "Jotform Waiver Emails" &&
-      log.automation !== "Internal Form Waiver Emails"
+      log.automation !== "Internal Form Waiver Emails" &&
+      log.automation !== "Internal Form Waiver Lodgify Messages"
     ) {
       continue;
     }
     const a = log.action || "";
 
-    // "--- Check-ins on 2026-03-15 (2 days from now) → would send "2 days before" to: ---"
-    const headerMatch = a.match(/^--- Check-ins on (.+?) → would send "([^"]+)" to: ---$/);
+    // "--- Check-ins on 2026-03-15 (2 days from now) → would send/post ... "2 days before" to: ---"
+    const headerMatch = a.match(/^--- Check-ins on (.+?) → would (?:send|post Lodgify reminder) "([^"]+)" to: ---$/);
     if (headerMatch) {
       currentGroup = { date: headerMatch[1].trim(), label: headerMatch[2], wouldSend: [], skips: [] };
       byDay.push(currentGroup);
       continue;
     }
 
-    // "[DRY RUN] Would send "..." to email | booking X | ..."
-    const sendMatch = a.match(/^\[DRY RUN\] Would send "[^"]*" to ([^|]+) \| booking (\d+)/);
+    // "[DRY RUN] Would send "..." to email | booking X | ..." or Lodgify-thread preview.
+    const sendMatch =
+      a.match(/^\[DRY RUN\] Would send "[^"]*" to ([^|]+) \| booking (\d+)/) ||
+      a.match(/^\[DRY RUN\] Would post Lodgify waiver reminder "[^"]*" to booking (\d+)/);
     if (sendMatch && currentGroup) {
-      currentGroup.wouldSend.push({ email: sendMatch[1].trim(), bookingId: sendMatch[2] });
+      currentGroup.wouldSend.push({
+        email: sendMatch[2] ? sendMatch[1].trim() : "Lodgify booking thread",
+        bookingId: sendMatch[2] || sendMatch[1],
+      });
       continue;
     }
 
@@ -104,7 +110,7 @@ async function main() {
   }
 
   // Display grouped by day
-  console.log("══════ Emails we WOULD send (by check-in date) ══════");
+  console.log("══════ Reminders we WOULD send (by check-in date) ══════");
   console.log("");
   for (const g of byDay) {
     console.log(`📅 ${g.date} — "${g.label}"`);

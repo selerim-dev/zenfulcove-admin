@@ -12,6 +12,7 @@ import {
   sendAccessCodeForBooking,
   sendCheckinInfoForBooking,
   sendWaiverReminderForBooking,
+  waiverReminderFormSource,
 } from "@/lib/access-code-messages";
 import { runAccessCodeRelease } from "@/app/api/cron/route";
 
@@ -48,6 +49,7 @@ function resultLog(sendResult, property) {
     status: sendResult.status,
     ...(sendResult.decision ? { decision: sendResult.decision } : {}),
     ...(sendResult.deliveryChannel ? { deliveryChannel: sendResult.deliveryChannel } : {}),
+    ...(sendResult.templateId ? { templateId: sendResult.templateId } : {}),
     ...(sendResult.bookingId ? { bookingId: sendResult.bookingId } : {}),
     ...(sendResult.templateData ? { templateData: sendResult.templateData } : {}),
   };
@@ -78,9 +80,11 @@ async function formIsCompleteForBooking(automationConfig, bookingId) {
   const jotformFormId =
     releaseConfig.jotformFormId ||
     waiverConfig.jotformFormId ||
+    waiverConfig.emails?.[0]?.jotformFormId ||
     waiverConfig.reminders?.[0]?.jotformFormId;
+  const usesLocalForm = waiverReminderFormSource(waiverConfig) === "internal";
 
-  if (localFormSlug) {
+  if (usesLocalForm && localFormSlug) {
     const submissions = await listLocalFormSubmissions({
       formSlugs: [localFormSlug],
       limit: 10000,
@@ -88,7 +92,7 @@ async function formIsCompleteForBooking(automationConfig, bookingId) {
     return bookingHasLocalFormSubmission(bookingId, submissions);
   }
 
-  if (jotformFormId) {
+  if (!usesLocalForm && jotformFormId) {
     const submissions = await getFormSubmissions(jotformFormId);
     return bookingHasWaiver(bookingId, submissions);
   }
@@ -159,12 +163,15 @@ export async function POST(request) {
         dryRun: true,
         persistState: false,
       });
+      const formSource = waiverReminderFormSource(
+        automationConfig.waiverReminders || {}
+      );
       const logs = [
         {
           timestamp: new Date().toISOString(),
           automation: "Access Code Release Test",
           property: samplePropertyName,
-          action: "Rendered sample Lodgify previews without fetching or posting to Lodgify.",
+          action: `Rendered sample access previews and ${formSource === "internal" ? "Lodgify" : "SendGrid"} waiver reminder preview without sending.`,
           status: "info",
         },
         resultLog(accessResult, samplePropertyName),
@@ -209,6 +216,9 @@ export async function POST(request) {
     }
 
     const hasForm = await formIsCompleteForBooking(automationConfig, bookingId);
+    const formSource = waiverReminderFormSource(
+      automationConfig.waiverReminders || {}
+    );
     const messagePrefix = dryRun
       ? ""
       : "[TEST ONLY - Zenfulcove internal waiver flow]\n\n";
@@ -250,7 +260,7 @@ export async function POST(request) {
           ? delayedAccess
             ? `Booking ${bookingId} has the selected form; testing delayed-property no-code check-in Lodgify message.`
             : `Booking ${bookingId} has the selected form; testing access-code Lodgify message.`
-          : `Booking ${bookingId} is missing the selected form; testing Lodgify waiver reminder message.`,
+          : `Booking ${bookingId} is missing the selected form; testing ${formSource === "internal" ? "Lodgify" : "SendGrid"} waiver reminder message.`,
         status: "info",
       },
       resultLog(sendResult, booking.property_name || booking.propertyName || "—"),

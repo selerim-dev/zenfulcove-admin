@@ -28,13 +28,14 @@ export const automationConfig = {
   waiverReminders: {
     enabled: true,
     propertyIds: [], // Lodgify property IDs to restrict to (e.g. Zenfulcove only). Empty = all properties.
-    localFormSlug: "guest-info", // Internal Zenfulcove form slug. When set, this replaces the Jotform waiver link/check.
+    formSource: "jotform", // "jotform" sends legacy SendGrid templates. "internal" posts Lodgify messages with the internal form link.
+    localFormSlug: "guest-info", // Internal Zenfulcove form slug. Used only when formSource is "internal".
     jotformFormId: "251834442091050", // Legacy Jotform waiver form ID fallback during migration.
     emails: [
-      // These are Lodgify booking-thread messages sent by the 11 AM Central cron.
-      { daysBeforeCheckin: 2, subjectTemplate: "Reservation form needed for {{propertyDisplayName}}", messageTemplate: "", label: "Reminder 1" },
-      { daysBeforeCheckin: 1, subjectTemplate: "Reservation form needed for {{propertyDisplayName}}", messageTemplate: "", label: "Reminder 2" },
-      { daysBeforeCheckin: 0, subjectTemplate: "Reservation form needed for {{propertyDisplayName}}", messageTemplate: "", label: "Reminder 3" },
+      // Legacy Jotform uses templateId. Internal form mode uses the Lodgify subject/message fields.
+      { daysBeforeCheckin: 2, templateId: "d-REPLACE_ME_JOTFORM_2DAY", subjectTemplate: "Reservation form needed for {{propertyDisplayName}}", messageTemplate: "", label: "Reminder 1" },
+      { daysBeforeCheckin: 1, templateId: "d-REPLACE_ME_JOTFORM_1DAY", subjectTemplate: "Reservation form needed for {{propertyDisplayName}}", messageTemplate: "", label: "Reminder 2" },
+      { daysBeforeCheckin: 0, templateId: "d-REPLACE_ME_JOTFORM_0DAY", subjectTemplate: "Reservation form needed for {{propertyDisplayName}}", messageTemplate: "", label: "Reminder 3" },
     ],
   },
   accessCodeRelease: {

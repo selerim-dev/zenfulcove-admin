@@ -16,23 +16,29 @@ const DEFAULT_DELAYED_ACCESS_PROPERTY_NAMES = ["Doodle House", "Desert Rose"];
 const DEFAULT_EMAILS = [
   {
     daysBeforeCheckin: 2,
+    templateId: "",
     subjectTemplate: "Reservation form needed for {{propertyDisplayName}}",
     messageTemplate: "",
     label: "Reminder 1",
   },
   {
     daysBeforeCheckin: 1,
+    templateId: "",
     subjectTemplate: "Reservation form needed for {{propertyDisplayName}}",
     messageTemplate: "",
     label: "Reminder 2",
   },
   {
     daysBeforeCheckin: 0,
+    templateId: "",
     subjectTemplate: "Reservation form needed for {{propertyDisplayName}}",
     messageTemplate: "",
     label: "Reminder 3",
   },
 ];
+
+const FORM_SOURCE_INTERNAL = "internal";
+const FORM_SOURCE_JOTFORM = "jotform";
 
 const TEMPLATE_VARIABLES = [
   "GuestFirstName",
@@ -101,6 +107,19 @@ function normalizeFormSlug(value) {
   return String(value || "")
     .trim()
     .replace(/^\/?forms\//, "");
+}
+
+function normalizeFormSource(value) {
+  return String(value || "").trim().toLowerCase() === FORM_SOURCE_INTERNAL
+    ? FORM_SOURCE_INTERNAL
+    : FORM_SOURCE_JOTFORM;
+}
+
+function jotformUrl(formId) {
+  const normalized = String(formId || "").trim();
+  if (!normalized) return "";
+  if (/^https?:\/\//i.test(normalized)) return normalized;
+  return `https://form.jotform.com/${normalized}`;
 }
 
 function normalizeLookupKey(value) {
@@ -576,8 +595,9 @@ export default function WaiverPanel({
   const currentFormSlug = normalizeFormSlug(
     safeConfig.localFormSlug || codeRelease.localFormSlug
   );
+  const configuredFormMode = normalizeFormSource(safeConfig.formSource);
 
-  const [formMode, setFormMode] = useState(currentFormSlug ? "internal" : "jotform");
+  const [formMode, setFormMode] = useState(configuredFormMode);
   const [remindersOpen, setRemindersOpen] = useState(true);
   const [accessOpen, setAccessOpen] = useState(true);
   const [deliverySettingsOpen, setDeliverySettingsOpen] = useState(true);
@@ -593,6 +613,10 @@ export default function WaiverPanel({
   const [testRunning, setTestRunning] = useState(false);
   const [testResult, setTestResult] = useState(null);
   const [testError, setTestError] = useState("");
+
+  useEffect(() => {
+    setFormMode(configuredFormMode);
+  }, [configuredFormMode]);
 
   useEffect(() => {
     let active = true;
@@ -687,7 +711,13 @@ export default function WaiverPanel({
     accessCode: selectedStaticCode || DEFAULT_PREVIEW_VALUES.accessCode,
     code: selectedStaticCode || DEFAULT_PREVIEW_VALUES.code,
   };
+  const currentJotformFormId =
+    safeConfig.jotformFormId ||
+    safeConfig.emails?.[0]?.jotformFormId ||
+    safeConfig.reminders?.[0]?.jotformFormId ||
+    "";
   const reminderFormUrl = currentFormSlug ? `/forms/${currentFormSlug}` : "";
+  const legacyFormUrl = jotformUrl(currentJotformFormId);
   const activeReminderCount = emails.length;
   const propertyStatusLabel =
     lodgifyPropertiesStatus === "loaded"
@@ -701,23 +731,25 @@ export default function WaiverPanel({
   }
 
   function updateJotformFormId(value) {
-    onChange({ ...safeConfig, jotformFormId: value });
+    onChange({ ...safeConfig, formSource: FORM_SOURCE_JOTFORM, jotformFormId: value });
     onAccessCodeReleaseChange?.({ ...codeRelease, jotformFormId: value });
   }
 
   function updateLocalFormSlug(value) {
     const normalized = normalizeFormSlug(value);
-    setFormMode("internal");
-    onChange({ ...safeConfig, localFormSlug: normalized });
+    setFormMode(FORM_SOURCE_INTERNAL);
+    onChange({
+      ...safeConfig,
+      formSource: FORM_SOURCE_INTERNAL,
+      localFormSlug: normalized,
+    });
     onAccessCodeReleaseChange?.({ ...codeRelease, localFormSlug: normalized });
   }
 
   function selectFormMode(mode) {
-    setFormMode(mode);
-    if (mode === "jotform") {
-      onChange({ ...safeConfig, localFormSlug: "" });
-      onAccessCodeReleaseChange?.({ ...codeRelease, localFormSlug: "" });
-    }
+    const nextMode = normalizeFormSource(mode);
+    setFormMode(nextMode);
+    onChange({ ...safeConfig, formSource: nextMode });
   }
 
   function updateCodeRelease(field, value) {
@@ -768,6 +800,7 @@ export default function WaiverPanel({
         ...emails,
         {
           daysBeforeCheckin: 1,
+          templateId: "",
           subjectTemplate: "Reservation form needed for {{propertyDisplayName}}",
           messageTemplate: "",
           label: "Reminder",
@@ -832,21 +865,21 @@ export default function WaiverPanel({
           </div>
           <div className="inline-flex rounded-xl border border-sand bg-white p-1">
             <SegmentButton
-              active={formMode === "internal"}
-              onClick={() => selectFormMode("internal")}
+              active={formMode === FORM_SOURCE_INTERNAL}
+              onClick={() => selectFormMode(FORM_SOURCE_INTERNAL)}
             >
               Internal form
             </SegmentButton>
             <SegmentButton
-              active={formMode === "jotform"}
-              onClick={() => selectFormMode("jotform")}
+              active={formMode === FORM_SOURCE_JOTFORM}
+              onClick={() => selectFormMode(FORM_SOURCE_JOTFORM)}
             >
               Legacy Jotform
             </SegmentButton>
           </div>
         </div>
 
-        {formMode === "internal" ? (
+        {formMode === FORM_SOURCE_INTERNAL ? (
           <Field
             label="Internal form route"
             value={currentFormSlug}
@@ -862,22 +895,26 @@ export default function WaiverPanel({
         ) : (
           <Field
             label="Legacy Jotform form ID"
-            value={
-              safeConfig.jotformFormId ||
-              (safeConfig.reminders && safeConfig.reminders[0]?.jotformFormId) ||
-              ""
-            }
+            value={currentJotformFormId}
             onChange={updateJotformFormId}
             placeholder="251834442091050"
             mono
-            helper="Used only while Legacy Jotform is selected."
+            helper={
+              legacyFormUrl
+                ? `Guests receive the legacy Jotform link (${legacyFormUrl}) through SendGrid templates.`
+                : "Used only while Legacy Jotform is selected."
+            }
           />
         )}
       </Card>
 
       <CollapsibleSection
         title="Reminder messages"
-        description="Uses Lodgify booking-thread messages for guests who have not completed the selected form. The scheduled cron posts these at 11 AM Central."
+        description={
+          formMode === FORM_SOURCE_INTERNAL
+            ? "Uses Lodgify booking-thread messages for guests who have not completed the internal form. The scheduled cron posts these at 11 AM Central."
+            : "Uses legacy SendGrid dynamic template IDs for guests who have not completed the Jotform waiver."
+        }
         badge={`${activeReminderCount} reminders`}
         open={remindersOpen}
         onToggle={() => setRemindersOpen((value) => !value)}
@@ -911,13 +948,24 @@ export default function WaiverPanel({
                   }
                   helper="0 = morning of stay"
                 />
-                <Field
-                  label="Subject"
-                  value={email.subjectTemplate || ""}
-                  onChange={(value) => updateEmail(index, "subjectTemplate", value)}
-                  placeholder="Reservation form needed for {{propertyDisplayName}}"
-                  helper="Supports standard variables."
-                />
+                {formMode === FORM_SOURCE_INTERNAL ? (
+                  <Field
+                    label="Subject"
+                    value={email.subjectTemplate || ""}
+                    onChange={(value) => updateEmail(index, "subjectTemplate", value)}
+                    placeholder="Reservation form needed for {{propertyDisplayName}}"
+                    helper="Supports standard variables."
+                  />
+                ) : (
+                  <Field
+                    label="SendGrid template ID"
+                    value={email.templateId || ""}
+                    onChange={(value) => updateEmail(index, "templateId", value)}
+                    placeholder="d-xxxxxxxx"
+                    mono
+                    helper="Legacy Jotform mode sends this dynamic template."
+                  />
+                )}
               </div>
               <div className="mt-3 grid grid-cols-1 gap-4">
                 <Field
@@ -926,15 +974,17 @@ export default function WaiverPanel({
                   onChange={(value) => updateEmail(index, "label", value)}
                   placeholder="Reminder 1"
                 />
-                <RichMessageField
-                  label="Lodgify message"
-                  value={email.messageTemplate || ""}
-                  onChange={(value) => updateEmail(index, "messageTemplate", value)}
-                  placeholder={REMINDER_MESSAGE_PLACEHOLDER}
-                  rows={7}
-                  helper="Leave blank to use the built-in reminder copy."
-                  previewValues={previewValues}
-                />
+                {formMode === FORM_SOURCE_INTERNAL ? (
+                  <RichMessageField
+                    label="Lodgify message"
+                    value={email.messageTemplate || ""}
+                    onChange={(value) => updateEmail(index, "messageTemplate", value)}
+                    placeholder={REMINDER_MESSAGE_PLACEHOLDER}
+                    rows={7}
+                    helper="Leave blank to use the built-in reminder copy."
+                    previewValues={previewValues}
+                  />
+                ) : null}
               </div>
             </div>
           ))}
@@ -1269,7 +1319,7 @@ export default function WaiverPanel({
               <div>
                 <h3 className="font-serif text-xl text-forest">Test Access Code Release</h3>
                 <p className="mt-1 text-sm leading-relaxed text-forest/60">
-                  Sample preview renders the selected property release messages and a waiver reminder without using Lodgify. For Doodle House and Desert Rose it shows both the no-code welcome and code-only message. Dry run checks the sweep without posting. A live test requires a Lodgify booking ID and posts a test-prefixed message into that booking thread.
+                  Sample preview renders the selected property release messages and a waiver reminder without sending. For Doodle House and Desert Rose it shows both the no-code welcome and code-only message. Dry run checks the sweep without posting or emailing. A live test requires a Lodgify booking ID.
                 </p>
               </div>
               <button
@@ -1308,6 +1358,7 @@ export default function WaiverPanel({
                         <div className="mt-2 flex flex-wrap gap-2 text-[11px] uppercase tracking-wider text-forest/50">
                           {log.deliveryChannel ? <span>{log.deliveryChannel}</span> : null}
                           {log.decision ? <span>{log.decision}</span> : null}
+                          {log.templateId ? <span>{log.templateId}</span> : null}
                           {log.bookingId ? <span>Booking {log.bookingId}</span> : null}
                         </div>
                       ) : null}
