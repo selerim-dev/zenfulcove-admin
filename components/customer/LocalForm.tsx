@@ -35,9 +35,20 @@ type SignaturePadProps = {
 const inputClass =
   "w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2.5 text-sm text-[var(--color-ink)] outline-none transition focus:border-[var(--color-accent)] focus:bg-white";
 
+const MAX_CLIENT_FILE_BYTES = 3.5 * 1024 * 1024;
+const MAX_CLIENT_REQUEST_BYTES = 3.8 * 1024 * 1024;
+const IMAGE_COMPRESSION_TARGET_BYTES = 1.6 * 1024 * 1024;
+const MAX_COMPRESSED_IMAGE_DIMENSION = 1800;
+
 function fieldDomId(name: string, suffix = "") {
   const safeName = name.replace(/[^A-Za-z0-9_-]/g, "-") || "field";
   return `local-form-${safeName}${suffix ? `-${suffix}` : ""}`;
+}
+
+function formatBytes(bytes: number) {
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
+  if (bytes >= 1024) return `${Math.round(bytes / 1024)}KB`;
+  return `${bytes}B`;
 }
 
 function dataUrlToBlob(dataUrl: string) {
@@ -49,6 +60,77 @@ function dataUrlToBlob(dataUrl: string) {
     bytes[index] = binary.charCodeAt(index);
   }
   return new Blob([bytes], { type: mime });
+}
+
+function loadImage(file: File) {
+  return new Promise<{ image: HTMLImageElement; url: string }>((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const image = new Image();
+    image.onload = () => resolve({ image, url });
+    image.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("Could not read image."));
+    };
+    image.src = url;
+  });
+}
+
+function canvasToBlob(
+  canvas: HTMLCanvasElement,
+  type: string,
+  quality: number
+) {
+  return new Promise<Blob | null>((resolve) => {
+    canvas.toBlob((blob) => resolve(blob), type, quality);
+  });
+}
+
+async function compressImageFile(file: File) {
+  if (
+    !file.type.startsWith("image/") ||
+    file.type === "image/gif" ||
+    file.size <= IMAGE_COMPRESSION_TARGET_BYTES
+  ) {
+    return file;
+  }
+
+  let loaded: { image: HTMLImageElement; url: string } | null = null;
+  try {
+    loaded = await loadImage(file);
+    const { image } = loaded;
+    const ratio = Math.min(
+      1,
+      MAX_COMPRESSED_IMAGE_DIMENSION / Math.max(image.width, image.height)
+    );
+    const width = Math.max(1, Math.round(image.width * ratio));
+    const height = Math.max(1, Math.round(image.height * ratio));
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return file;
+    ctx.drawImage(image, 0, 0, width, height);
+
+    const qualities = [0.82, 0.74, 0.66, 0.58];
+    let best: Blob | null = null;
+    for (const quality of qualities) {
+      const blob = await canvasToBlob(canvas, "image/jpeg", quality);
+      if (!blob) continue;
+      best = blob;
+      if (blob.size <= IMAGE_COMPRESSION_TARGET_BYTES) break;
+    }
+    if (!best || best.size >= file.size) return file;
+
+    const fileName = file.name.replace(/\.[^.]+$/, "") || "upload";
+    return new File([best], `${fileName}.jpg`, {
+      type: "image/jpeg",
+      lastModified: file.lastModified,
+    });
+  } catch {
+    return file;
+  } finally {
+    if (loaded) URL.revokeObjectURL(loaded.url);
+  }
 }
 
 function SignaturePad({
@@ -218,17 +300,57 @@ export default function LocalForm({
   const [files, setFiles] = useState<Record<string, File[]>>({});
   const [signatures, setSignatures] = useState<Record<string, string>>({});
   const [status, setStatus] = useState<"idle" | "submitting" | "success">("idle");
+  const [preparingFiles, setPreparingFiles] = useState(false);
   const [error, setError] = useState("");
 
   function update(name: string, value: string | boolean) {
     setValues((current) => ({ ...current, [name]: value }));
   }
 
-  function updateFiles(name: string, fileList: FileList | null) {
-    setFiles((current) => ({
-      ...current,
-      [name]: fileList ? Array.from(fileList) : [],
-    }));
+  async function updateFiles(
+    name: string,
+    fileList: FileList | null,
+    fieldType = "file"
+  ) {
+    const selectedFiles = fileList ? Array.from(fileList) : [];
+    if (selectedFiles.length === 0) {
+      setFiles((current) => ({ ...current, [name]: [] }));
+      return;
+    }
+
+    setPreparingFiles(true);
+    setError("");
+    try {
+      const preparedFiles: File[] = [];
+      for (const file of selectedFiles) {
+        preparedFiles.push(
+          fieldType === "image" ? await compressImageFile(file) : file
+        );
+      }
+      const tooLarge = preparedFiles.find(
+        (file) => file.size > MAX_CLIENT_FILE_BYTES
+      );
+      if (tooLarge) {
+        setFiles((current) => ({ ...current, [name]: [] }));
+        setError(
+          `${tooLarge.name} is too large after preparing (${formatBytes(tooLarge.size)}). Please choose a smaller photo or screenshot.`
+        );
+        return;
+      }
+      setFiles((current) => ({ ...current, [name]: preparedFiles }));
+    } finally {
+      setPreparingFiles(false);
+    }
+  }
+
+  function currentUploadBytes() {
+    const fileBytes = Object.values(files)
+      .flat()
+      .reduce((sum, file) => sum + file.size, 0);
+    const signatureBytes = Object.values(signatures)
+      .filter(Boolean)
+      .reduce((sum, signature) => sum + dataUrlToBlob(signature).size, 0);
+    return fileBytes + signatureBytes;
   }
 
   function validateRequired() {
@@ -287,6 +409,15 @@ export default function LocalForm({
     const requiredError = validateRequired();
     if (requiredError) {
       setError(requiredError);
+      setStatus("idle");
+      return;
+    }
+
+    const uploadBytes = currentUploadBytes();
+    if (uploadBytes > MAX_CLIENT_REQUEST_BYTES) {
+      setError(
+        `The uploaded files are too large to submit online (${formatBytes(uploadBytes)}). Please choose a smaller photo or screenshot.`
+      );
       setStatus("idle");
       return;
     }
@@ -545,13 +676,15 @@ export default function LocalForm({
                 required={Boolean(field.required)}
                 multiple={field.multiple !== false}
                 accept={type === "image" ? "image/*" : undefined}
-                onChange={(event) => updateFiles(name, event.target.files)}
+                onChange={(event) =>
+                  updateFiles(name, event.target.files, type)
+                }
                 className="block w-full cursor-pointer rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] text-sm text-[var(--color-ink)] file:mr-3 file:cursor-pointer file:border-0 file:bg-[var(--color-accent)] file:px-4 file:py-3 file:text-sm file:font-medium file:text-white"
               />
               <span className="mt-1 block text-xs text-[var(--color-ink-muted)]">
                 {type === "image"
-                  ? "Upload image files up to 5MB each."
-                  : "Upload files up to 5MB each."}
+                  ? "Large phone photos are compressed automatically. If it still fails, use a smaller photo or screenshot."
+                  : "Upload files up to 4MB each."}
               </span>
             </FieldShell>
           );
@@ -639,12 +772,14 @@ export default function LocalForm({
 
         <button
           type={preview ? "button" : "submit"}
-          disabled={status === "submitting"}
+          disabled={status === "submitting" || preparingFiles}
           className="rounded-full bg-[var(--color-accent)] px-6 py-3 text-sm font-medium text-white transition hover:bg-[var(--color-accent-strong)] disabled:opacity-60"
         >
-          {status === "submitting"
-            ? "Submitting..."
-            : schema.submitLabel || "Submit"}
+          {preparingFiles
+            ? "Preparing uploads..."
+            : status === "submitting"
+              ? "Submitting..."
+              : schema.submitLabel || "Submit"}
         </button>
       </form>
 

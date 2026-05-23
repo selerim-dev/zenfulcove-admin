@@ -8,6 +8,7 @@ import {
   markLocalFormSubmissionsSynced,
   updateLocalFormSubmissionPayload,
   uploadLocalFormFile,
+  validateLocalFormUpload,
 } from "@/lib/local-forms";
 import { maybeSendSameDayAccessCodeForSubmission } from "@/lib/access-code-messages";
 
@@ -185,6 +186,25 @@ export async function POST(request: Request) {
     );
   }
 
+  try {
+    for (const upload of parsed.uploads) {
+      validateLocalFormUpload({
+        file: upload.file,
+        kind: upload.kind,
+      });
+    }
+  } catch (err) {
+    return NextResponse.json(
+      {
+        error:
+          err instanceof Error
+            ? err.message
+            : "One of the uploaded files could not be accepted.",
+      },
+      { status: 400 }
+    );
+  }
+
   const submittedAt = new Date().toISOString();
   const submissionPayload = isTrustedPreview
     ? {
@@ -194,48 +214,59 @@ export async function POST(request: Request) {
       }
     : parsed.payload;
 
-  const submission = await createLocalFormSubmission({
-    form,
-    formSlug,
-    contact,
-    payload: submissionPayload,
-    source: isTrustedPreview ? "staff-preview" : parsed.source,
-  });
-
-  const uploadedFiles = [];
+  let submission: { id: string; form_slug: string; submitted_at: string };
   let finalSubmissionPayload = submissionPayload;
-  for (const upload of parsed.uploads) {
-    const uploaded = await uploadLocalFormFile({
-      formSlug: submission.form_slug,
-      submissionId: submission.id,
-      fieldName: upload.fieldName,
-      file: upload.file,
-      kind: upload.kind,
+  try {
+    submission = await createLocalFormSubmission({
+      form,
+      formSlug,
+      contact,
+      payload: submissionPayload,
+      source: isTrustedPreview ? "staff-preview" : parsed.source,
     });
-    uploadedFiles.push(uploaded);
-  }
 
-  if (uploadedFiles.length > 0) {
-    const nextPayload: Record<string, unknown> = {
-      ...submissionPayload,
-      __files: uploadedFiles,
-      __uploadedAt: new Date().toISOString(),
-    };
-    for (const file of uploadedFiles) {
-      if (file.kind === "signature") {
-        nextPayload[file.fieldName] = "Signed";
-      } else {
-        const current = nextPayload[file.fieldName];
-        const names = Array.isArray(current)
-          ? current
-          : current
-            ? [current]
-            : [];
-        nextPayload[file.fieldName] = [...names, file.fileName];
-      }
+    const uploadedFiles = [];
+    for (const upload of parsed.uploads) {
+      const uploaded = await uploadLocalFormFile({
+        formSlug: submission.form_slug,
+        submissionId: submission.id,
+        fieldName: upload.fieldName,
+        file: upload.file,
+        kind: upload.kind,
+      });
+      uploadedFiles.push(uploaded);
     }
-    await updateLocalFormSubmissionPayload(submission.id, nextPayload);
-    finalSubmissionPayload = nextPayload;
+
+    if (uploadedFiles.length > 0) {
+      const nextPayload: Record<string, unknown> = {
+        ...submissionPayload,
+        __files: uploadedFiles,
+        __uploadedAt: new Date().toISOString(),
+      };
+      for (const file of uploadedFiles) {
+        if (file.kind === "signature") {
+          nextPayload[file.fieldName] = "Signed";
+        } else {
+          const current = nextPayload[file.fieldName];
+          const names = Array.isArray(current)
+            ? current
+            : current
+              ? [current]
+              : [];
+          nextPayload[file.fieldName] = [...names, file.fileName];
+        }
+      }
+      await updateLocalFormSubmissionPayload(submission.id, nextPayload);
+      finalSubmissionPayload = nextPayload;
+    }
+  } catch (err) {
+    return NextResponse.json(
+      {
+        error:
+          err instanceof Error ? err.message : "Could not submit the form.",
+      },
+      { status: 500 }
+    );
   }
 
   if (isTrustedPreview) {
