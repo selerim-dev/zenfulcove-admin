@@ -290,6 +290,7 @@ export async function POST(request: Request) {
     });
     return NextResponse.json({ error: "Form not found." }, { status: 404 });
   }
+  const resolvedFormSlug = String(form.slug || formSlug).trim();
 
   const fields = parseSchemaFields(form);
   const requiredError = validateRequiredFields({
@@ -301,7 +302,7 @@ export async function POST(request: Request) {
     await recordSubmitLog({
       status: "failed",
       action: `Form submit rejected: ${requiredError}`,
-      formSlug,
+      formSlug: resolvedFormSlug,
       parsed,
       httpStatus: 400,
     });
@@ -314,7 +315,7 @@ export async function POST(request: Request) {
     await recordSubmitLog({
       status: "failed",
       action: "Form submit rejected: invalid email address.",
-      formSlug,
+      formSlug: resolvedFormSlug,
       parsed,
       contact,
       httpStatus: 400,
@@ -340,7 +341,7 @@ export async function POST(request: Request) {
     await recordSubmitLog({
       status: "failed",
       action: `Form submit rejected: ${message}`,
-      formSlug,
+      formSlug: resolvedFormSlug,
       parsed,
       contact,
       httpStatus: 400,
@@ -366,11 +367,11 @@ export async function POST(request: Request) {
       : {};
 
   if (parsed.submissionId) {
-    if (!existingSubmission || existingSubmission.form_slug !== formSlug) {
+    if (!existingSubmission || existingSubmission.form_slug !== resolvedFormSlug) {
       await recordSubmitLog({
         status: "failed",
         action: "Form submit rejected: existing submission was not found for this form.",
-        formSlug,
+        formSlug: resolvedFormSlug,
         parsed,
         contact,
         httpStatus: 404,
@@ -385,7 +386,7 @@ export async function POST(request: Request) {
       await recordSubmitLog({
         status: "failed",
         action: "Form submit rejected: booking code does not match existing submission.",
-        formSlug,
+        formSlug: resolvedFormSlug,
         parsed,
         contact,
         httpStatus: 403,
@@ -416,14 +417,14 @@ export async function POST(request: Request) {
       ? await updateLocalFormSubmission({
           id: existingSubmission.id,
           form,
-          formSlug,
+          formSlug: resolvedFormSlug,
           contact,
           payload: submissionPayload,
           source: isTrustedPreview ? "staff-preview" : parsed.source,
         })
       : await createLocalFormSubmission({
           form,
-          formSlug,
+          formSlug: resolvedFormSlug,
           contact,
           payload: submissionPayload,
           source: isTrustedPreview ? "staff-preview" : parsed.source,
@@ -474,7 +475,7 @@ export async function POST(request: Request) {
     await recordSubmitLog({
       status: "failed",
       action: `Form submit failed after validation: ${message}`,
-      formSlug,
+      formSlug: resolvedFormSlug,
       parsed,
       contact,
       httpStatus: 500,
@@ -496,7 +497,7 @@ export async function POST(request: Request) {
   if (!isTrustedPreview) {
     try {
       accessCodeRelease = await maybeSendSameDayAccessCodeForSubmission({
-        formSlug,
+        formSlug: resolvedFormSlug,
         payload: finalSubmissionPayload,
         contact,
       });
@@ -511,7 +512,7 @@ export async function POST(request: Request) {
       await recordSubmitLog({
         status: "failed",
         action: `Form submitted, but access-code release failed: ${accessCodeRelease.action}`,
-        formSlug,
+        formSlug: resolvedFormSlug,
         parsed,
         contact,
         submissionId: submission.id,
@@ -523,7 +524,7 @@ export async function POST(request: Request) {
   await recordSubmitLog({
     status: "success",
     action: "Internal form submitted successfully.",
-    formSlug,
+    formSlug: resolvedFormSlug,
     parsed,
     contact,
     submissionId: submission.id,

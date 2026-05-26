@@ -208,7 +208,6 @@ function reservationFormUrlFor(formSlug, bookingId) {
   if (!formSlug) return "";
   const url = new URL(localFormUrl(formSlug));
   if (bookingId) {
-    url.searchParams.set("bookingCode", bookingId);
     url.searchParams.set("reservation", bookingId);
   }
   return url.toString();

@@ -99,26 +99,6 @@ function bookingCodeFromPayload(payload: Record<string, unknown>) {
   ]);
 }
 
-function lastNameFromPayload(payload: Record<string, unknown>) {
-  const direct = payloadString(payload, [
-    "lastName",
-    "last_name",
-    "guestLastName",
-    "guest_last_name",
-  ]);
-  if (direct) return direct;
-
-  const fullName = payloadString(payload, [
-    "fullName",
-    "full_name",
-    "name",
-    "guestName",
-    "guest_name",
-  ]);
-  const parts = fullName.split(/\s+/).filter(Boolean);
-  return parts.length > 1 ? parts[parts.length - 1] : "";
-}
-
 function initialValueFor(value: unknown): string | boolean {
   if (typeof value === "boolean") return value;
   if (typeof value === "number") return String(value);
@@ -594,13 +574,11 @@ export default function LocalForm({
         throw new Error(data.error || "Could not submit the form.");
       }
       const bookingCode = bookingCodeFromPayload(payload);
-      const lastName = lastNameFromPayload(payload);
       const redirectHref =
-        !staffPreview && bookingCode ? stayHref(bookingCode, lastName) : "";
+        !staffPreview && bookingCode ? stayHref(bookingCode) : "";
       if (redirectHref) {
         saveGuestBookingSession({
           reservation: bookingCode,
-          lastName,
         });
       }
       setSuccessStayHref(redirectHref);
