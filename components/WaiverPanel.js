@@ -135,7 +135,7 @@ const DEFAULT_PREVIEW_VALUES = {
 };
 
 const MESSAGE_PREVIEW_CLASS =
-  "whitespace-pre-wrap break-words text-sm leading-relaxed text-forest [&_a]:text-grove [&_a]:underline [&_a]:underline-offset-2 [&_li]:my-1 [&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-6 [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-6";
+  "whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-sm leading-relaxed text-forest [&_a]:break-all [&_a]:text-grove [&_a]:underline [&_a]:underline-offset-2 [&_li]:my-1 [&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-6 [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-6";
 
 const FORMATTING_BUTTONS = [
   { label: "B", title: "Bold", before: "<strong>", after: "</strong>", fallback: "bold text" },
@@ -1501,7 +1501,7 @@ export default function WaiverPanel({
 
       {testModalOpen ? (
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/30 px-4 py-6">
-          <div className="max-h-[calc(100vh-3rem)] w-full max-w-3xl overflow-y-auto rounded-xl border border-sand bg-white p-5 shadow-xl">
+          <div className="max-h-[calc(100vh-3rem)] w-full max-w-5xl overflow-y-auto rounded-xl border border-sand bg-white p-5 shadow-xl">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <h3 className="font-serif text-xl text-forest">
@@ -1542,36 +1542,45 @@ export default function WaiverPanel({
             {testError ? <p className="mt-3 text-sm text-red-600">{testError}</p> : null}
 
             {testResult ? (
-              <div className="mt-4 max-h-[55vh] overflow-y-auto rounded-xl border border-sand bg-cream/30 p-4">
+              <div className="mt-4 max-h-[60vh] overflow-y-auto overflow-x-hidden rounded-xl border border-sand bg-cream/30 p-4">
                 <div className="text-xs uppercase tracking-wider text-forest/50">
                   Latest result: {testResult.status}
                 </div>
                 <div className="mt-3 space-y-2">
                   {(Array.isArray(testResult.logs) ? testResult.logs : []).map((log, index) => (
-                    <div key={index} className="rounded-lg bg-white px-3 py-2 text-sm">
+                    <div
+                      key={index}
+                      className="min-w-0 overflow-hidden rounded-lg bg-white px-3 py-2 text-sm"
+                    >
                       <div className="font-medium text-forest">{log.status}</div>
-                      <div className="text-forest/70">{log.action}</div>
+                      <div className="whitespace-pre-wrap break-words text-forest/70 [overflow-wrap:anywhere]">
+                        {log.action}
+                      </div>
                       {log.deliveryChannel || log.decision || log.bookingId ? (
-                        <div className="mt-2 flex flex-wrap gap-2 text-[11px] uppercase tracking-wider text-forest/50">
+                        <div className="mt-2 flex min-w-0 flex-wrap gap-2 text-[11px] uppercase tracking-wider text-forest/50">
                           {log.deliveryChannel ? <span>{log.deliveryChannel}</span> : null}
                           {log.decision ? <span>{log.decision}</span> : null}
                           {log.templateId ? <span>{log.templateId}</span> : null}
-                          {log.bookingId ? <span>Booking {log.bookingId}</span> : null}
+                          {log.bookingId ? (
+                            <span className="break-words [overflow-wrap:anywhere]">
+                              Booking {log.bookingId}
+                            </span>
+                          ) : null}
                         </div>
                       ) : null}
                       {log.templateData?.lodgifyMessageSubject ? (
-                        <div className="mt-2 rounded-md border border-sand/70 bg-cream/30 p-2">
+                        <div className="mt-2 min-w-0 rounded-md border border-sand/70 bg-cream/30 p-2">
                           <div className="text-[11px] uppercase tracking-wider text-forest/50">
                             Subject
                           </div>
-                          <div className="mt-1 text-forest">
+                          <div className="mt-1 break-words text-forest [overflow-wrap:anywhere]">
                             {log.templateData.lodgifyMessageSubject}
                           </div>
                         </div>
                       ) : null}
                       {log.templateData?.lodgifyMessageText ? (
-                        <details className="mt-2 max-h-80 overflow-y-auto rounded-md border border-sand/70 bg-cream/30 p-2">
-                          <summary className="cursor-pointer text-[11px] uppercase tracking-wider text-forest/50">
+                        <details className="mt-2 max-h-80 overflow-y-auto overflow-x-hidden rounded-md border border-sand/70 bg-cream/30 p-2">
+                          <summary className="cursor-pointer break-words text-[11px] uppercase tracking-wider text-forest/50 [overflow-wrap:anywhere]">
                             Message preview
                           </summary>
                           <div
@@ -1586,8 +1595,8 @@ export default function WaiverPanel({
                         </details>
                       ) : null}
                       {log.templateData ? (
-                        <details className="mt-2 rounded-md border border-sand/70 bg-cream/30 p-2">
-                          <summary className="cursor-pointer text-[11px] uppercase tracking-wider text-forest/50">
+                        <details className="mt-2 min-w-0 overflow-hidden rounded-md border border-sand/70 bg-cream/30 p-2">
+                          <summary className="cursor-pointer break-words text-[11px] uppercase tracking-wider text-forest/50 [overflow-wrap:anywhere]">
                             Variables
                           </summary>
                           <dl className="mt-2 grid gap-2 text-xs sm:grid-cols-2">
@@ -1602,7 +1611,7 @@ export default function WaiverPanel({
                                 <dt className="font-mono text-[10px] uppercase tracking-wider text-forest/50">
                                   {key}
                                 </dt>
-                                <dd className="mt-0.5 break-words font-mono text-forest/80">
+                                <dd className="mt-0.5 break-all font-mono text-forest/80">
                                   {String(value || "")}
                                 </dd>
                               </div>
