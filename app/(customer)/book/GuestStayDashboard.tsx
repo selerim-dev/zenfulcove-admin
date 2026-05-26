@@ -72,6 +72,60 @@ function cleanText(value?: unknown) {
   return String(value || "").trim();
 }
 
+const URL_PATTERN = /\b((?:https?:\/\/|www\.)[^\s<>"']+)/gi;
+
+function splitUrlTrailingPunctuation(url: string) {
+  const match = url.match(/[),.!?:;]+$/);
+  if (!match) return { hrefText: url, trailing: "" };
+  const trailing = match[0];
+  return {
+    hrefText: url.slice(0, -trailing.length),
+    trailing,
+  };
+}
+
+function hrefForUrl(value: string) {
+  return /^https?:\/\//i.test(value) ? value : `https://${value}`;
+}
+
+function LinkifiedText({ text }: { text: string }) {
+  const parts: React.ReactNode[] = [];
+  let lastIndex = 0;
+
+  for (const match of text.matchAll(URL_PATTERN)) {
+    const rawUrl = match[0];
+    const index = match.index ?? 0;
+    const { hrefText, trailing } = splitUrlTrailingPunctuation(rawUrl);
+
+    if (index > lastIndex) {
+      parts.push(text.slice(lastIndex, index));
+    }
+
+    if (hrefText) {
+      parts.push(
+        <a
+          key={`${hrefText}-${index}`}
+          href={hrefForUrl(hrefText)}
+          target="_blank"
+          rel="noreferrer"
+          className="break-all text-[var(--color-accent)] underline underline-offset-2 transition hover:text-[var(--color-accent-strong)]"
+        >
+          {hrefText}
+        </a>
+      );
+    }
+
+    if (trailing) parts.push(trailing);
+    lastIndex = index + rawUrl.length;
+  }
+
+  if (lastIndex < text.length) {
+    parts.push(text.slice(lastIndex));
+  }
+
+  return <>{parts.length > 0 ? parts : text}</>;
+}
+
 function InfoTile({
   label,
   value,
@@ -144,7 +198,7 @@ function DetailList({
               item.mono ? "font-mono text-base" : ""
             }`}
           >
-            {item.value}
+            <LinkifiedText text={item.value} />
           </dd>
         </div>
       ))}
@@ -400,7 +454,7 @@ export default function GuestStayDashboard({
           {goodToKnowText ? (
             <SectionCard eyebrow="Good to know" title="Stay notes">
               <p className="whitespace-pre-line text-sm leading-relaxed text-[var(--color-ink)]">
-                {goodToKnowText}
+                <LinkifiedText text={goodToKnowText} />
               </p>
             </SectionCard>
           ) : null}
@@ -408,7 +462,7 @@ export default function GuestStayDashboard({
           {amenitiesText ? (
             <SectionCard eyebrow="Amenities" title="What is included">
               <p className="whitespace-pre-line text-sm leading-relaxed text-[var(--color-ink)]">
-                {amenitiesText}
+                <LinkifiedText text={amenitiesText} />
               </p>
             </SectionCard>
           ) : null}
