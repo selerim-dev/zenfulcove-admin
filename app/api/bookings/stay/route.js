@@ -343,6 +343,7 @@ export async function POST(request) {
       additionalKayakText: templateData.additionalKayakText,
       lifeJacketText: templateData.lifeJacketText,
       amenitiesText: templateData.amenitiesText,
+      goodToKnowText: templateData.goodToKnowText,
       additionalRulesText: templateData.additionalRulesText,
       goodToKnowItems: templateData.goodToKnowItems,
       hostName: templateData.hostName,

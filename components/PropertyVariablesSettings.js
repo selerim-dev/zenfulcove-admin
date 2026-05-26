@@ -12,8 +12,8 @@ const KNOWN_UNITS = [
 
 const PROPERTY_VARIABLE_SECTIONS = [
   {
-    title: "Display",
-    helper: "Names shown in Lodgify messages and the customer My Stay page.",
+    title: "Location info",
+    helper: "Property name, address, maps link, parking, and arrival notes.",
     fields: [
       {
         key: "displayName",
@@ -27,12 +27,6 @@ const PROPERTY_VARIABLE_SECTIONS = [
         placeholder: "SKY CASTLE",
         helper: "Used in fallback directions.",
       },
-    ],
-  },
-  {
-    title: "Getting here",
-    helper: "Address, maps link, parking, and unit-specific arrival notes.",
-    fields: [
       {
         key: "address",
         label: "Address shown",
@@ -63,7 +57,7 @@ const PROPERTY_VARIABLE_SECTIONS = [
     ],
   },
   {
-    title: "Wi-Fi",
+    title: "Wi-Fi info",
     helper: "Network details shown after a guest opens My Stay.",
     fields: [
       {
@@ -80,59 +74,26 @@ const PROPERTY_VARIABLE_SECTIONS = [
   },
   {
     title: "Good to know",
-    helper: "These map directly to the Good to know card in My Stay for this property.",
+    helper: "One property-specific note card shown in My Stay.",
+    fields: [
+      {
+        key: "goodToKnowText",
+        aliases: ["additionalRulesText", "goodToKnow"],
+        label: "Good to know",
+        placeholder: "Quiet hours, house notes, special instructions...",
+        multiline: true,
+      },
+    ],
+  },
+  {
+    title: "Amenities",
+    helper: "Amenity details shown in My Stay for this property.",
     fields: [
       {
         key: "amenitiesText",
         label: "Amenities",
-        placeholder: "There is a gas grill on the deck...",
+        placeholder: "Gas grill, outdoor soaking tub, private beach access...",
         multiline: true,
-      },
-      {
-        key: "additionalRulesText",
-        label: "Additional rules",
-        placeholder: "Additional rules are in the unit...",
-        multiline: true,
-      },
-    ],
-  },
-  {
-    title: "Kayaks",
-    helper: "Kayak notes shown in My Stay and available to message templates.",
-    fields: [
-      {
-        key: "dedicatedKayakText",
-        label: "Dedicated kayak text",
-        placeholder: "There is one dedicated kayak for this unit...",
-        multiline: true,
-      },
-      {
-        key: "additionalKayakText",
-        label: "Additional kayak text",
-        placeholder: "Additional kayaks are available for rent...",
-        multiline: true,
-      },
-      {
-        key: "lifeJacketText",
-        label: "Life jacket text",
-        placeholder: "Please use the provided life jackets...",
-        multiline: true,
-      },
-    ],
-  },
-  {
-    title: "Host",
-    helper: "Contact details shown in the Need help card.",
-    fields: [
-      {
-        key: "hostName",
-        label: "Host name",
-        placeholder: "Norma",
-      },
-      {
-        key: "urgentPhone",
-        label: "Urgent phone",
-        placeholder: "512-273-7962",
       },
     ],
   },
@@ -208,6 +169,16 @@ function TextField({ field, value, onChange }) {
       ) : null}
     </label>
   );
+}
+
+function valueForField(data, field) {
+  for (const key of [field.key, ...(field.aliases || [])]) {
+    const value = data[key];
+    if (value !== undefined && value !== null && String(value).trim()) {
+      return value;
+    }
+  }
+  return "";
 }
 
 export default function PropertyVariablesSettings({ config = {}, onChange }) {
@@ -400,7 +371,7 @@ export default function PropertyVariablesSettings({ config = {}, onChange }) {
                     <TextField
                       key={field.key}
                       field={field}
-                      value={selectedData[field.key] || ""}
+                      value={valueForField(selectedData, field)}
                       onChange={(value) => updateField(field.key, value)}
                     />
                   ))}

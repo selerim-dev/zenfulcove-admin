@@ -28,18 +28,14 @@ type StayResponse = {
     wifiPassword: string;
     unitDirections: string;
     parkingInstructions: string;
-    dedicatedKayakText: string;
-    additionalKayakText: string;
-    lifeJacketText: string;
     amenitiesText: string;
+    goodToKnowText: string;
     additionalRulesText: string;
     goodToKnowItems?: {
       label?: string;
       title?: string;
       text?: string;
     }[];
-    hostName: string;
-    urgentPhone: string;
     reservationFormUrl: string;
   };
   access?: {
@@ -71,9 +67,8 @@ function nightsBetween(arrival?: string, departure?: string) {
   return Math.max(0, Math.round((end.getTime() - start.getTime()) / 86400000));
 }
 
-function phoneHref(phone?: string) {
-  const digits = String(phone || "").replace(/[^\d+]/g, "");
-  return digits ? `tel:${digits}` : "tel:+15122737962";
+function cleanText(value?: unknown) {
+  return String(value || "").trim();
 }
 
 function InfoTile({
@@ -99,6 +94,60 @@ function InfoTile({
         </p>
       ) : null}
     </div>
+  );
+}
+
+function SectionCard({
+  eyebrow,
+  title,
+  action,
+  children,
+}: {
+  eyebrow: string;
+  title: string;
+  action?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <article className="rounded-[24px] border border-[var(--color-border)] bg-white p-6 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-[var(--color-accent)] hover:shadow-lg">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--color-accent)]">
+            {eyebrow}
+          </p>
+          <h2 className="mt-1 font-serif text-2xl font-medium tracking-tight text-[var(--color-ink)]">
+            {title}
+          </h2>
+        </div>
+        {action ? <div className="shrink-0">{action}</div> : null}
+      </div>
+      <div className="mt-5">{children}</div>
+    </article>
+  );
+}
+
+function DetailList({
+  items,
+}: {
+  items: { label: string; value: string; mono?: boolean }[];
+}) {
+  return (
+    <dl className="space-y-4">
+      {items.map((item) => (
+        <div key={item.label}>
+          <dt className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--color-ink-muted)]">
+            {item.label}
+          </dt>
+          <dd
+            className={`mt-1 whitespace-pre-line break-words text-sm leading-relaxed text-[var(--color-ink)] ${
+              item.mono ? "font-mono text-base" : ""
+            }`}
+          >
+            {item.value}
+          </dd>
+        </div>
+      ))}
+    </dl>
   );
 }
 
@@ -198,25 +247,29 @@ export default function GuestStayDashboard({
   const stay = data.stay;
   const access = data.access;
   const formComplete = Boolean(access?.formSubmitted);
-  const mapsAddress = stay.googleMapsAddress || stay.address;
+  const mapsAddress = cleanText(stay.googleMapsAddress || stay.address);
   const mapsUrl =
     stay.googleMapsUrl ||
     (mapsAddress
       ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapsAddress)}`
       : "");
-  const goodToKnowItems = (
-    Array.isArray(stay.goodToKnowItems) && stay.goodToKnowItems.length > 0
-      ? stay.goodToKnowItems
-      : [
-          { label: "Amenities", text: stay.amenitiesText },
-          { label: "Additional rules", text: stay.additionalRulesText },
-        ]
-  )
-    .map((item) => ({
-      label: String(item.label || item.title || "").trim(),
-      text: String(item.text || "").trim(),
-    }))
-    .filter((item) => item.text);
+  const locationItems = [
+    { label: "Address", value: mapsAddress },
+    { label: "Arrival notes", value: cleanText(stay.unitDirections) },
+    { label: "Parking", value: cleanText(stay.parkingInstructions) },
+  ].filter((item) => item.value);
+  const wifiItems = [
+    { label: "Network", value: cleanText(stay.wifiName), mono: true },
+    { label: "Password", value: cleanText(stay.wifiPassword), mono: true },
+  ].filter((item) => item.value);
+  const goodToKnowText = cleanText(stay.goodToKnowText || stay.additionalRulesText);
+  const amenitiesText = cleanText(stay.amenitiesText);
+  const hasPropertyInfo =
+    locationItems.length > 0 ||
+    Boolean(mapsUrl) ||
+    wifiItems.length > 0 ||
+    Boolean(goodToKnowText) ||
+    Boolean(amenitiesText);
 
   return (
     <div className="mx-auto max-w-6xl space-y-8">
@@ -264,159 +317,95 @@ export default function GuestStayDashboard({
         />
       </section>
 
-      <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="space-y-4">
-          <StayCard>
+      <StayCard
+        className={
+          formComplete
+            ? "border-emerald-200 bg-emerald-50/20"
+            : "border-red-200 bg-red-50/30"
+        }
+      >
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div>
             <h2 className="font-serif text-2xl font-medium tracking-tight">
-              Getting here
+              Reservation form
             </h2>
             <p className="mt-3 text-sm leading-relaxed text-[var(--color-ink-muted)]">
-              {mapsAddress}
+              {formComplete
+                ? "Your reservation form is complete."
+                : "Complete the reservation form so access-code release can be approved."}
             </p>
-            <div className="mt-5 grid gap-3 sm:grid-cols-2">
-              <p className="rounded-2xl bg-[var(--color-bg)] p-4 text-sm leading-relaxed text-[var(--color-ink)]">
-                {stay.unitDirections}
-              </p>
-              <p className="rounded-2xl bg-[var(--color-bg)] p-4 text-sm leading-relaxed text-[var(--color-ink)]">
-                {stay.parkingInstructions}
-              </p>
-            </div>
-            {mapsUrl ? (
-              <a
-                href={mapsUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="mt-5 inline-flex rounded-full border border-[var(--color-border)] bg-white px-4 py-2 text-sm font-medium text-[var(--color-ink)] transition hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]"
-              >
-                Open in Maps
-              </a>
-            ) : null}
-          </StayCard>
+          </div>
+          <span
+            className={`inline-flex w-fit items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] ${
+              formComplete
+                ? "bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200"
+                : "bg-red-50 text-red-700 ring-1 ring-red-200"
+            }`}
+          >
+            <span aria-hidden="true">{formComplete ? "✓" : "!"}</span>
+            {formComplete ? "Complete" : "Action required"}
+          </span>
+        </div>
+        {stay.reservationFormUrl ? (
+          <Link
+            href={stay.reservationFormUrl}
+            className={`mt-5 inline-flex rounded-full px-4 py-2 text-sm font-medium transition ${
+              formComplete
+                ? "border border-emerald-200 bg-emerald-50 text-emerald-900 hover:border-emerald-300"
+                : "bg-red-600 text-white hover:bg-red-700"
+            }`}
+          >
+            {formComplete ? "View or Edit Form" : "Complete Form"}
+          </Link>
+        ) : null}
+      </StayCard>
 
-          <div className="grid gap-4 md:grid-cols-2">
-            <StayCard>
-              <h2 className="font-serif text-2xl font-medium tracking-tight">
-                Wi-Fi
-              </h2>
-              <dl className="mt-4 space-y-3">
-                <div>
-                  <dt className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--color-ink-muted)]">
-                    Network
-                  </dt>
-                  <dd className="mt-1 break-words font-mono text-lg text-[var(--color-ink)]">
-                    {stay.wifiName || "Not available"}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--color-ink-muted)]">
-                    Password
-                  </dt>
-                  <dd className="mt-1 break-words font-mono text-lg text-[var(--color-ink)]">
-                    {stay.wifiPassword || "Not available"}
-                  </dd>
-                </div>
-              </dl>
-            </StayCard>
-
-            <StayCard
-              className={
-                formComplete
-                  ? "border-emerald-200 bg-emerald-50/20"
-                  : "border-red-200 bg-red-50/30"
+      {hasPropertyInfo ? (
+        <section className="grid gap-4 md:grid-cols-2">
+          {locationItems.length > 0 || mapsUrl ? (
+            <SectionCard
+              eyebrow="Location"
+              title="Getting here"
+              action={
+                mapsUrl ? (
+                  <a
+                    href={mapsUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex rounded-full border border-[var(--color-border)] bg-white px-3 py-1.5 text-xs font-medium text-[var(--color-ink)] transition hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]"
+                  >
+                    Maps
+                  </a>
+                ) : null
               }
             >
-              <div className="flex items-start justify-between gap-4">
-                <h2 className="font-serif text-2xl font-medium tracking-tight">
-                  Reservation form
-                </h2>
-                <span
-                  className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] ${
-                    formComplete
-                      ? "bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200"
-                      : "bg-red-50 text-red-700 ring-1 ring-red-200"
-                  }`}
-                >
-                  <span aria-hidden="true">{formComplete ? "✓" : "!"}</span>
-                  {formComplete ? "Complete" : "Action required"}
-                </span>
-              </div>
-              <p className="mt-3 text-sm leading-relaxed text-[var(--color-ink-muted)]">
-                {formComplete
-                  ? "Your reservation form is complete."
-                  : "Complete the reservation form so access-code release can be approved."}
+              <DetailList items={locationItems} />
+            </SectionCard>
+          ) : null}
+
+          {wifiItems.length > 0 ? (
+            <SectionCard eyebrow="Wi-Fi" title="Network details">
+              <DetailList items={wifiItems} />
+            </SectionCard>
+          ) : null}
+
+          {goodToKnowText ? (
+            <SectionCard eyebrow="Good to know" title="Stay notes">
+              <p className="whitespace-pre-line text-sm leading-relaxed text-[var(--color-ink)]">
+                {goodToKnowText}
               </p>
-              {stay.reservationFormUrl ? (
-                <Link
-                  href={stay.reservationFormUrl}
-                  className={`mt-5 inline-flex rounded-full px-4 py-2 text-sm font-medium transition ${
-                    formComplete
-                      ? "border border-emerald-200 bg-emerald-50 text-emerald-900 hover:border-emerald-300"
-                      : "bg-red-600 text-white hover:bg-red-700"
-                  }`}
-                >
-                  {formComplete ? "View or Edit Form" : "Complete Form"}
-                </Link>
-              ) : null}
-            </StayCard>
-          </div>
+            </SectionCard>
+          ) : null}
 
-          <StayCard>
-            <h2 className="font-serif text-2xl font-medium tracking-tight">
-              Good to know
-            </h2>
-            {goodToKnowItems.length > 0 ? (
-              <div className="mt-4 divide-y divide-[var(--color-border)] text-sm leading-relaxed text-[var(--color-ink-muted)]">
-                {goodToKnowItems.map((item, index) => (
-                  <div key={`${item.label}-${index}`} className="py-4 first:pt-0 last:pb-0">
-                    {item.label ? (
-                      <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--color-ink)]">
-                        {item.label}
-                      </p>
-                    ) : null}
-                    <p>{item.text}</p>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="mt-4 text-sm leading-relaxed text-[var(--color-ink-muted)]">
-                Stay notes are not available yet.
+          {amenitiesText ? (
+            <SectionCard eyebrow="Amenities" title="What is included">
+              <p className="whitespace-pre-line text-sm leading-relaxed text-[var(--color-ink)]">
+                {amenitiesText}
               </p>
-            )}
-          </StayCard>
-        </div>
-
-        <aside className="space-y-4 lg:sticky lg:top-8 lg:self-start">
-          <StayCard>
-            <h2 className="font-serif text-2xl font-medium tracking-tight">
-              Need help?
-            </h2>
-            <p className="mt-3 text-sm leading-relaxed text-[var(--color-ink-muted)]">
-              For urgent matters, contact {stay.hostName || "Zenfulcove Glamping"}.
-            </p>
-            <a
-              href={phoneHref(stay.urgentPhone)}
-              className="mt-5 block rounded-2xl bg-[var(--color-ink)] px-4 py-3 text-center text-sm font-medium text-white transition hover:bg-[var(--color-accent-strong)]"
-            >
-              Call or text {stay.urgentPhone || "512-273-7962"}
-            </a>
-          </StayCard>
-
-          <StayCard>
-            <h2 className="font-serif text-2xl font-medium tracking-tight">
-              Kayaks
-            </h2>
-            <div className="mt-3 space-y-3 text-sm leading-relaxed text-[var(--color-ink-muted)]">
-              {stay.dedicatedKayakText ? <p>{stay.dedicatedKayakText}</p> : null}
-              {stay.additionalKayakText ? <p>{stay.additionalKayakText}</p> : null}
-              {stay.lifeJacketText ? <p>{stay.lifeJacketText}</p> : null}
-            </div>
-            <p className="mt-4 rounded-2xl bg-[var(--color-bg)] p-3 text-xs leading-relaxed text-[var(--color-ink-muted)]">
-              Online kayak checkout is currently paused while payments are
-              being finalized. Reply to your guest message thread for rentals.
-            </p>
-          </StayCard>
-        </aside>
-      </div>
+            </SectionCard>
+          ) : null}
+        </section>
+      ) : null}
     </div>
   );
 }
