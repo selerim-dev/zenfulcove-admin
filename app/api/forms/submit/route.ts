@@ -366,6 +366,21 @@ export async function POST(request: Request) {
       ? (existingSubmission.payload as Record<string, unknown>)
       : {};
 
+  if (parsed.submissionId && !isTrustedPreview) {
+    await recordSubmitLog({
+      status: "failed",
+      action: "Form submit rejected: customer submissions are view-only after completion.",
+      formSlug: resolvedFormSlug,
+      parsed,
+      contact,
+      httpStatus: 403,
+    });
+    return NextResponse.json(
+      { error: "Submitted reservation forms are view-only." },
+      { status: 403 }
+    );
+  }
+
   if (parsed.submissionId) {
     if (!existingSubmission || existingSubmission.form_slug !== resolvedFormSlug) {
       await recordSubmitLog({

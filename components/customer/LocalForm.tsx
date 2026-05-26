@@ -34,6 +34,17 @@ type SignaturePadProps = {
   onChange: (value: string) => void;
 };
 
+type LocalFormSubmissionFile = {
+  fieldName?: string;
+  kind?: string;
+  fileName?: string;
+  signedUrl?: string;
+  contentType?: string;
+  size?: number;
+  path?: string;
+  bucket?: string;
+};
+
 const inputClass =
   "w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2.5 text-sm text-[var(--color-ink)] outline-none transition focus:border-[var(--color-accent)] focus:bg-white";
 
@@ -131,6 +142,77 @@ function buildInitialFormValues(
   }
 
   return next;
+}
+
+function cleanDisplay(value: unknown) {
+  return String(value ?? "").trim();
+}
+
+function formatSubmittedAt(value: string) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
+}
+
+function readOnlyValueForField(
+  field: LocalFormField,
+  initialValues: Record<string, unknown>
+) {
+  const name = String(field.name || "").trim();
+  const type = String(field.type || "text").toLowerCase();
+  const value = initialValues[name];
+
+  if (type === "daterange") {
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      const range = value as { checkIn?: unknown; checkOut?: unknown };
+      const checkIn = cleanDisplay(range.checkIn);
+      const checkOut = cleanDisplay(range.checkOut);
+      return [checkIn, checkOut].filter(Boolean).join(" to ");
+    }
+    return "";
+  }
+
+  if (type === "checkbox") {
+    return value === true || value === "true" || value === "1" ? "Yes" : "";
+  }
+
+  if (type === "terms") {
+    return value === true || value === "true" || value === "1" ? "Accepted" : "";
+  }
+
+  if (Array.isArray(value)) {
+    return value.map(cleanDisplay).filter(Boolean).join(", ");
+  }
+
+  if (value && typeof value === "object") {
+    const objectValue = value as Record<string, unknown>;
+    const joinedName = [objectValue.first, objectValue.last]
+      .map(cleanDisplay)
+      .filter(Boolean)
+      .join(" ");
+    if (joinedName) return joinedName;
+    return JSON.stringify(value);
+  }
+
+  return cleanDisplay(value);
+}
+
+function filesForField(files: LocalFormSubmissionFile[], fieldName: string) {
+  return (files || []).filter(
+    (file) => cleanDisplay(file.fieldName) === fieldName
+  );
+}
+
+function isImageFile(file: LocalFormSubmissionFile) {
+  const contentType = cleanDisplay(file.contentType).toLowerCase();
+  return file.kind === "image" || file.kind === "signature" || contentType.startsWith("image/");
 }
 
 function loadImage(file: File) {
@@ -355,6 +437,211 @@ function HelpNote({ text }: { text?: string }) {
   );
 }
 
+function ReadOnlyFileList({ files }: { files: LocalFormSubmissionFile[] }) {
+  if (files.length === 0) return null;
+
+  return (
+    <div className="grid gap-3 sm:grid-cols-2">
+      {files.map((file, index) => {
+        const label = cleanDisplay(file.fileName) || `Upload ${index + 1}`;
+        const url = cleanDisplay(file.signedUrl);
+        const image = isImageFile(file);
+
+        return (
+          <div
+            key={`${file.path || file.fileName || file.fieldName}-${index}`}
+            className="overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)]"
+          >
+            {image && url ? (
+              <a href={url} target="_blank" rel="noreferrer" className="block">
+                <span
+                  role="img"
+                  aria-label={label}
+                  className="block h-56 w-full bg-white bg-contain bg-center bg-no-repeat"
+                  style={{ backgroundImage: `url("${url.replace(/"/g, '\\"')}")` }}
+                />
+              </a>
+            ) : null}
+            <div className="flex items-center justify-between gap-3 p-3">
+              <span className="min-w-0 truncate text-sm font-medium text-[var(--color-ink)]">
+                {label}
+              </span>
+              {url ? (
+                <a
+                  href={url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="shrink-0 rounded-full border border-[var(--color-border)] bg-white px-3 py-1 text-xs font-medium text-[var(--color-ink)] transition hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]"
+                >
+                  View
+                </a>
+              ) : null}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function ReadOnlyField({
+  field,
+  schema,
+  initialValues,
+  existingFiles,
+}: {
+  field: LocalFormField;
+  schema: LocalFormSchema;
+  initialValues: Record<string, unknown>;
+  existingFiles: LocalFormSubmissionFile[];
+}) {
+  const name = cleanDisplay(field.name);
+  if (!name) return null;
+
+  const type = cleanDisplay(field.type || "text").toLowerCase();
+  const label = field.label || name;
+  const helpText = field.helpText || "";
+
+  if (type === "section") {
+    return (
+      <section className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] p-4">
+        <div className="flex items-center gap-2">
+          <h2 className="font-serif text-xl font-medium tracking-tight text-[var(--color-ink)]">
+            {label}
+          </h2>
+          <HelpNote text={helpText} />
+        </div>
+        {field.placeholder ? (
+          <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-[var(--color-ink-muted)]">
+            {field.placeholder}
+          </p>
+        ) : null}
+      </section>
+    );
+  }
+
+  const fieldFiles = filesForField(existingFiles, name);
+  const value = readOnlyValueForField(field, initialValues);
+  const showValue =
+    Boolean(value) && !(fieldFiles.length > 0 && ["file", "image", "signature"].includes(type));
+  if (fieldFiles.length === 0 && !value) return null;
+
+  return (
+    <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] p-4">
+      <div className="mb-2 flex items-center gap-2">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--color-ink-muted)]">
+          {type === "signature" ? `${label} signature` : label}
+        </p>
+        <HelpNote text={helpText} />
+      </div>
+
+      {type === "terms" && schema.termsText ? (
+        <div className="mb-3 max-h-44 overflow-y-auto rounded-xl border border-[var(--color-border)] bg-white p-3 text-xs leading-relaxed text-[var(--color-ink-muted)]">
+          <p className="whitespace-pre-line">{schema.termsText}</p>
+        </div>
+      ) : null}
+
+      {fieldFiles.length > 0 ? <ReadOnlyFileList files={fieldFiles} /> : null}
+      {showValue ? (
+        <p className="whitespace-pre-line break-words text-sm leading-relaxed text-[var(--color-ink)]">
+          {value}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function ReadOnlyLocalForm({
+  fields,
+  schema,
+  initialValues,
+  existingFiles,
+  submittedAt,
+  bookingCode,
+}: {
+  fields: LocalFormField[];
+  schema: LocalFormSchema;
+  initialValues: Record<string, unknown>;
+  existingFiles: LocalFormSubmissionFile[];
+  submittedAt?: string;
+  bookingCode?: string;
+}) {
+  const resolvedBookingCode =
+    cleanDisplay(bookingCode) || bookingCodeFromPayload(initialValues);
+  const visibleFields = fields
+    .map((field) => cleanDisplay(field.name))
+    .filter(Boolean);
+  const visibleFieldSet = new Set(visibleFields);
+  const unmatchedFiles = existingFiles.filter(
+    (file) => !visibleFieldSet.has(cleanDisplay(file.fieldName))
+  );
+  const hasVisibleData =
+    visibleFields.some((fieldName) => {
+      const field = fields.find((candidate) => candidate.name === fieldName);
+      return (
+        field &&
+        (readOnlyValueForField(field, initialValues) ||
+          filesForField(existingFiles, fieldName).length > 0)
+      );
+    }) || fields.some((field) => cleanDisplay(field.type).toLowerCase() === "section");
+
+  return (
+    <div className="space-y-5 rounded-2xl border border-[var(--color-border)] bg-white p-6 shadow-sm">
+      <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-800">
+          Submitted form
+        </p>
+        <h2 className="mt-1 font-serif text-2xl font-medium tracking-tight text-[var(--color-ink)]">
+          Your reservation form is complete.
+        </h2>
+        <p className="mt-2 text-sm leading-relaxed text-[var(--color-ink-muted)]">
+          This copy is view-only. Contact Zenfulcove Glamping if anything needs
+          to be changed.
+        </p>
+        {submittedAt ? (
+          <p className="mt-2 text-xs text-[var(--color-ink-muted)]">
+            Submitted {formatSubmittedAt(submittedAt)}
+          </p>
+        ) : null}
+      </div>
+
+      {hasVisibleData ? (
+        fields.map((field) => (
+          <ReadOnlyField
+            key={field.name}
+            field={field}
+            schema={schema}
+            initialValues={initialValues}
+            existingFiles={existingFiles}
+          />
+        ))
+      ) : (
+        <p className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] p-4 text-sm text-[var(--color-ink-muted)]">
+          No saved form details are available to show.
+        </p>
+      )}
+
+      {unmatchedFiles.length > 0 ? (
+        <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] p-4">
+          <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--color-ink-muted)]">
+            Uploaded files
+          </p>
+          <ReadOnlyFileList files={unmatchedFiles} />
+        </div>
+      ) : null}
+
+      {resolvedBookingCode ? (
+        <a
+          href={stayHref(resolvedBookingCode)}
+          className="inline-flex rounded-full bg-[var(--color-accent)] px-5 py-3 text-sm font-medium text-white transition hover:bg-[var(--color-accent-strong)]"
+        >
+          Back to My Stay
+        </a>
+      ) : null}
+    </div>
+  );
+}
+
 export default function LocalForm({
   formSlug,
   schema,
@@ -362,6 +649,8 @@ export default function LocalForm({
   staffPreview = false,
   initialValues = {},
   existingSubmissionId = "",
+  existingSubmissionSubmittedAt = "",
+  existingFiles = [],
   bookingCode = "",
 }: {
   formSlug: string;
@@ -370,10 +659,13 @@ export default function LocalForm({
   staffPreview?: boolean;
   initialValues?: Record<string, unknown>;
   existingSubmissionId?: string;
+  existingSubmissionSubmittedAt?: string;
+  existingFiles?: LocalFormSubmissionFile[];
   bookingCode?: string;
 }) {
   const router = useRouter();
   const fields = Array.isArray(schema.fields) ? schema.fields : [];
+  const readOnly = Boolean(existingSubmissionId && !staffPreview && !preview);
   const [values, setValues] = useState<Record<string, string | boolean>>(() =>
     buildInitialFormValues(fields, initialValues)
   );
@@ -383,6 +675,19 @@ export default function LocalForm({
   const [successStayHref, setSuccessStayHref] = useState("");
   const [preparingFiles, setPreparingFiles] = useState(false);
   const [error, setError] = useState("");
+
+  if (readOnly) {
+    return (
+      <ReadOnlyLocalForm
+        fields={fields}
+        schema={schema}
+        initialValues={initialValues}
+        existingFiles={existingFiles}
+        submittedAt={existingSubmissionSubmittedAt}
+        bookingCode={bookingCode}
+      />
+    );
+  }
 
   function update(name: string, value: string | boolean) {
     setValues((current) => ({ ...current, [name]: value }));

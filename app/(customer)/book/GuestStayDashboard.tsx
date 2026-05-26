@@ -355,7 +355,7 @@ export default function GuestStayDashboard({
                 : "bg-red-600 text-white hover:bg-red-700"
             }`}
           >
-            {formComplete ? "View or Edit Form" : "Complete Form"}
+            {formComplete ? "View Form" : "Complete Form"}
           </Link>
         ) : null}
       </StayCard>

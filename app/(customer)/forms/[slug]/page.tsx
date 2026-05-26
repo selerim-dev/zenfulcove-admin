@@ -5,6 +5,7 @@ import { hasSupabaseAdminEnv } from "@/lib/supabaseEnv";
 import {
   findLocalFormSubmissionForBooking,
   getLocalFormBySlug,
+  signLocalFormUpload,
 } from "@/lib/local-forms";
 
 export const dynamic = "force-dynamic";
@@ -81,6 +82,13 @@ export default async function LocalFormPage({
     !Array.isArray(existingSubmission.payload)
       ? (existingSubmission.payload as Record<string, unknown>)
       : {};
+  const existingFiles = Array.isArray(existingPayload.__files)
+    ? await Promise.all(
+        (existingPayload.__files as Record<string, unknown>[]).map((file) =>
+          signLocalFormUpload(file)
+        )
+      )
+    : [];
   const initialValues =
     bookingCode && !existingPayload.bookingCode
       ? { ...existingPayload, bookingCode }
@@ -122,6 +130,8 @@ export default async function LocalFormPage({
         staffPreview={isAdminPreview}
         initialValues={initialValues}
         existingSubmissionId={String(existingSubmission?.id || "")}
+        existingSubmissionSubmittedAt={String(existingSubmission?.submitted_at || "")}
+        existingFiles={existingFiles}
         bookingCode={bookingCode}
       />
     </div>
