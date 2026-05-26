@@ -33,6 +33,11 @@ type StayResponse = {
     lifeJacketText: string;
     amenitiesText: string;
     additionalRulesText: string;
+    goodToKnowItems?: {
+      label?: string;
+      title?: string;
+      text?: string;
+    }[];
     hostName: string;
     urgentPhone: string;
     reservationFormUrl: string;
@@ -199,6 +204,19 @@ export default function GuestStayDashboard({
     (mapsAddress
       ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapsAddress)}`
       : "");
+  const goodToKnowItems = (
+    Array.isArray(stay.goodToKnowItems) && stay.goodToKnowItems.length > 0
+      ? stay.goodToKnowItems
+      : [
+          { label: "Amenities", text: stay.amenitiesText },
+          { label: "Additional rules", text: stay.additionalRulesText },
+        ]
+  )
+    .map((item) => ({
+      label: String(item.label || item.title || "").trim(),
+      text: String(item.text || "").trim(),
+    }))
+    .filter((item) => item.text);
 
   return (
     <div className="mx-auto max-w-6xl space-y-8">
@@ -346,13 +364,24 @@ export default function GuestStayDashboard({
             <h2 className="font-serif text-2xl font-medium tracking-tight">
               Good to know
             </h2>
-            <div className="mt-4 space-y-4 text-sm leading-relaxed text-[var(--color-ink-muted)]">
-              {[stay.amenitiesText, stay.additionalRulesText]
-                .filter(Boolean)
-                .map((text) => (
-                  <p key={text}>{text}</p>
+            {goodToKnowItems.length > 0 ? (
+              <div className="mt-4 divide-y divide-[var(--color-border)] text-sm leading-relaxed text-[var(--color-ink-muted)]">
+                {goodToKnowItems.map((item, index) => (
+                  <div key={`${item.label}-${index}`} className="py-4 first:pt-0 last:pb-0">
+                    {item.label ? (
+                      <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--color-ink)]">
+                        {item.label}
+                      </p>
+                    ) : null}
+                    <p>{item.text}</p>
+                  </div>
                 ))}
-            </div>
+              </div>
+            ) : (
+              <p className="mt-4 text-sm leading-relaxed text-[var(--color-ink-muted)]">
+                Stay notes are not available yet.
+              </p>
+            )}
           </StayCard>
         </div>
 

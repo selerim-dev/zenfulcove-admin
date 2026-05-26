@@ -344,6 +344,7 @@ export async function POST(request) {
       lifeJacketText: templateData.lifeJacketText,
       amenitiesText: templateData.amenitiesText,
       additionalRulesText: templateData.additionalRulesText,
+      goodToKnowItems: templateData.goodToKnowItems,
       hostName: templateData.hostName,
       urgentPhone: templateData.urgentPhone,
       reservationFormUrl: reservationFormUrlFor(formSlug, normalized.id),

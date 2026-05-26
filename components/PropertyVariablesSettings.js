@@ -10,95 +10,131 @@ const KNOWN_UNITS = [
   { id: "754651", name: "Doodle House" },
 ];
 
-const PROPERTY_VARIABLE_FIELDS = [
+const PROPERTY_VARIABLE_SECTIONS = [
   {
-    key: "displayName",
-    label: "Display name",
-    placeholder: "SKY CASTLE",
-    helper: "Used by {{propertyDisplayName}} in messages and the My Stay page.",
+    title: "Display",
+    helper: "Names shown in Lodgify messages and the customer My Stay page.",
+    fields: [
+      {
+        key: "displayName",
+        label: "Display name",
+        placeholder: "SKY CASTLE",
+        helper: "Used by {{propertyDisplayName}} in messages and the My Stay page.",
+      },
+      {
+        key: "directionsName",
+        label: "Directions/sign name",
+        placeholder: "SKY CASTLE",
+        helper: "Used in fallback directions.",
+      },
+    ],
   },
   {
-    key: "directionsName",
-    label: "Directions/sign name",
-    placeholder: "SKY CASTLE",
-    helper: "Used in fallback directions.",
+    title: "Getting here",
+    helper: "Address, maps link, parking, and unit-specific arrival notes.",
+    fields: [
+      {
+        key: "address",
+        label: "Address shown",
+        placeholder: "103 potato smith rd, unit c, elgin texas 78621",
+      },
+      {
+        key: "googleMapsAddress",
+        label: "Google Maps label",
+        placeholder: "103 potato smith rd, unit c, elgin texas 78621",
+      },
+      {
+        key: "googleMapsUrl",
+        label: "Google Maps URL",
+        placeholder: "https://maps.app.goo.gl/QowaHLFH3anBavuv6?g_st=ic",
+      },
+      {
+        key: "unitDirections",
+        label: "Unit directions",
+        placeholder: "Once you are at Zenfulcove Glamping, follow the signs...",
+        multiline: true,
+      },
+      {
+        key: "parkingInstructions",
+        label: "Parking instructions",
+        placeholder: "Parking - please park in front of your unit...",
+        multiline: true,
+      },
+    ],
   },
   {
-    key: "address",
-    label: "Address shown",
-    placeholder: "103 potato smith rd, unit c, elgin texas 78621",
+    title: "Wi-Fi",
+    helper: "Network details shown after a guest opens My Stay.",
+    fields: [
+      {
+        key: "wifiName",
+        label: "Wi-Fi network",
+        placeholder: "SKYCASTLE",
+      },
+      {
+        key: "wifiPassword",
+        label: "Wi-Fi password",
+        placeholder: "Iamgrateful!",
+      },
+    ],
   },
   {
-    key: "googleMapsAddress",
-    label: "Google Maps label",
-    placeholder: "103 potato smith rd, unit c, elgin texas 78621",
+    title: "Good to know",
+    helper: "These map directly to the Good to know card in My Stay for this property.",
+    fields: [
+      {
+        key: "amenitiesText",
+        label: "Amenities",
+        placeholder: "There is a gas grill on the deck...",
+        multiline: true,
+      },
+      {
+        key: "additionalRulesText",
+        label: "Additional rules",
+        placeholder: "Additional rules are in the unit...",
+        multiline: true,
+      },
+    ],
   },
   {
-    key: "googleMapsUrl",
-    label: "Google Maps URL",
-    placeholder: "https://maps.app.goo.gl/QowaHLFH3anBavuv6?g_st=ic",
+    title: "Kayaks",
+    helper: "Kayak notes shown in My Stay and available to message templates.",
+    fields: [
+      {
+        key: "dedicatedKayakText",
+        label: "Dedicated kayak text",
+        placeholder: "There is one dedicated kayak for this unit...",
+        multiline: true,
+      },
+      {
+        key: "additionalKayakText",
+        label: "Additional kayak text",
+        placeholder: "Additional kayaks are available for rent...",
+        multiline: true,
+      },
+      {
+        key: "lifeJacketText",
+        label: "Life jacket text",
+        placeholder: "Please use the provided life jackets...",
+        multiline: true,
+      },
+    ],
   },
   {
-    key: "wifiName",
-    label: "Wi-Fi network",
-    placeholder: "SKYCASTLE",
-  },
-  {
-    key: "wifiPassword",
-    label: "Wi-Fi password",
-    placeholder: "Iamgrateful!",
-  },
-  {
-    key: "unitDirections",
-    label: "Unit directions",
-    placeholder: "Once you are at Zenfulcove Glamping, follow the signs...",
-    multiline: true,
-  },
-  {
-    key: "parkingInstructions",
-    label: "Parking instructions",
-    placeholder: "Parking - please park in front of your unit...",
-    multiline: true,
-  },
-  {
-    key: "dedicatedKayakText",
-    label: "Dedicated kayak text",
-    placeholder: "There is one dedicated kayak for this unit...",
-    multiline: true,
-  },
-  {
-    key: "additionalKayakText",
-    label: "Additional kayak text",
-    placeholder: "Additional kayaks are available for rent...",
-    multiline: true,
-  },
-  {
-    key: "lifeJacketText",
-    label: "Life jacket text",
-    placeholder: "Please use the provided life jackets...",
-    multiline: true,
-  },
-  {
-    key: "amenitiesText",
-    label: "Amenities text",
-    placeholder: "There is a gas grill on the deck...",
-    multiline: true,
-  },
-  {
-    key: "additionalRulesText",
-    label: "Additional rules text",
-    placeholder: "Additional rules are in the unit...",
-    multiline: true,
-  },
-  {
-    key: "hostName",
-    label: "Host name",
-    placeholder: "Norma",
-  },
-  {
-    key: "urgentPhone",
-    label: "Urgent phone",
-    placeholder: "512-273-7962",
+    title: "Host",
+    helper: "Contact details shown in the Need help card.",
+    fields: [
+      {
+        key: "hostName",
+        label: "Host name",
+        placeholder: "Norma",
+      },
+      {
+        key: "urgentPhone",
+        label: "Urgent phone",
+        placeholder: "512-273-7962",
+      },
+    ],
   },
 ];
 
@@ -343,14 +379,33 @@ export default function PropertyVariablesSettings({ config = {}, onChange }) {
             </p>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2">
-            {PROPERTY_VARIABLE_FIELDS.map((field) => (
-              <TextField
-                key={field.key}
-                field={field}
-                value={selectedData[field.key] || ""}
-                onChange={(value) => updateField(field.key, value)}
-              />
+          <div className="space-y-6">
+            {PROPERTY_VARIABLE_SECTIONS.map((section) => (
+              <div
+                key={section.title}
+                className="border-t border-sand pt-5 first:border-t-0 first:pt-0"
+              >
+                <div className="mb-4">
+                  <h3 className="font-serif text-xl text-forest">
+                    {section.title}
+                  </h3>
+                  {section.helper ? (
+                    <p className="mt-1 text-sm leading-relaxed text-forest/60">
+                      {section.helper}
+                    </p>
+                  ) : null}
+                </div>
+                <div className="grid gap-4 md:grid-cols-2">
+                  {section.fields.map((field) => (
+                    <TextField
+                      key={field.key}
+                      field={field}
+                      value={selectedData[field.key] || ""}
+                      onChange={(value) => updateField(field.key, value)}
+                    />
+                  ))}
+                </div>
+              </div>
             ))}
           </div>
         </div>
