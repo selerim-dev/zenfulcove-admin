@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { optionsForLocalFormSource } from "@/lib/local-form-options";
+import { saveGuestBookingSession, stayHref } from "@/components/customer/bookingSession";
 
 type LocalFormField = {
   name: string;
@@ -60,6 +62,61 @@ function dataUrlToBlob(dataUrl: string) {
     bytes[index] = binary.charCodeAt(index);
   }
   return new Blob([bytes], { type: mime });
+}
+
+function payloadString(payload: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = payload[key];
+    if (typeof value === "string" || typeof value === "number") {
+      const cleaned = String(value).trim();
+      if (cleaned) return cleaned;
+    }
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      const objectValue = value as Record<string, unknown>;
+      const joined = [objectValue.first, objectValue.last]
+        .map((part) => String(part || "").trim())
+        .filter(Boolean)
+        .join(" ");
+      if (joined) return joined;
+    }
+  }
+  return "";
+}
+
+function bookingCodeFromPayload(payload: Record<string, unknown>) {
+  return payloadString(payload, [
+    "bookingCode",
+    "booking_code",
+    "bookingId",
+    "booking_id",
+    "bookingConfirmationId",
+    "booking_confirmation_id",
+    "confirmationCode",
+    "confirmationId",
+    "confirmation_id",
+    "reservationId",
+    "reservation_id",
+  ]);
+}
+
+function lastNameFromPayload(payload: Record<string, unknown>) {
+  const direct = payloadString(payload, [
+    "lastName",
+    "last_name",
+    "guestLastName",
+    "guest_last_name",
+  ]);
+  if (direct) return direct;
+
+  const fullName = payloadString(payload, [
+    "fullName",
+    "full_name",
+    "name",
+    "guestName",
+    "guest_name",
+  ]);
+  const parts = fullName.split(/\s+/).filter(Boolean);
+  return parts.length > 1 ? parts[parts.length - 1] : "";
 }
 
 function loadImage(file: File) {
@@ -295,11 +352,13 @@ export default function LocalForm({
   preview?: boolean;
   staffPreview?: boolean;
 }) {
+  const router = useRouter();
   const fields = Array.isArray(schema.fields) ? schema.fields : [];
   const [values, setValues] = useState<Record<string, string | boolean>>({});
   const [files, setFiles] = useState<Record<string, File[]>>({});
   const [signatures, setSignatures] = useState<Record<string, string>>({});
   const [status, setStatus] = useState<"idle" | "submitting" | "success">("idle");
+  const [successStayHref, setSuccessStayHref] = useState("");
   const [preparingFiles, setPreparingFiles] = useState(false);
   const [error, setError] = useState("");
 
@@ -481,6 +540,17 @@ export default function LocalForm({
       if (!response.ok) {
         throw new Error(data.error || "Could not submit the form.");
       }
+      const bookingCode = bookingCodeFromPayload(payload);
+      const lastName = lastNameFromPayload(payload);
+      const redirectHref =
+        !staffPreview && bookingCode && lastName ? stayHref(bookingCode, lastName) : "";
+      if (redirectHref) {
+        saveGuestBookingSession({
+          reservation: bookingCode,
+          lastName,
+        });
+      }
+      setSuccessStayHref(redirectHref);
       setStatus("success");
       setValues({});
       setFiles({});
@@ -786,7 +856,13 @@ export default function LocalForm({
       {status === "success" ? (
         <SuccessModal
           message={schema.successMessage}
-          onClose={() => setStatus("idle")}
+          onClose={() => {
+            if (successStayHref) {
+              router.push(successStayHref);
+              return;
+            }
+            setStatus("idle");
+          }}
         />
       ) : null}
     </>
@@ -871,7 +947,7 @@ function SuccessModal({
             onClick={onClose}
             className="mt-6 rounded-full bg-[var(--color-accent)] px-6 py-3 text-sm font-medium text-white transition hover:bg-[var(--color-accent-strong)]"
           >
-            Done
+            OK
           </button>
         </div>
 

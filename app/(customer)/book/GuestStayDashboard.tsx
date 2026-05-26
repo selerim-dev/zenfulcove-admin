@@ -19,6 +19,8 @@ type StayResponse = {
   stay?: {
     propertyDisplayName: string;
     address: string;
+    googleMapsAddress: string;
+    googleMapsUrl: string;
     timezone: string;
     checkinTime: string;
     checkoutTime: string;
@@ -190,6 +192,12 @@ export default function GuestStayDashboard({
   const booking = data.booking;
   const stay = data.stay;
   const access = data.access;
+  const mapsAddress = stay.googleMapsAddress || stay.address;
+  const mapsUrl =
+    stay.googleMapsUrl ||
+    (mapsAddress
+      ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapsAddress)}`
+      : "");
 
   return (
     <div className="mx-auto max-w-6xl space-y-8">
@@ -244,7 +252,7 @@ export default function GuestStayDashboard({
               Getting here
             </h2>
             <p className="mt-3 text-sm leading-relaxed text-[var(--color-ink-muted)]">
-              {stay.address}
+              {mapsAddress}
             </p>
             <div className="mt-5 grid gap-3 sm:grid-cols-2">
               <p className="rounded-2xl bg-[var(--color-bg)] p-4 text-sm leading-relaxed text-[var(--color-ink)]">
@@ -254,9 +262,9 @@ export default function GuestStayDashboard({
                 {stay.parkingInstructions}
               </p>
             </div>
-            {stay.address ? (
+            {mapsUrl ? (
               <a
-                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(stay.address)}`}
+                href={mapsUrl}
                 target="_blank"
                 rel="noreferrer"
                 className="mt-5 inline-flex rounded-full border border-[var(--color-border)] bg-white px-4 py-2 text-sm font-medium text-[var(--color-ink)] transition hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]"

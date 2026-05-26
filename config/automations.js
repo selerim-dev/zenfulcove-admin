@@ -77,7 +77,9 @@ export const automationConfig = {
       "Sky Castle": {
         displayName: "SKY CASTLE",
         directionsName: "SKY CASTLE",
-        address: "Zenfulcove Glamping, 103 Potato Smith Rd unit c, Elgin, TX 78621",
+        address: "103 potato smith rd, unit c, elgin texas 78621",
+        googleMapsAddress: "103 potato smith rd, unit c, elgin texas 78621",
+        googleMapsUrl: "https://maps.app.goo.gl/QowaHLFH3anBavuv6?g_st=ic",
         parkingInstructions:
           "Parking - please park in front of your unit on the white gravel driveway.",
         wifiName: "SKYCASTLE",

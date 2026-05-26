@@ -1,3 +1,5 @@
+import { bookingCodeLookupVariants } from "@/lib/booking-code";
+
 const LODGIFY_BASE = "https://api.lodgify.com";
 
 export class LodgifyError extends Error {
@@ -105,22 +107,26 @@ export function normalizeReservation(
 export async function fetchReservationById(
   reservationId: string
 ): Promise<NormalizedReservation | null> {
-  const id = encodeURIComponent(reservationId.trim());
-  const candidatePaths = [
-    `/v2/reservations/bookings/${id}`,
-    `/v1/reservation/${id}`,
-  ];
+  const variants = bookingCodeLookupVariants(reservationId);
 
-  for (const path of candidatePaths) {
-    try {
-      const raw = await lodgifyGet<LodgifyReservation>(path);
-      const normalized = normalizeReservation(raw);
-      if (normalized) return normalized;
-    } catch (err) {
-      if (err instanceof LodgifyError && err.status === 404) {
-        continue;
+  for (const variant of variants) {
+    const id = encodeURIComponent(variant);
+    const candidatePaths = [
+      `/v2/reservations/bookings/${id}`,
+      `/v1/reservation/${id}`,
+    ];
+
+    for (const path of candidatePaths) {
+      try {
+        const raw = await lodgifyGet<LodgifyReservation>(path);
+        const normalized = normalizeReservation(raw);
+        if (normalized) return normalized;
+      } catch (err) {
+        if (err instanceof LodgifyError && err.status === 404) {
+          continue;
+        }
+        throw err;
       }
-      throw err;
     }
   }
 

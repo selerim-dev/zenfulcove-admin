@@ -311,7 +311,9 @@ export async function POST(request) {
     },
     stay: {
       propertyDisplayName: templateData.propertyDisplayName,
-      address: property?.address || templateData.address,
+      address: templateData.address || property?.address,
+      googleMapsAddress: templateData.googleMapsAddress || templateData.address || property?.address,
+      googleMapsUrl: templateData.googleMapsUrl,
       timezone: property?.timezone || "America/Chicago",
       checkinTime: templateData.checkinTime,
       checkoutTime: templateData.checkoutTime,
