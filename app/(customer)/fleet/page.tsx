@@ -13,7 +13,7 @@ import FleetCalendar from "./FleetCalendar";
 
 export const dynamic = "force-dynamic";
 
-const DAYS = 7;
+const BOOKING_WINDOW_DAYS = 90;
 
 export default async function FleetPage() {
   const isSupabaseConfigured = hasSupabaseRuntimeEnv();
@@ -21,7 +21,7 @@ export default async function FleetPage() {
 
   const today = todayIso();
   const rangeStart = dayBoundsUtc(today).start;
-  const rangeEnd = dayBoundsUtc(addDaysIso(today, DAYS)).start;
+  const rangeEnd = dayBoundsUtc(addDaysIso(today, BOOKING_WINDOW_DAYS)).start;
 
   let bookingRows:
     | { kayak_id: string | null; starts_at: string | null; ends_at: string | null }[]
@@ -53,7 +53,7 @@ export default async function FleetPage() {
     end: new Date(b.ends_at as string),
   }));
 
-  const days = Array.from({ length: DAYS }, (_, i) => {
+  const days = Array.from({ length: BOOKING_WINDOW_DAYS }, (_, i) => {
     const iso = addDaysIso(today, i);
     return {
       iso,
@@ -82,11 +82,11 @@ export default async function FleetPage() {
           Customer Portal
         </p>
         <h1 className="mt-2 font-serif text-4xl font-medium leading-[1.05] tracking-tight md:text-5xl">
-          Availability this week.
+          Availability calendar.
         </h1>
         <p className="mt-3 max-w-xl text-sm leading-relaxed text-[var(--color-ink-muted)]">
-          Click any OPEN cell to reserve available rental equipment for that
-          day.
+          Select a rental to review its details, then pick an available date in
+          the next 90 days to reserve it.
         </p>
       </header>
 

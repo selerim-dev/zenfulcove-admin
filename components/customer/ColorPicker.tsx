@@ -7,9 +7,11 @@ import { COLOR_OPTIONS, colorLabel } from "@/lib/types";
 export default function ColorPicker({
   name,
   defaultValue = "#2563eb",
+  onValueChange,
 }: {
   name: string;
   defaultValue?: string;
+  onValueChange?: (value: string) => void;
 }) {
   const [value, setValue] = useState(defaultValue);
   const [open, setOpen] = useState(false);
@@ -86,6 +88,7 @@ export default function ColorPicker({
                   type="button"
                   onClick={() => {
                     setValue(c.value);
+                    onValueChange?.(c.value);
                     setOpen(false);
                   }}
                   className={`h-9 w-9 rounded-full ring-1 ring-black/10 transition ${

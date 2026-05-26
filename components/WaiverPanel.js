@@ -39,6 +39,11 @@ const DEFAULT_EMAILS = [
 
 const FORM_SOURCE_INTERNAL = "internal";
 const FORM_SOURCE_JOTFORM = "jotform";
+const PUBLIC_APP_BASE_URL = (
+  process.env.NEXT_PUBLIC_SITE_URL ||
+  process.env.NEXT_PUBLIC_APP_URL ||
+  "https://zenfulcove-admin.vercel.app"
+).replace(/\/+$/, "");
 
 const TEMPLATE_VARIABLES = [
   "GuestFirstName",
@@ -49,7 +54,9 @@ const TEMPLATE_VARIABLES = [
   "bookingId",
   "propertyDisplayName",
   "reservationFormUrl",
+  "reservationFormURL",
   "waiverUrl",
+  "waiverURL",
 ];
 
 const ACCESS_MESSAGE_PLACEHOLDER =
@@ -84,8 +91,10 @@ const DEFAULT_PREVIEW_VALUES = {
   UnitName: "Sky Castle",
   wifiName: "SKYCASTLE",
   wifiPassword: "Iamgrateful!",
-  reservationFormUrl: "/forms/welcome-to-zenfulcove",
-  waiverUrl: "/forms/welcome-to-zenfulcove",
+  reservationFormUrl: `${PUBLIC_APP_BASE_URL}/forms/welcome-to-zenfulcove`,
+  reservationFormURL: `${PUBLIC_APP_BASE_URL}/forms/welcome-to-zenfulcove`,
+  waiverUrl: `${PUBLIC_APP_BASE_URL}/forms/welcome-to-zenfulcove`,
+  waiverURL: `${PUBLIC_APP_BASE_URL}/forms/welcome-to-zenfulcove`,
   dedicatedKayakText: "There is one dedicated kayak for Sky Castle guests. The kayak lock code is 1010.",
   amenitiesText: "There is a gas grill on the deck, an outdoor soaking tub, private beach access, and one kayak for your enjoyment.",
   accessMessageText: "Sample access message text",
@@ -120,6 +129,11 @@ function jotformUrl(formId) {
   if (!normalized) return "";
   if (/^https?:\/\//i.test(normalized)) return normalized;
   return `https://form.jotform.com/${normalized}`;
+}
+
+function localFormUrl(slug) {
+  const normalized = normalizeFormSlug(slug || "welcome-to-zenfulcove");
+  return `${PUBLIC_APP_BASE_URL}/forms/${normalized}`;
 }
 
 function normalizeLookupKey(value) {
@@ -166,6 +180,15 @@ function sanitizePreviewHtml(value) {
   );
 }
 
+function linkifyEscapedPreviewUrls(value) {
+  return String(value || "").replace(/\bhttps?:\/\/[^\s<]+/g, (match) => {
+    const trailingMatch = match.match(/[),.!?:;]+$/);
+    const trailing = trailingMatch?.[0] || "";
+    const url = trailing ? match.slice(0, -trailing.length) : match;
+    return `<a href="${url}">${url}</a>${trailing}`;
+  });
+}
+
 function previewValueForVariable(variable, previewValues = {}) {
   const key = String(variable || "").trim();
   const lowerCamel = key ? `${key.charAt(0).toLowerCase()}${key.slice(1)}` : "";
@@ -189,11 +212,15 @@ function messagePreviewHtml(value, previewValues = {}) {
   const raw = applyPreviewVariables(value, previewValues).trim();
   if (!raw) return "";
   const hasHtml = /<\/?(a|br|em|i|li|ol|p|strong|b|u|ul)\b/i.test(raw);
-  return hasHtml ? sanitizePreviewHtml(raw) : escapePreviewHtml(raw);
+  return hasHtml
+    ? sanitizePreviewHtml(raw)
+    : linkifyEscapedPreviewUrls(escapePreviewHtml(raw));
 }
 
 function buildPreviewValues({ selectedProperty, selectedMessageData, currentFormSlug }) {
-  const formUrl = currentFormSlug ? `/forms/${currentFormSlug}` : DEFAULT_PREVIEW_VALUES.reservationFormUrl;
+  const formUrl = currentFormSlug
+    ? localFormUrl(currentFormSlug)
+    : DEFAULT_PREVIEW_VALUES.reservationFormUrl;
   const propertyDisplayName =
     selectedMessageData.displayName ||
     selectedMessageData.propertyDisplayName ||
@@ -210,7 +237,9 @@ function buildPreviewValues({ selectedProperty, selectedMessageData, currentForm
     wifiName: selectedMessageData.wifiName || DEFAULT_PREVIEW_VALUES.wifiName,
     wifiPassword: selectedMessageData.wifiPassword || DEFAULT_PREVIEW_VALUES.wifiPassword,
     reservationFormUrl: formUrl,
+    reservationFormURL: formUrl,
     waiverUrl: formUrl,
+    waiverURL: formUrl,
     dedicatedKayakText:
       selectedMessageData.dedicatedKayakText || DEFAULT_PREVIEW_VALUES.dedicatedKayakText,
     amenitiesText: selectedMessageData.amenitiesText || DEFAULT_PREVIEW_VALUES.amenitiesText,
@@ -716,7 +745,7 @@ export default function WaiverPanel({
     safeConfig.emails?.[0]?.jotformFormId ||
     safeConfig.reminders?.[0]?.jotformFormId ||
     "";
-  const reminderFormUrl = currentFormSlug ? `/forms/${currentFormSlug}` : "";
+  const reminderFormUrl = currentFormSlug ? localFormUrl(currentFormSlug) : "";
   const legacyFormUrl = jotformUrl(currentJotformFormId);
   const activeReminderCount = emails.length;
   const propertyStatusLabel =
