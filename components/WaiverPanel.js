@@ -78,98 +78,6 @@ const TEMPLATE_VARIABLES = [
   "waiverURL",
 ];
 
-const PROPERTY_VARIABLE_FIELDS = [
-  {
-    key: "displayName",
-    label: "Display name",
-    placeholder: "SKY CASTLE",
-    helper: "Used by {{propertyDisplayName}} in messages and the My Stay page.",
-  },
-  {
-    key: "directionsName",
-    label: "Directions/sign name",
-    placeholder: "SKY CASTLE",
-    helper: "Used in fallback directions text.",
-  },
-  {
-    key: "address",
-    label: "Address shown",
-    placeholder: "103 potato smith rd, unit c, elgin texas 78621",
-  },
-  {
-    key: "googleMapsAddress",
-    label: "Google Maps label",
-    placeholder: "103 potato smith rd, unit c, elgin texas 78621",
-  },
-  {
-    key: "googleMapsUrl",
-    label: "Google Maps URL",
-    placeholder: "https://maps.app.goo.gl/QowaHLFH3anBavuv6?g_st=ic",
-  },
-  {
-    key: "wifiName",
-    label: "Wi-Fi network",
-    placeholder: "SKYCASTLE",
-  },
-  {
-    key: "wifiPassword",
-    label: "Wi-Fi password",
-    placeholder: "Iamgrateful!",
-  },
-  {
-    key: "unitDirections",
-    label: "Unit directions",
-    placeholder: "Once you are at Zenfulcove Glamping, follow the signs...",
-    multiline: true,
-  },
-  {
-    key: "parkingInstructions",
-    label: "Parking instructions",
-    placeholder: "Parking - please park in front of your unit...",
-    multiline: true,
-  },
-  {
-    key: "dedicatedKayakText",
-    label: "Dedicated kayak text",
-    placeholder: "There is one dedicated kayak for this unit...",
-    multiline: true,
-  },
-  {
-    key: "additionalKayakText",
-    label: "Additional kayak text",
-    placeholder: "Additional kayaks are available for rent...",
-    multiline: true,
-  },
-  {
-    key: "lifeJacketText",
-    label: "Life jacket text",
-    placeholder: "Please use the provided life jackets...",
-    multiline: true,
-  },
-  {
-    key: "amenitiesText",
-    label: "Amenities text",
-    placeholder: "There is a gas grill on the deck...",
-    multiline: true,
-  },
-  {
-    key: "additionalRulesText",
-    label: "Additional rules text",
-    placeholder: "Additional rules are in the unit...",
-    multiline: true,
-  },
-  {
-    key: "hostName",
-    label: "Host name",
-    placeholder: "Norma",
-  },
-  {
-    key: "urgentPhone",
-    label: "Urgent phone",
-    placeholder: "512-273-7962",
-  },
-];
-
 const ACCESS_MESSAGE_PLACEHOLDER =
   "Greetings {{GuestFirstName}},\n\nWe are excited to welcome you to {{propertyDisplayName}}.\n\nCheck-in Date: {{Arrival}}\nCheck-out Date: {{Departure}}\n\nAccess Code: {{KeyCode}}";
 
@@ -631,22 +539,6 @@ function Field({ label, value, onChange, placeholder, type = "text", mono = fals
         className={`mt-1 block w-full rounded-lg border border-sand px-3 py-2 text-sm text-forest focus:outline-none focus:ring-2 focus:ring-grove/30 ${
           mono ? "font-mono" : ""
         }`}
-      />
-      {helper ? <span className="mt-1 block text-xs text-forest/40">{helper}</span> : null}
-    </label>
-  );
-}
-
-function PlainTextArea({ label, value, onChange, placeholder, rows = 3, helper }) {
-  return (
-    <label className="block text-xs text-forest/60">
-      <span className="uppercase tracking-wider">{label}</span>
-      <textarea
-        value={value ?? ""}
-        onChange={(event) => onChange(event.target.value)}
-        placeholder={placeholder}
-        rows={rows}
-        className="mt-1 block w-full resize-y rounded-lg border border-sand px-3 py-2 text-sm text-forest focus:outline-none focus:ring-2 focus:ring-grove/30"
       />
       {helper ? <span className="mt-1 block text-xs text-forest/40">{helper}</span> : null}
     </label>
@@ -1347,59 +1239,6 @@ export default function WaiverPanel({
                       Keep <code>{"{{KeyCode}}"}</code> out of the day-before welcome message. Use <code>{"{{KeyCode}}"}</code> only in the 11 AM day-of code message.
                     </InfoTooltip>
                   ) : null}
-                </div>
-              </div>
-
-              <div className="rounded-xl border border-sand/70 bg-cream/20 p-4">
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                  <div>
-                    <h5 className="text-sm font-semibold text-forest">
-                      Property variables
-                    </h5>
-                    <p className="mt-1 text-xs leading-relaxed text-forest/50">
-                      These values feed the Lodgify messages and the guest My Stay page.
-                    </p>
-                  </div>
-                  <span className="rounded-full border border-sand bg-white px-3 py-1 text-[11px] font-medium text-forest/60">
-                    {selectedProperty?.name || "Selected property"}
-                  </span>
-                </div>
-
-                <div className="mt-4 grid gap-4 md:grid-cols-2">
-                  {PROPERTY_VARIABLE_FIELDS.map((field) =>
-                    field.multiline ? (
-                      <PlainTextArea
-                        key={field.key}
-                        label={field.label}
-                        value={selectedMessageData[field.key] || ""}
-                        onChange={(value) =>
-                          updatePropertyMessageField(
-                            selectedConfigKey,
-                            field.key,
-                            value
-                          )
-                        }
-                        placeholder={field.placeholder}
-                        rows={3}
-                        helper={field.helper}
-                      />
-                    ) : (
-                      <Field
-                        key={field.key}
-                        label={field.label}
-                        value={selectedMessageData[field.key] || ""}
-                        onChange={(value) =>
-                          updatePropertyMessageField(
-                            selectedConfigKey,
-                            field.key,
-                            value
-                          )
-                        }
-                        placeholder={field.placeholder}
-                        helper={field.helper}
-                      />
-                    )
-                  )}
                 </div>
               </div>
 

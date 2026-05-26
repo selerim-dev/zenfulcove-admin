@@ -1,6 +1,7 @@
 "use client";
 
 import SendGridListPicker from "./SendGridListPicker";
+import PropertyVariablesSettings from "./PropertyVariablesSettings";
 
 export default function SettingsPanel({
   config,
@@ -9,6 +10,8 @@ export default function SettingsPanel({
   onMessageNotificationsChange,
   customerPortal,
   onCustomerPortalChange,
+  accessCodeRelease,
+  onAccessCodeReleaseChange,
 }) {
   const sg = config || {};
   const notif = messageNotifications || {};
@@ -84,6 +87,11 @@ export default function SettingsPanel({
           helperText="Shared contact list used by vacancy promo emails and other automations."
         />
       </div>
+
+      <PropertyVariablesSettings
+        config={accessCodeRelease || {}}
+        onChange={onAccessCodeReleaseChange}
+      />
 
       <h2 className="font-serif text-2xl text-forest pt-4">
         Guest Portal Navigation

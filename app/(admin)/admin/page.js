@@ -202,6 +202,13 @@ export default function Dashboard() {
                       customerPortal: updated,
                     }))
                   }
+                  accessCodeRelease={config.accessCodeRelease}
+                  onAccessCodeReleaseChange={(updated) =>
+                    setConfig((prev) => ({
+                      ...prev,
+                      accessCodeRelease: updated,
+                    }))
+                  }
                 />
               )}
               {activeCategory === "vacancy" && (

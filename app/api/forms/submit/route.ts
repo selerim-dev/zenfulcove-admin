@@ -5,8 +5,11 @@ import { hasSupabaseAdminEnv } from "@/lib/supabaseEnv";
 import {
   createLocalFormSubmission,
   extractSubmittedContact,
+  getLocalFormSubmissionById,
   getLocalFormBySlug,
+  localFormSubmissionMatchesBooking,
   markLocalFormSubmissionsSynced,
+  updateLocalFormSubmission,
   updateLocalFormSubmissionPayload,
   uploadLocalFormFile,
   validateLocalFormUpload,
@@ -104,6 +107,7 @@ async function readRequest(request: Request) {
         : body;
     return {
       formSlug: String(body.formSlug || body.form_slug || "welcome-to-zenfulcove").trim(),
+      submissionId: String(body.submissionId || body.submission_id || "").trim(),
       source: String(body.source || "local").trim() || "local",
       preview: isTruthy(body.preview || body.staffPreview),
       payload,
@@ -133,6 +137,7 @@ async function readRequest(request: Request) {
 
   return {
     formSlug: String(formData.get("formSlug") || "welcome-to-zenfulcove").trim(),
+    submissionId: String(formData.get("submissionId") || "").trim(),
     source: String(formData.get("source") || "local").trim() || "local",
     preview: isTruthy(formData.get("preview")),
     payload,
@@ -350,24 +355,79 @@ export async function POST(request: Request) {
   }
 
   const submittedAt = new Date().toISOString();
+  const existingSubmission = parsed.submissionId
+    ? await getLocalFormSubmissionById(parsed.submissionId)
+    : null;
+  const existingPayload =
+    existingSubmission?.payload &&
+    typeof existingSubmission.payload === "object" &&
+    !Array.isArray(existingSubmission.payload)
+      ? (existingSubmission.payload as Record<string, unknown>)
+      : {};
+
+  if (parsed.submissionId) {
+    if (!existingSubmission || existingSubmission.form_slug !== formSlug) {
+      await recordSubmitLog({
+        status: "failed",
+        action: "Form submit rejected: existing submission was not found for this form.",
+        formSlug,
+        parsed,
+        contact,
+        httpStatus: 404,
+      });
+      return NextResponse.json({ error: "Existing submission not found." }, { status: 404 });
+    }
+    if (
+      existingSubmission.booking_code &&
+      contact.bookingCode &&
+      !localFormSubmissionMatchesBooking(contact.bookingCode, existingSubmission)
+    ) {
+      await recordSubmitLog({
+        status: "failed",
+        action: "Form submit rejected: booking code does not match existing submission.",
+        formSlug,
+        parsed,
+        contact,
+        httpStatus: 403,
+      });
+      return NextResponse.json(
+        { error: "Booking code does not match the existing submission." },
+        { status: 403 }
+      );
+    }
+  }
+
   const submissionPayload = isTrustedPreview
     ? {
+        ...existingPayload,
         ...parsed.payload,
         __staffPreview: true,
         __staffPreviewAt: submittedAt,
       }
-    : parsed.payload;
+    : {
+        ...existingPayload,
+        ...parsed.payload,
+      };
 
   let submission: { id: string; form_slug: string; submitted_at: string };
   let finalSubmissionPayload = submissionPayload;
   try {
-    submission = await createLocalFormSubmission({
-      form,
-      formSlug,
-      contact,
-      payload: submissionPayload,
-      source: isTrustedPreview ? "staff-preview" : parsed.source,
-    });
+    submission = existingSubmission
+      ? await updateLocalFormSubmission({
+          id: existingSubmission.id,
+          form,
+          formSlug,
+          contact,
+          payload: submissionPayload,
+          source: isTrustedPreview ? "staff-preview" : parsed.source,
+        })
+      : await createLocalFormSubmission({
+          form,
+          formSlug,
+          contact,
+          payload: submissionPayload,
+          source: isTrustedPreview ? "staff-preview" : parsed.source,
+        });
 
     const uploadedFiles = [];
     for (const upload of parsed.uploads) {
@@ -384,7 +444,12 @@ export async function POST(request: Request) {
     if (uploadedFiles.length > 0) {
       const nextPayload: Record<string, unknown> = {
         ...submissionPayload,
-        __files: uploadedFiles,
+        __files: [
+          ...((Array.isArray(existingPayload.__files)
+            ? existingPayload.__files
+            : []) as unknown[]),
+          ...uploadedFiles,
+        ],
         __uploadedAt: new Date().toISOString(),
       };
       for (const file of uploadedFiles) {

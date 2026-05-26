@@ -2,7 +2,10 @@ import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import LocalForm from "@/components/customer/LocalForm";
 import { hasSupabaseAdminEnv } from "@/lib/supabaseEnv";
-import { getLocalFormBySlug } from "@/lib/local-forms";
+import {
+  findLocalFormSubmissionForBooking,
+  getLocalFormBySlug,
+} from "@/lib/local-forms";
 
 export const dynamic = "force-dynamic";
 
@@ -30,7 +33,12 @@ export default async function LocalFormPage({
   searchParams,
 }: {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ preview?: string }>;
+  searchParams: Promise<{
+    preview?: string;
+    bookingCode?: string;
+    booking?: string;
+    reservation?: string;
+  }>;
 }) {
   const { slug } = await params;
   const query = await searchParams;
@@ -57,6 +65,26 @@ export default async function LocalFormPage({
 
   if (!form || (form.is_active === false && !isAdminPreview)) notFound();
   const schema = (form.schema || {}) as LocalFormSchema;
+  const bookingCode = String(
+    query.bookingCode || query.booking || query.reservation || ""
+  ).trim();
+  const existingSubmission =
+    bookingCode && !isAdminPreview
+      ? await findLocalFormSubmissionForBooking({
+          formSlug: form.slug,
+          bookingId: bookingCode,
+        }).catch(() => null)
+      : null;
+  const existingPayload =
+    existingSubmission?.payload &&
+    typeof existingSubmission.payload === "object" &&
+    !Array.isArray(existingSubmission.payload)
+      ? (existingSubmission.payload as Record<string, unknown>)
+      : {};
+  const initialValues =
+    bookingCode && !existingPayload.bookingCode
+      ? { ...existingPayload, bookingCode }
+      : existingPayload;
   const rawSubtitle = schema.subtitle || form.description || "";
   const subtitle = String(rawSubtitle || "").includes("Jotform")
     ? "Share the details needed for your stay."
@@ -92,6 +120,9 @@ export default async function LocalFormPage({
         formSlug={form.slug}
         schema={schema}
         staffPreview={isAdminPreview}
+        initialValues={initialValues}
+        existingSubmissionId={String(existingSubmission?.id || "")}
+        bookingCode={bookingCode}
       />
     </div>
   );

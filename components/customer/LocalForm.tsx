@@ -119,6 +119,40 @@ function lastNameFromPayload(payload: Record<string, unknown>) {
   return parts.length > 1 ? parts[parts.length - 1] : "";
 }
 
+function initialValueFor(value: unknown): string | boolean {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return String(value);
+  if (typeof value === "string") return value;
+  return "";
+}
+
+function buildInitialFormValues(
+  fields: LocalFormField[],
+  initialValues: Record<string, unknown>
+) {
+  const next: Record<string, string | boolean> = {};
+
+  for (const field of fields) {
+    const name = String(field.name || "").trim();
+    if (!name) continue;
+    const value = initialValues[name];
+    const type = String(field.type || "text").toLowerCase();
+
+    if (type === "daterange" && value && typeof value === "object") {
+      const range = value as { checkIn?: unknown; checkOut?: unknown };
+      next[`${name}CheckIn`] = initialValueFor(range.checkIn);
+      next[`${name}CheckOut`] = initialValueFor(range.checkOut);
+      continue;
+    }
+
+    if (value !== undefined && value !== null) {
+      next[name] = initialValueFor(value);
+    }
+  }
+
+  return next;
+}
+
 function loadImage(file: File) {
   return new Promise<{ image: HTMLImageElement; url: string }>((resolve, reject) => {
     const url = URL.createObjectURL(file);
@@ -346,15 +380,23 @@ export default function LocalForm({
   schema,
   preview = false,
   staffPreview = false,
+  initialValues = {},
+  existingSubmissionId = "",
+  bookingCode = "",
 }: {
   formSlug: string;
   schema: LocalFormSchema;
   preview?: boolean;
   staffPreview?: boolean;
+  initialValues?: Record<string, unknown>;
+  existingSubmissionId?: string;
+  bookingCode?: string;
 }) {
   const router = useRouter();
   const fields = Array.isArray(schema.fields) ? schema.fields : [];
-  const [values, setValues] = useState<Record<string, string | boolean>>({});
+  const [values, setValues] = useState<Record<string, string | boolean>>(() =>
+    buildInitialFormValues(fields, initialValues)
+  );
   const [files, setFiles] = useState<Record<string, File[]>>({});
   const [signatures, setSignatures] = useState<Record<string, string>>({});
   const [status, setStatus] = useState<"idle" | "submitting" | "success">("idle");
@@ -419,6 +461,7 @@ export default function LocalForm({
       const type = String(field.type || "text").toLowerCase();
       if (type === "section") continue;
       if (type === "signature" && !signatures[name]) {
+        if (String(values[name] || "").trim()) continue;
         return `${field.label || name} is required.`;
       }
       if ((type === "file" || type === "image") && !(files[name]?.length > 0)) {
@@ -513,6 +556,8 @@ export default function LocalForm({
           const blob = dataUrlToBlob(signatures[name]);
           formData.append(`file:${name}`, blob, `${name}-signature.png`);
           payload[name] = "Signed";
+        } else if (String(values[name] || "").trim()) {
+          payload[name] = values[name];
         }
         formData.append(`fieldType:${name}`, "signature");
         continue;
@@ -529,6 +574,14 @@ export default function LocalForm({
       payload[name] = values[name] ?? "";
     }
 
+    const normalizedBookingCode = String(bookingCode || "").trim();
+    if (normalizedBookingCode && !bookingCodeFromPayload(payload)) {
+      payload.bookingCode = normalizedBookingCode;
+    }
+
+    if (existingSubmissionId) {
+      formData.append("submissionId", existingSubmissionId);
+    }
     formData.append("payload", JSON.stringify(payload));
 
     try {
@@ -767,10 +820,11 @@ export default function LocalForm({
               label={label}
               required={field.required}
               helpText={helpText}
-              value={signatures[name] || ""}
-              onChange={(value) =>
-                setSignatures((current) => ({ ...current, [name]: value }))
-              }
+              value={signatures[name] || String(values[name] || "")}
+              onChange={(value) => {
+                setValues((current) => ({ ...current, [name]: value || "" }));
+                setSignatures((current) => ({ ...current, [name]: value }));
+              }}
             />
           );
         }

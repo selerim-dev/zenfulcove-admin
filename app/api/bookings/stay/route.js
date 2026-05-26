@@ -5,6 +5,7 @@ import { buildAccessCodeTemplateData, localFormUrl } from "@/lib/access-code-mes
 import { getBookingById, getProperties } from "@/lib/lodgify";
 import {
   bookingHasLocalFormSubmission,
+  findLocalFormSubmissionForBooking,
   listLocalFormSubmissions,
 } from "@/lib/local-forms";
 import { hasSupabaseAdminEnv } from "@/lib/supabaseEnv";
@@ -203,6 +204,16 @@ async function hasSubmittedInternalForm(bookingId, formSlug) {
   }
 }
 
+function reservationFormUrlFor(formSlug, bookingId) {
+  if (!formSlug) return "";
+  const url = new URL(localFormUrl(formSlug));
+  if (bookingId) {
+    url.searchParams.set("bookingCode", bookingId);
+    url.searchParams.set("reservation", bookingId);
+  }
+  return url.toString();
+}
+
 export async function POST(request) {
   let body;
   try {
@@ -260,7 +271,15 @@ export async function POST(request) {
       config.waiverReminders?.localFormSlug ||
       "welcome-to-zenfulcove"
   ).replace(/^\/?forms\//, "");
-  const formSubmitted = await hasSubmittedInternalForm(normalized.id, formSlug);
+  const formSubmission = formSlug
+    ? await findLocalFormSubmissionForBooking({
+        formSlug,
+        bookingId: normalized.id,
+      }).catch(() => null)
+    : null;
+  const formSubmitted =
+    Boolean(formSubmission) ||
+    (formSlug ? await hasSubmittedInternalForm(normalized.id, formSlug) : false);
   const release = await getAccessCodeRelease(normalized.id).catch(() => null);
   const releasedStatus = Boolean(release?.sent_at || release?.status === "sent");
   const accessCode = releasedStatus ? clean(release?.access_code) : "";
@@ -328,7 +347,7 @@ export async function POST(request) {
       additionalRulesText: templateData.additionalRulesText,
       hostName: templateData.hostName,
       urgentPhone: templateData.urgentPhone,
-      reservationFormUrl: formSlug ? localFormUrl(formSlug) : "",
+      reservationFormUrl: reservationFormUrlFor(formSlug, normalized.id),
     },
     access: {
       code: accessCode,
