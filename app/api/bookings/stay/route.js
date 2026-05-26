@@ -256,9 +256,9 @@ export async function POST(request) {
     PROPERTY_TO_CABIN[Number(normalized.propertyId)] ||
     "Your stay";
   const formSlug = clean(
-    config.accessCodeRelease?.localFormSlug ||
+      config.accessCodeRelease?.localFormSlug ||
       config.waiverReminders?.localFormSlug ||
-      "guest-info"
+      "welcome-to-zenfulcove"
   ).replace(/^\/?forms\//, "");
   const formSubmitted = await hasSubmittedInternalForm(normalized.id, formSlug);
   const release = await getAccessCodeRelease(normalized.id).catch(() => null);

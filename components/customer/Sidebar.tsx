@@ -130,7 +130,7 @@ export default function Sidebar({
             className={`flex flex-col items-start ${collapsed ? "md:hidden" : ""}`}
           >
             <h1 className="font-serif text-3xl font-medium leading-none tracking-tight text-[var(--color-accent-strong)]">
-              Zenfulcove
+              Zenfulcove Glamping
             </h1>
             <p className="mt-1 text-xs font-medium uppercase tracking-[0.2em] text-[var(--color-ink-muted)]">
               Guest Portal

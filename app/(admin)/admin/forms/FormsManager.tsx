@@ -110,7 +110,7 @@ const DEFAULT_FIELDS: LocalFormField[] = [
     type: "text",
     required: false,
     helpText:
-      "Please use your Zenfulcove/Lodgify booking confirmation ID. This is not your Expedia, Airbnb, or Vrbo confirmation number.",
+      "Please use your Zenfulcove Glamping/Lodgify booking confirmation ID. This is not your Expedia, Airbnb, or Vrbo confirmation number.",
   },
   {
     name: "stayUnit",
@@ -199,13 +199,13 @@ const FIELD_LIBRARY_GROUPS: {
         type: "text",
         required: false,
         helpText:
-          "Please use your Zenfulcove/Lodgify booking confirmation ID. This is not your Expedia, Airbnb, or Vrbo confirmation number.",
+          "Please use your Zenfulcove Glamping/Lodgify booking confirmation ID. This is not your Expedia, Airbnb, or Vrbo confirmation number.",
         unique: true,
       },
       {
         id: "stayUnit",
         title: "Stay Unit",
-        description: "Dropdown populated from the Zenfulcove unit list.",
+        description: "Dropdown populated from the Zenfulcove Glamping unit list.",
         name: "stayUnit",
         label: "Unit You're Staying In",
         type: "select",
@@ -1486,7 +1486,7 @@ function FormSettings({
                 type="text"
                 value={settings.slug}
                 onChange={(event) => onChange({ slug: event.target.value })}
-                placeholder="guest-info"
+                placeholder="welcome-to-zenfulcove"
                 className="form-input"
               />
             </Field>
@@ -1580,7 +1580,7 @@ function CustomerPreviewModal({
         <div className="mx-auto max-w-xl space-y-6 rounded-2xl bg-[var(--color-bg)]">
           <header>
             <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[var(--color-accent)]">
-              Zenfulcove
+              Zenfulcove Glamping
             </p>
             <h1 className="mt-2 font-serif text-4xl font-medium leading-[1.05] tracking-tight">
               {title}
@@ -1886,7 +1886,7 @@ function EditablePreviewField({
                   Unit dropdown
                 </p>
                 <p className="mt-1">
-                  Uses the Zenfulcove Lodgify property map:
+                  Uses the Zenfulcove Glamping Lodgify property map:
                 </p>
                 <p className="mt-2">
                   {(field.options || LOCAL_FORM_STAY_UNIT_OPTIONS).join(", ")}

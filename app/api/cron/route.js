@@ -34,6 +34,7 @@ import {
   isDelayedAccessCodeBooking,
   isBookedLodgifyStatus,
   lodgifyBookingStatus,
+  lodgifyPropertyName,
   sendAccessCodeForBooking,
   sendCheckinInfoForBooking,
   sendWaiverReminderForBooking,
@@ -279,11 +280,7 @@ function extractLodgifyContact(booking) {
 
   const bookingStatus = lodgifyBookingStatus(booking);
 
-  const propertyName = getFirstNonEmpty([
-    booking?.property_name,
-    booking?.propertyName,
-    booking?.property?.name,
-  ]);
+  const propertyName = lodgifyPropertyName(booking);
 
   return {
     email,
@@ -748,7 +745,7 @@ async function runWaiverReminders(automationConfig, dryRunOverride) {
         return toDateOnly(arrival) === targetDateStr;
       });
 
-      // Optional: restrict to specific property IDs (e.g. Zenfulcove only)
+      // Optional: restrict to specific property IDs (e.g. Zenfulcove Glamping only)
       const propertyIds = config.propertyIds;
       if (Array.isArray(propertyIds) && propertyIds.length > 0) {
         bookings = bookings.filter(
@@ -767,8 +764,7 @@ async function runWaiverReminders(automationConfig, dryRunOverride) {
 
       for (const booking of bookings) {
         const bookingId = String(booking.id);
-        const propertyName =
-          booking.property_name || booking.propertyName || "Property";
+        const propertyName = lodgifyPropertyName(booking) || "Property";
         const bookingStatus = lodgifyBookingStatus(booking);
 
         if (!isBookedLodgifyStatus(bookingStatus)) {
@@ -1027,11 +1023,9 @@ export async function runAccessCodeRelease(automationConfig, dryRunOverride, opt
   for (const booking of bookings) {
     const contact = extractLodgifyContact(booking);
     const bookingId = String(booking.id || contact.bookingId || "").trim();
-    const propertyName =
-      booking.property_name ||
-      booking.propertyName ||
-      contact.propertyName ||
-      "Property";
+    const propertyName = lodgifyPropertyName(booking, {
+      propertyName: contact.propertyName,
+    }) || "Property";
     const delayedAccess = isDelayedAccessCodeBooking({
       booking,
       automationConfig,

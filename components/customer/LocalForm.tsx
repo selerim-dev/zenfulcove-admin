@@ -851,7 +851,7 @@ function SuccessModal({
               What happens next
             </p>
             <p className="mt-1">
-              Your submission is saved for the Zenfulcove team to review before
+              Your submission is saved for the Zenfulcove Glamping team to review before
               any stay codes or follow-up details are sent.
             </p>
             <p className="mt-2">

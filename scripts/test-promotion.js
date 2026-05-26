@@ -21,13 +21,13 @@ async function main() {
       mode: "dryRun",
       lists,
       channel,
-      subject: process.env.PROMOTION_EMAIL_SUBJECT || "Zenfulcove Promotion Test",
+      subject: process.env.PROMOTION_EMAIL_SUBJECT || "Zenfulcove Glamping Promotion Test",
       emailBody:
         process.env.PROMOTION_EMAIL_BODY ||
         "This is a dry-run email body for the one-off promotions flow.",
       smsBody:
         process.env.PROMOTION_SMS_BODY ||
-        "This is a dry-run SMS body for the Zenfulcove one-off promotions flow.",
+        "This is a dry-run SMS body for the Zenfulcove Glamping one-off promotions flow.",
     }),
   });
 

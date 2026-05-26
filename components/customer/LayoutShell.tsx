@@ -40,7 +40,7 @@ export default function LayoutShell({
       <header className="sticky top-0 z-20 flex items-center justify-between border-b border-[var(--color-border)] bg-[var(--color-surface)] px-5 py-3 md:hidden">
         <Link href="/" className="flex flex-col leading-none">
           <span className="font-serif text-xl font-medium tracking-tight text-[var(--color-accent-strong)]">
-            Zenfulcove
+            Zenfulcove Glamping
           </span>
           <span className="mt-0.5 text-[10px] font-medium uppercase tracking-[0.2em] text-[var(--color-ink-muted)]">
             Guest Portal

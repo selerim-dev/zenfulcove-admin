@@ -4,7 +4,7 @@ const token = process.env.TWILIO_AUTH_TOKEN;
 
 const from = process.argv[2] || "+13256665058";
 const to = process.argv[3] || "+18327667183";
-const body = process.argv[4] || "Zenfulcove diagnostic — testing From=" + from;
+const body = process.argv[4] || "Zenfulcove Glamping diagnostic - testing From=" + from;
 
 console.log(`Attempting Twilio send`);
 console.log(`  Account: ${sid}`);

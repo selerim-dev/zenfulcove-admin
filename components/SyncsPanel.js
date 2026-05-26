@@ -335,7 +335,7 @@ export default function SyncsPanel({
           <textarea
             value={mappingsText}
             onChange={(e) => updateJotformImportMappings(e.target.value)}
-            placeholder={"251834442091050: guest-info"}
+            placeholder={"251834442091050: welcome-to-zenfulcove"}
             rows={4}
             className="border border-sand rounded-lg px-3 py-2 text-sm w-full font-mono focus:outline-none focus:ring-2 focus:ring-grove/30"
           />
@@ -360,7 +360,7 @@ export default function SyncsPanel({
 
       <SyncCard
         title="Local Form Client Sync"
-        description="Pull contacts from Zenfulcove-hosted form submissions in Supabase and upsert them into your master SendGrid client list. This is the replacement path for Jotform."
+        description="Pull contacts from Zenfulcove Glamping-hosted form submissions in Supabase and upsert them into your master SendGrid client list. This is the replacement path for Jotform."
         enabled={safeLocalFormConfig.enabled}
         onToggle={(enabled) => updateLocalForm("enabled", enabled)}
       >
@@ -382,7 +382,7 @@ export default function SyncsPanel({
                 .filter(Boolean);
               updateLocalForm("formSlugs", slugs);
             }}
-            placeholder="guest-info"
+            placeholder="welcome-to-zenfulcove"
             rows={3}
             className="border border-sand rounded-lg px-3 py-2 text-sm w-full font-mono focus:outline-none focus:ring-2 focus:ring-grove/30"
           />

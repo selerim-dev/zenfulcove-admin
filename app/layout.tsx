@@ -16,8 +16,8 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Zenfulcove",
-  description: "Zenfulcove guest booking and staff operations.",
+  title: "Zenfulcove Glamping",
+  description: "Zenfulcove Glamping guest booking and staff operations.",
 };
 
 export const viewport: Viewport = {

@@ -40,6 +40,31 @@ function dateDaysFromNow(days) {
   return date.toISOString().slice(0, 10);
 }
 
+function sampleBookingFor({
+  id,
+  status = "Booked",
+  propertyId = "608954",
+  propertyName = "Sky Castle",
+  arrivalDays = 1,
+  departureDays = 3,
+} = {}) {
+  return {
+    id,
+    status,
+    property_id: propertyId,
+    property_name: propertyName,
+    arrival: dateDaysFromNow(arrivalDays),
+    departure: dateDaysFromNow(departureDays),
+    guest: {
+      firstName: "Sample",
+      lastName: "Guest",
+      name: "Sample Guest",
+      email: "sample.guest@example.com",
+      phone: "+15551234567",
+    },
+  };
+}
+
 function resultLog(sendResult, property) {
   return {
     timestamp: sendResult.timestamp || new Date().toISOString(),
@@ -75,7 +100,10 @@ async function formIsCompleteForBooking(automationConfig, bookingId) {
   const releaseConfig = automationConfig.accessCodeRelease || {};
   const waiverConfig = automationConfig.waiverReminders || {};
   const localFormSlug = clean(
-    releaseConfig.localFormSlug || waiverConfig.localFormSlug || waiverConfig.formSlug
+    releaseConfig.localFormSlug ||
+      waiverConfig.localFormSlug ||
+      waiverConfig.formSlug ||
+      "welcome-to-zenfulcove"
   ).replace(/^\/?forms\//, "");
   const jotformFormId =
     releaseConfig.jotformFormId ||
@@ -113,23 +141,30 @@ export async function POST(request) {
     const automationConfig = mergeConfig(baseConfig, body);
 
     if (sample) {
-      const samplePropertyName = clean(body?.samplePropertyName) || "Sample Property";
-      const samplePropertyId = clean(body?.samplePropertyId) || "sample-property";
-      const sampleBooking = {
-        id: "sample-preview",
-        status: "Booked",
-        property_id: samplePropertyId,
-        property_name: samplePropertyName,
-        arrival: dateDaysFromNow(1),
-        departure: dateDaysFromNow(3),
-        guest: {
-          firstName: "Sample",
-          lastName: "Guest",
-          name: "Sample Guest",
-          email: "sample.guest@example.com",
-          phone: "+15551234567",
-        },
-      };
+      const samplePropertyName = clean(body?.samplePropertyName) || "Sky Castle";
+      const samplePropertyId = clean(body?.samplePropertyId) || "608954";
+      const sampleBooking = sampleBookingFor({
+        id: "sample-booked-form-submitted",
+        propertyId: samplePropertyId,
+        propertyName: samplePropertyName,
+      });
+      const missingFormBooking = sampleBookingFor({
+        id: "sample-booked-form-missing",
+        propertyId: samplePropertyId,
+        propertyName: samplePropertyName,
+      });
+      const openBooking = sampleBookingFor({
+        id: "sample-open-not-eligible",
+        status: "Open",
+        propertyId: samplePropertyId,
+        propertyName: samplePropertyName,
+      });
+      const cancelledBooking = sampleBookingFor({
+        id: "sample-cancelled-not-eligible",
+        status: "Cancelled",
+        propertyId: samplePropertyId,
+        propertyName: samplePropertyName,
+      });
 
       const delayedAccess = isDelayedAccessCodeBooking({
         booking: sampleBooking,
@@ -158,9 +193,22 @@ export async function POST(request) {
           })
         : null;
       const reminderResult = await sendWaiverReminderForBooking({
-        booking: sampleBooking,
+        booking: missingFormBooking,
         automationConfig,
         reminder: reminderForTest(automationConfig),
+        dryRun: true,
+        persistState: false,
+      });
+      const openReminderResult = await sendWaiverReminderForBooking({
+        booking: openBooking,
+        automationConfig,
+        reminder: reminderForTest(automationConfig),
+        dryRun: true,
+        persistState: false,
+      });
+      const cancelledAccessResult = await sendAccessCodeForBooking({
+        booking: cancelledBooking,
+        automationConfig,
         dryRun: true,
         persistState: false,
       });
@@ -172,12 +220,14 @@ export async function POST(request) {
           timestamp: new Date().toISOString(),
           automation: "Access Code Release Test",
           property: samplePropertyName,
-          action: `Rendered sample access previews and ${formSource === "internal" ? "Lodgify" : "SendGrid"} waiver reminder preview without sending.`,
+          action: `Rendered fake booking flow matrix without sending: submitted form, missing form, Open status skip, and Cancelled status skip. Waiver reminders use ${formSource === "internal" ? "Lodgify" : "SendGrid"}.`,
           status: "info",
         },
         resultLog(accessResult, samplePropertyName),
         ...(codeOnlyResult ? [resultLog(codeOnlyResult, samplePropertyName)] : []),
         resultLog(reminderResult, samplePropertyName),
+        resultLog(openReminderResult, samplePropertyName),
+        resultLog(cancelledAccessResult, samplePropertyName),
       ];
       const hasFailed = logs.some((log) => log.status === "failed");
       return NextResponse.json({
@@ -222,7 +272,7 @@ export async function POST(request) {
     );
     const messagePrefix = dryRun
       ? ""
-      : "[TEST ONLY - Zenfulcove internal waiver flow]\n\n";
+      : "[TEST ONLY - Zenfulcove Glamping internal waiver flow]\n\n";
     const delayedAccess = isDelayedAccessCodeBooking({
       booking,
       automationConfig,

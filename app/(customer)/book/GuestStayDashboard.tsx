@@ -200,7 +200,7 @@ export default function GuestStayDashboard({
         >
           <div className="flex min-h-[320px] flex-col justify-end bg-black/35 p-6 text-white md:p-10">
             <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-white/85">
-              Zenfulcove Stay
+              Zenfulcove Glamping Stay
             </p>
             <h1 className="mt-3 max-w-3xl font-serif text-5xl font-medium leading-[1.02] tracking-tight md:text-6xl">
               {stay.propertyDisplayName || booking.propertyName}
@@ -331,7 +331,7 @@ export default function GuestStayDashboard({
               Need help?
             </h2>
             <p className="mt-3 text-sm leading-relaxed text-[var(--color-ink-muted)]">
-              For urgent matters, contact {stay.hostName || "Zenfulcove"}.
+              For urgent matters, contact {stay.hostName || "Zenfulcove Glamping"}.
             </p>
             <a
               href={phoneHref(stay.urgentPhone)}

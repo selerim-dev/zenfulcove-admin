@@ -1,6 +1,6 @@
-# Zenfulcove Admin Dashboard
+# Zenfulcove Glamping Admin Dashboard
 
-Automation dashboard for Zenfulcove Texas Glamping Retreat. Manages vacancy promo emails and waiver reminders via a daily cron job.
+Automation dashboard for Zenfulcove Glamping. Manages vacancy promo emails and waiver reminders via a daily cron job.
 
 ## Stack
 
