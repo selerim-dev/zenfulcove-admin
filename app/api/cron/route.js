@@ -10,7 +10,13 @@ import {
   getSalesmateFormSyncState,
   setSalesmateFormSyncState,
 } from "@/lib/kv";
-import { getProperties, getAvailability, getBookings, getAllBookings } from "@/lib/lodgify";
+import {
+  getProperties,
+  getAvailability,
+  getBookings,
+  getAllBookings,
+  getBookingById,
+} from "@/lib/lodgify";
 import {
   getFormSubmissions,
   bookingHasWaiver,
@@ -1279,8 +1285,54 @@ export async function runJervisAccessCodeRetries(automationConfig, dryRunOverrid
       continue;
     }
 
+    const fallbackBooking = retryBookingFromAccessCodeRelease(row);
+    let liveBooking = null;
+    try {
+      liveBooking = await getBookingById(bookingId);
+    } catch (err) {
+      logs.push({
+        timestamp: new Date().toISOString(),
+        automation: automationName,
+        property: propertyName,
+        action: `Failed booking ${bookingId}: could not refresh Lodgify status before retry (${err.message})`,
+        status: "failed",
+        bookingId,
+      });
+      continue;
+    }
+
+    if (!liveBooking) {
+      logs.push({
+        timestamp: new Date().toISOString(),
+        automation: automationName,
+        property: propertyName,
+        action: `Skipped booking ${bookingId}: Lodgify booking was not found before retry`,
+        status: "skipped",
+        bookingId,
+      });
+      continue;
+    }
+
+    const liveStatus = lodgifyBookingStatus(liveBooking);
+    if (!isBookedLodgifyStatus(liveStatus)) {
+      logs.push({
+        timestamp: new Date().toISOString(),
+        automation: automationName,
+        property: propertyName,
+        action: ineligibleBookingStatusMessage(bookingId, liveStatus),
+        status: "skipped",
+        bookingId,
+        bookingStatus: liveStatus || "unknown",
+      });
+      continue;
+    }
+
     const sendResult = await sendAccessCodeForBooking({
-      booking: retryBookingFromAccessCodeRelease(row),
+      booking: {
+        ...fallbackBooking,
+        ...liveBooking,
+        id: liveBooking.id || fallbackBooking.id,
+      },
       automationConfig,
       dryRun: isDryRun,
       persistState: options.persistState !== false,
