@@ -15,7 +15,9 @@ function clean(value) {
 }
 
 function authorized(request) {
-  const secret = String(process.env.JERVIS_WEBHOOK_SECRET || "").trim();
+  const secret = String(
+    process.env.JERVIS_WEBHOOK_SECRET || process.env.CRON_SECRET || ""
+  ).trim();
   if (!secret) {
     return {
       ok: false,
