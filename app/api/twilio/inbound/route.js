@@ -87,7 +87,7 @@ async function notifyInboundMessage({ twilioNumber, contactPhone, body }) {
   };
   if (!from.email) return;
 
-  const prefix = String(notif.subjectPrefix || "[Zenfulcove SMS]").trim();
+  const prefix = String(notif.subjectPrefix || "[Zenfulcove Glamping SMS]").trim();
   const preview = String(body || "").slice(0, 120).replace(/\s+/g, " ").trim();
   const subject = `${prefix} New message from ${contactPhone}${preview ? ` — ${preview}` : ""}`;
 
@@ -109,7 +109,7 @@ async function notifyInboundMessage({ twilioNumber, contactPhone, body }) {
   if (deepLink) {
     lines.push(`Open this conversation: ${deepLink}`);
   } else {
-    lines.push("Open the Zenfulcove admin dashboard to reply or manage this conversation.");
+    lines.push("Open the Zenfulcove Glamping admin dashboard to reply or manage this conversation.");
   }
   const text = lines.join("\n");
 

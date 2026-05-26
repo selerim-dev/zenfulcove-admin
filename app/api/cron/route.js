@@ -30,7 +30,11 @@ import {
   getAccessCodeRelease,
 } from "@/lib/access-code-releases";
 import {
+  ineligibleBookingStatusMessage,
   isDelayedAccessCodeBooking,
+  isBookedLodgifyStatus,
+  lodgifyBookingStatus,
+  lodgifyPropertyName,
   sendAccessCodeForBooking,
   sendCheckinInfoForBooking,
   sendWaiverReminderForBooking,
@@ -274,19 +278,9 @@ function extractLodgifyContact(booking) {
       ""
   ).trim();
 
-  const bookingStatus = String(
-    booking?.status ||
-      booking?.booking_status ||
-      booking?.reservationStatus ||
-      booking?.reservation_status ||
-      ""
-  ).trim();
+  const bookingStatus = lodgifyBookingStatus(booking);
 
-  const propertyName = getFirstNonEmpty([
-    booking?.property_name,
-    booking?.propertyName,
-    booking?.property?.name,
-  ]);
+  const propertyName = lodgifyPropertyName(booking);
 
   return {
     email,
@@ -751,7 +745,7 @@ async function runWaiverReminders(automationConfig, dryRunOverride) {
         return toDateOnly(arrival) === targetDateStr;
       });
 
-      // Optional: restrict to specific property IDs (e.g. Zenfulcove only)
+      // Optional: restrict to specific property IDs (e.g. Zenfulcove Glamping only)
       const propertyIds = config.propertyIds;
       if (Array.isArray(propertyIds) && propertyIds.length > 0) {
         bookings = bookings.filter(
@@ -770,8 +764,21 @@ async function runWaiverReminders(automationConfig, dryRunOverride) {
 
       for (const booking of bookings) {
         const bookingId = String(booking.id);
-        const propertyName =
-          booking.property_name || booking.propertyName || "Property";
+        const propertyName = lodgifyPropertyName(booking) || "Property";
+        const bookingStatus = lodgifyBookingStatus(booking);
+
+        if (!isBookedLodgifyStatus(bookingStatus)) {
+          logs.push({
+            timestamp: new Date().toISOString(),
+            automation: automationName,
+            property: propertyName,
+            action: ineligibleBookingStatusMessage(bookingId, bookingStatus),
+            status: "skipped",
+            bookingId,
+            bookingStatus: bookingStatus || "unknown",
+          });
+          continue;
+        }
 
         try {
           const hasWaiver = usesLocalForm
@@ -1016,11 +1023,9 @@ export async function runAccessCodeRelease(automationConfig, dryRunOverride, opt
   for (const booking of bookings) {
     const contact = extractLodgifyContact(booking);
     const bookingId = String(booking.id || contact.bookingId || "").trim();
-    const propertyName =
-      booking.property_name ||
-      booking.propertyName ||
-      contact.propertyName ||
-      "Property";
+    const propertyName = lodgifyPropertyName(booking, {
+      propertyName: contact.propertyName,
+    }) || "Property";
     const delayedAccess = isDelayedAccessCodeBooking({
       booking,
       automationConfig,
@@ -1030,13 +1035,15 @@ export async function runAccessCodeRelease(automationConfig, dryRunOverride, opt
       },
     });
 
-    if (isCancelledBooking(contact.bookingStatus) && config.includeCancelledBookings !== true) {
+    if (!isBookedLodgifyStatus(contact.bookingStatus)) {
       logs.push({
         timestamp: new Date().toISOString(),
         automation: automationName,
         property: propertyName,
-        action: `Skipped booking ${bookingId}: booking is cancelled`,
+        action: ineligibleBookingStatusMessage(bookingId, contact.bookingStatus),
         status: "skipped",
+        bookingId,
+        bookingStatus: contact.bookingStatus || "unknown",
       });
       continue;
     }

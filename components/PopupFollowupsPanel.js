@@ -440,7 +440,7 @@ export default function PopupFollowupsPanel({ config, sendgridConfig, onChange }
                 rows={4}
                 value={smsConfig.messageBody || ""}
                 onChange={(e) => updateSms(idx, "messageBody", e.target.value)}
-                placeholder="Your Zenfulcove reminder message..."
+                placeholder="Your Zenfulcove Glamping reminder message..."
                 className="border border-sand rounded-lg px-3 py-2 text-sm w-full focus:outline-none focus:ring-2 focus:ring-grove/30"
               />
             </div>

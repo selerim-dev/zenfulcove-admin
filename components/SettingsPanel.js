@@ -73,7 +73,7 @@ export default function SettingsPanel({
             type="text"
             value={sg.fromName || ""}
             onChange={(e) => update("fromName", e.target.value)}
-            placeholder="Zenfulcove"
+            placeholder="Zenfulcove Glamping"
             className="border border-sand rounded-lg px-3 py-2 text-sm w-full focus:outline-none focus:ring-2 focus:ring-grove/30"
           />
         </div>
@@ -154,7 +154,7 @@ export default function SettingsPanel({
             type="text"
             value={notif.subjectPrefix || ""}
             onChange={(e) => updateNotif("subjectPrefix", e.target.value)}
-            placeholder="[Zenfulcove SMS]"
+            placeholder="[Zenfulcove Glamping SMS]"
             className="border border-sand rounded-lg px-3 py-2 text-sm w-full focus:outline-none focus:ring-2 focus:ring-grove/30"
           />
         </div>

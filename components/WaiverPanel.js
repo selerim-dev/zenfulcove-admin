@@ -53,6 +53,9 @@ const TEMPLATE_VARIABLES = [
   "KeyCode",
   "bookingId",
   "propertyDisplayName",
+  "PropertyDisplayName",
+  "propertyName",
+  "PropertyName",
   "reservationFormUrl",
   "reservationFormURL",
   "waiverUrl",
@@ -86,7 +89,9 @@ const DEFAULT_PREVIEW_VALUES = {
   accessCode: "1234",
   code: "1234",
   propertyDisplayName: "SKY CASTLE",
+  PropertyDisplayName: "SKY CASTLE",
   propertyName: "Sky Castle",
+  PropertyName: "Sky Castle",
   unitName: "Sky Castle",
   UnitName: "Sky Castle",
   wifiName: "SKYCASTLE",
@@ -203,7 +208,7 @@ function previewValueForVariable(variable, previewValues = {}) {
 }
 
 function applyPreviewVariables(value, previewValues = {}) {
-  return String(value || "").replace(/\{\{\s*([A-Za-z0-9_]+)\s*\}\}/g, (_, variable) =>
+  return String(value || "").replace(/\{\{\s*([A-Za-z0-9_.-]+)\s*\}\}/g, (_, variable) =>
     previewValueForVariable(variable, previewValues)
   );
 }
@@ -231,7 +236,9 @@ function buildPreviewValues({ selectedProperty, selectedMessageData, currentForm
   return {
     ...DEFAULT_PREVIEW_VALUES,
     propertyDisplayName,
+    PropertyDisplayName: propertyDisplayName,
     propertyName,
+    PropertyName: propertyName,
     unitName: propertyName,
     UnitName: propertyName,
     wifiName: selectedMessageData.wifiName || DEFAULT_PREVIEW_VALUES.wifiName,
@@ -913,7 +920,7 @@ export default function WaiverPanel({
             label="Internal form route"
             value={currentFormSlug}
             onChange={updateLocalFormSlug}
-            placeholder="guest-info"
+            placeholder="welcome-to-zenfulcove"
             mono
             helper={
               reminderFormUrl
@@ -1348,7 +1355,7 @@ export default function WaiverPanel({
               <div>
                 <h3 className="font-serif text-xl text-forest">Test Access Code Release</h3>
                 <p className="mt-1 text-sm leading-relaxed text-forest/60">
-                  Sample preview renders the selected property release messages and a waiver reminder without sending. For Doodle House and Desert Rose it shows both the no-code welcome and code-only message. Dry run checks the sweep without posting or emailing. A live test requires a Lodgify booking ID.
+                  Sample flow renders fake booked, missing-form, Open, and Cancelled bookings without sending, so the template variables and status guards can be checked together. For Doodle House and Desert Rose it also shows both the no-code welcome and code-only message. Dry run checks real upcoming Lodgify bookings without posting or emailing. A live test requires a Lodgify booking ID.
                 </p>
               </div>
               <button
@@ -1417,6 +1424,31 @@ export default function WaiverPanel({
                           />
                         </details>
                       ) : null}
+                      {log.templateData ? (
+                        <details className="mt-2 rounded-md border border-sand/70 bg-cream/30 p-2">
+                          <summary className="cursor-pointer text-[11px] uppercase tracking-wider text-forest/50">
+                            Variables
+                          </summary>
+                          <dl className="mt-2 grid gap-2 text-xs sm:grid-cols-2">
+                            {[
+                              ["propertyDisplayName", log.templateData.propertyDisplayName],
+                              ["PropertyDisplayName", log.templateData.PropertyDisplayName],
+                              ["propertyName", log.templateData.propertyName],
+                              ["reservationFormURL", log.templateData.reservationFormURL],
+                              ["waiverURL", log.templateData.waiverURL],
+                            ].map(([key, value]) => (
+                              <div key={key} className="min-w-0">
+                                <dt className="font-mono text-[10px] uppercase tracking-wider text-forest/50">
+                                  {key}
+                                </dt>
+                                <dd className="mt-0.5 break-words font-mono text-forest/80">
+                                  {String(value || "")}
+                                </dd>
+                              </div>
+                            ))}
+                          </dl>
+                        </details>
+                      ) : null}
                     </div>
                   ))}
                 </div>
@@ -1430,7 +1462,7 @@ export default function WaiverPanel({
                 disabled={testRunning}
                 className="rounded-full border border-sand bg-white px-4 py-2 text-sm font-medium text-forest transition hover:border-grove hover:text-grove disabled:opacity-50"
               >
-                {testRunning ? "Running..." : "Preview Sample"}
+                {testRunning ? "Running..." : "Preview Fake Flow"}
               </button>
               <button
                 type="button"

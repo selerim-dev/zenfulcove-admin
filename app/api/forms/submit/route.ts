@@ -103,7 +103,7 @@ async function readRequest(request: Request) {
         ? (body.payload as Record<string, unknown>)
         : body;
     return {
-      formSlug: String(body.formSlug || body.form_slug || "guest-info").trim(),
+      formSlug: String(body.formSlug || body.form_slug || "welcome-to-zenfulcove").trim(),
       source: String(body.source || "local").trim() || "local",
       preview: isTruthy(body.preview || body.staffPreview),
       payload,
@@ -132,7 +132,7 @@ async function readRequest(request: Request) {
   }
 
   return {
-    formSlug: String(formData.get("formSlug") || "guest-info").trim(),
+    formSlug: String(formData.get("formSlug") || "welcome-to-zenfulcove").trim(),
     source: String(formData.get("source") || "local").trim() || "local",
     preview: isTruthy(formData.get("preview")),
     payload,

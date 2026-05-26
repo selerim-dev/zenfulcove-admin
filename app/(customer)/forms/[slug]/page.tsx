@@ -71,7 +71,7 @@ export default async function LocalFormPage({
           </p>
         ) : null}
         <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[var(--color-accent)]">
-          Zenfulcove
+          Zenfulcove Glamping
         </p>
         <h1 className="mt-2 font-serif text-4xl font-medium leading-[1.05] tracking-tight">
           {form.name}

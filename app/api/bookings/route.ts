@@ -170,7 +170,7 @@ export async function POST(req: Request) {
     return NextResponse.json(
       {
         error:
-          "Online paid kayak checkout is currently paused. Please contact Zenfulcove staff to book an additional rental.",
+          "Online paid kayak checkout is currently paused. Please contact Zenfulcove Glamping staff to book an additional rental.",
       },
       { status: 503 }
     );

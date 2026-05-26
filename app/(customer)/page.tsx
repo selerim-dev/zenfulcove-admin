@@ -37,7 +37,7 @@ export default async function Home({
       <header className="relative z-10 mx-auto flex w-full max-w-5xl items-center justify-between px-5 py-5 md:px-10 md:py-7">
         <Link href="/" className="flex flex-col leading-none text-white">
           <span className="font-serif text-2xl font-medium tracking-tight">
-            Zenfulcove
+            Zenfulcove Glamping
           </span>
           <span className="mt-0.5 text-[10px] font-medium uppercase tracking-[0.2em] text-white/80">
             Guest Portal
@@ -96,7 +96,7 @@ export default async function Home({
 
       <footer className="relative z-10 mx-auto w-full max-w-5xl px-5 pb-10 pt-6 text-xs text-white/80 md:px-10 md:pb-14">
         <p>
-          &copy; {new Date().getFullYear()} Zenfulcove ·{" "}
+          &copy; {new Date().getFullYear()} Zenfulcove Glamping ·{" "}
           <Link href="/terms" className="hover:text-white">
             Terms
           </Link>{" "}

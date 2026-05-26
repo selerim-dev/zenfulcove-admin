@@ -26,7 +26,7 @@ export default function Header({
         <div className="min-w-0">
           <Link href="/admin" className="inline-flex flex-col leading-none">
             <span className="font-serif text-xl font-medium tracking-tight text-[var(--color-ink)]">
-              Zenfulcove
+              Zenfulcove Glamping
             </span>
             <span className="mt-0.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-[var(--color-ink-muted)]">
               Staff Operations

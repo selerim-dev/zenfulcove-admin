@@ -9,7 +9,7 @@
 export const automationConfig = {
   sendgrid: {
     fromEmail: "contact@zenfulcove.com",
-    fromName: "Zenfulcove",
+    fromName: "Zenfulcove Glamping",
     sendgridContactListId: "65075b7e-7fd3-4357-9953-6ff3ce2ff59b", // "Lodgify Booked Guests" — shared by all automations
   },
   vacancyEmails: {
@@ -27,9 +27,9 @@ export const automationConfig = {
   },
   waiverReminders: {
     enabled: true,
-    propertyIds: [], // Lodgify property IDs to restrict to (e.g. Zenfulcove only). Empty = all properties.
+    propertyIds: [], // Lodgify property IDs to restrict to (e.g. Zenfulcove Glamping only). Empty = all properties.
     formSource: "jotform", // "jotform" sends legacy SendGrid templates. "internal" posts Lodgify messages with the internal form link.
-    localFormSlug: "guest-info", // Internal Zenfulcove form slug. Used only when formSource is "internal".
+    localFormSlug: "welcome-to-zenfulcove", // Internal Zenfulcove Glamping form slug. Used only when formSource is "internal".
     jotformFormId: "251834442091050", // Legacy Jotform waiver form ID fallback during migration.
     emails: [
       // Legacy Jotform uses templateId. Internal form mode uses the Lodgify subject/message fields.
@@ -63,7 +63,7 @@ export const automationConfig = {
     missingFormMessageTemplate: "",
     lodgifyMessageType: "Owner",
     lodgifySendNotification: true,
-    localFormSlug: "guest-info",
+    localFormSlug: "welcome-to-zenfulcove",
     jotformFormId: "251834442091050", // fallback while historical Jotform forms are still active
     propertyIds: [],
     includeCancelledBookings: false,
@@ -77,7 +77,7 @@ export const automationConfig = {
       "Sky Castle": {
         displayName: "SKY CASTLE",
         directionsName: "SKY CASTLE",
-        address: "Zenfulcove, 103 Potato Smith Rd unit c, Elgin, TX 78621",
+        address: "Zenfulcove Glamping, 103 Potato Smith Rd unit c, Elgin, TX 78621",
         parkingInstructions:
           "Parking - please park in front of your unit on the white gravel driveway.",
         wifiName: "SKYCASTLE",
@@ -140,7 +140,7 @@ export const automationConfig = {
   localFormClientSync: {
     enabled: false,
     sendgridContactListId: "e46aa43e-3f91-4965-8bbb-fcae8f9c3124",
-    formSlugs: ["guest-info"],
+    formSlugs: ["welcome-to-zenfulcove"],
     onlyUnsynced: false,
   },
   jotformLocalFormImport: {
@@ -148,7 +148,7 @@ export const automationConfig = {
     mappings: [
       {
         jotformFormId: "251834442091050",
-        localFormSlug: "guest-info",
+        localFormSlug: "welcome-to-zenfulcove",
       },
     ],
     limit: 1000,
@@ -179,7 +179,7 @@ export const automationConfig = {
   messageNotifications: {
     enabled: true,
     recipients: ["contact@zenfulcove.com"],
-    subjectPrefix: "[Zenfulcove SMS]",
+    subjectPrefix: "[Zenfulcove Glamping SMS]",
     // Base URL of the admin dashboard. Used to deep-link the alert email
     // straight to the messages tab + thread. Falls back to
     // NEXT_PUBLIC_DASHBOARD_URL env var if blank.
