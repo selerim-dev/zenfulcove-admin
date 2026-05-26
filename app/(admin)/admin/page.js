@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import Header from "@/components/Header";
 import Sidebar from "@/components/Sidebar";
 import SettingsPanel from "@/components/SettingsPanel";
@@ -12,6 +12,7 @@ import SyncsPanel from "@/components/SyncsPanel";
 import OneOffPromotionsPanel from "@/components/OneOffPromotionsPanel";
 import MessagesPanel from "@/components/MessagesPanel";
 import ActivityLog from "@/components/ActivityLog";
+import FloatingSaveBar from "@/components/FloatingSaveBar";
 
 const CATEGORY_TITLES = {
   settings: "Global Settings",
@@ -26,6 +27,7 @@ const CATEGORY_TITLES = {
 
 export default function Dashboard() {
   const [config, setConfig] = useState(null);
+  const [savedConfig, setSavedConfig] = useState(null);
   const [logs, setLogs] = useState([]);
   const [logsPage, setLogsPage] = useState(1);
   const [logsTotalPages, setLogsTotalPages] = useState(1);
@@ -33,6 +35,7 @@ export default function Dashboard() {
   const [lastRun, setLastRun] = useState(null);
   const [lastRunStatus, setLastRunStatus] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [savedRecently, setSavedRecently] = useState(false);
   const [loading, setLoading] = useState(true);
   const [activeCategory, setActiveCategory] = useState("settings");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -65,7 +68,10 @@ export default function Dashboard() {
       const logsData = await logsRes.json();
 
       // Only set config if it's valid (avoid crash when API returns error)
-      if (!configData?.error) setConfig(configData);
+      if (!configData?.error) {
+        setConfig(configData);
+        setSavedConfig(configData);
+      }
 
       setLogs(logsData.logs || []);
       setLogsPage(logsData.page || 1);
@@ -101,6 +107,17 @@ export default function Dashboard() {
     fetchData();
   }, [fetchData]);
 
+  const hasUnsavedConfigChanges = useMemo(() => {
+    if (!config || !savedConfig) return false;
+    return JSON.stringify(config) !== JSON.stringify(savedConfig);
+  }, [config, savedConfig]);
+
+  useEffect(() => {
+    if (!savedRecently) return;
+    const timeout = window.setTimeout(() => setSavedRecently(false), 2400);
+    return () => window.clearTimeout(timeout);
+  }, [savedRecently]);
+
   // Save config
   async function handleSave() {
     setSaving(true);
@@ -111,6 +128,8 @@ export default function Dashboard() {
         body: JSON.stringify(config),
       });
       if (!res.ok) throw new Error("Save failed");
+      setSavedConfig(config);
+      setSavedRecently(true);
     } catch (err) {
       console.error("Failed to save config:", err);
       alert("Failed to save settings.");
@@ -265,18 +284,6 @@ export default function Dashboard() {
                 />
               )}
 
-              {/* Save Button */}
-              {activeCategory !== "promotions" && activeCategory !== "messages" && (
-                <div className="flex justify-end">
-                  <button
-                    onClick={handleSave}
-                    disabled={saving}
-                    className="rounded-full bg-[var(--color-accent)] px-5 py-2.5 font-sans text-sm font-semibold text-white transition-colors duration-200 hover:bg-[var(--color-accent-strong)] disabled:opacity-50"
-                  >
-                    {saving ? "Saving..." : "Save Settings"}
-                  </button>
-                </div>
-              )}
             </>
           )}
 
@@ -292,6 +299,15 @@ export default function Dashboard() {
           </main>
         )}
       </div>
+      <FloatingSaveBar
+        visible={Boolean(config) && hasUnsavedConfigChanges}
+        saved={savedRecently}
+        saving={saving}
+        onSave={handleSave}
+        saveLabel="Save changes"
+        savingLabel="Saving..."
+        message="Unsaved settings"
+      />
     </div>
   );
 }

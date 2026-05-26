@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import FloatingSaveBar from "@/components/FloatingSaveBar";
 import LocalForm from "@/components/customer/LocalForm";
 import { LOCAL_FORM_STAY_UNIT_OPTIONS } from "@/lib/local-form-options";
 import { archiveLocalForm, deleteLocalForm, saveLocalForm } from "./actions";
@@ -439,6 +440,59 @@ function fieldsFrom(form?: LocalFormRow) {
         ? field.multiple !== false
         : undefined,
     };
+  });
+}
+
+function settingsFrom(form?: LocalFormRow): FormDraftSettings {
+  const schema = form?.schema || {};
+  return {
+    name: form?.name || "",
+    slug: form?.slug || "",
+    description: schema.subtitle || form?.description || "",
+    introText: schema.introText || "",
+    termsText: schema.termsText || "",
+    submitLabel: schema.submitLabel || "Submit",
+    successMessage:
+      schema.successMessage || "Thanks. We received your information.",
+    isActive: form?.is_active ?? false,
+  };
+}
+
+function serializeFormDraft(
+  settings: FormDraftSettings,
+  fields: LocalFormField[]
+) {
+  return JSON.stringify({
+    settings: {
+      name: settings.name || "",
+      slug: settings.slug || "",
+      description: settings.description || "",
+      introText: settings.introText || "",
+      termsText: settings.termsText || "",
+      submitLabel: settings.submitLabel || "Submit",
+      successMessage:
+        settings.successMessage || "Thanks. We received your information.",
+      isActive: Boolean(settings.isActive),
+    },
+    fields: fields.map((field) => {
+      const type = field.type || "text";
+      return {
+        name: field.name || "",
+        label: field.label || "",
+        type,
+        required: Boolean(field.required),
+        placeholder: field.placeholder || "",
+        helpText: field.helpText || "",
+        optionSource: field.optionSource || "",
+        options: Array.isArray(field.options)
+          ? field.options.map((option) => String(option))
+          : [],
+        multiple:
+          type === "image" || type === "file"
+            ? field.multiple !== false
+            : undefined,
+      };
+    }),
   });
 }
 
@@ -1051,24 +1105,23 @@ function FormEditor({
 }) {
   const router = useRouter();
   const isEdit = Boolean(form);
-  const initialSchema: LocalFormSchema = form?.schema || {};
-  const [fields, setFields] = useState<LocalFormField[]>(() =>
-    form ? fieldsFrom(form) : []
+  const formId = form
+    ? `local-form-editor-${form.id}`
+    : "local-form-editor-create";
+  const initialFields = useMemo(() => (form ? fieldsFrom(form) : []), [form]);
+  const initialSettings = useMemo(() => settingsFrom(form), [form]);
+  const initialSnapshot = useMemo(
+    () => serializeFormDraft(initialSettings, initialFields),
+    [initialFields, initialSettings]
   );
-  const [settings, setSettings] = useState<FormDraftSettings>(() => ({
-    name: form?.name || "",
-    slug: form?.slug || "",
-    description: initialSchema.subtitle || form?.description || "",
-    introText: initialSchema.introText || "",
-    termsText: initialSchema.termsText || "",
-    submitLabel: initialSchema.submitLabel || "Submit",
-    successMessage:
-      initialSchema.successMessage || "Thanks. We received your information.",
-    isActive: form?.is_active ?? false,
-  }));
+  const [fields, setFields] = useState<LocalFormField[]>(() => initialFields);
+  const [settings, setSettings] =
+    useState<FormDraftSettings>(() => initialSettings);
+  const [savedSnapshot, setSavedSnapshot] = useState(initialSnapshot);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [savedRecently, setSavedRecently] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const activeFields = useMemo(
@@ -1110,7 +1163,20 @@ function FormEditor({
     ]
   );
 
+  const draftSnapshot = useMemo(
+    () => serializeFormDraft(settings, activeFields),
+    [activeFields, settings]
+  );
+  const isDirty = draftSnapshot !== savedSnapshot;
+
+  useEffect(() => {
+    if (!savedRecently) return;
+    const timeout = window.setTimeout(() => setSavedRecently(false), 2400);
+    return () => window.clearTimeout(timeout);
+  }, [savedRecently]);
+
   function updateSettings(patch: Partial<FormDraftSettings>) {
+    setSavedRecently(false);
     setSettings((current) => ({ ...current, ...patch }));
   }
 
@@ -1118,6 +1184,7 @@ function FormEditor({
     index: number,
     patch: Partial<LocalFormField>
   ) {
+    setSavedRecently(false);
     setFields((current) =>
       current.map((field, fieldIndex) =>
         fieldIndex === index ? { ...field, ...patch } : field
@@ -1126,6 +1193,7 @@ function FormEditor({
   }
 
   function addBlankField() {
+    setSavedRecently(false);
     const next = [
       ...fields,
       {
@@ -1145,6 +1213,7 @@ function FormEditor({
   }
 
   function addTemplate(template: FieldTemplate) {
+    setSavedRecently(false);
     if (template.unique) {
       const existingIndex = fields.findIndex(
         (field) => field.name === template.name
@@ -1161,6 +1230,7 @@ function FormEditor({
   }
 
   function removeField(index: number) {
+    setSavedRecently(false);
     const next = fields.filter((_, fieldIndex) => fieldIndex !== index);
     setFields(next);
     setSelectedIndex((currentIndex) => {
@@ -1171,6 +1241,7 @@ function FormEditor({
   }
 
   function moveField(index: number, direction: -1 | 1) {
+    setSavedRecently(false);
     const nextIndex = index + direction;
     if (nextIndex < 0 || nextIndex >= fields.length) return;
     const next = [...fields];
@@ -1187,8 +1258,10 @@ function FormEditor({
 
     try {
       await saveLocalForm(new FormData(event.currentTarget));
+      setSavedSnapshot(draftSnapshot);
+      setSavedRecently(true);
       router.refresh();
-      onClose();
+      window.setTimeout(onClose, 750);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Save failed");
     } finally {
@@ -1216,7 +1289,7 @@ function FormEditor({
 
   return (
     <section className="rounded-2xl border border-[var(--color-border)] bg-white shadow-sm">
-      <form onSubmit={handleSubmit}>
+      <form id={formId} onSubmit={handleSubmit}>
         {form ? <input type="hidden" name="id" value={form.id} /> : null}
 
         <div className="flex flex-col gap-3 border-b border-[var(--color-border)] p-4 md:flex-row md:items-center md:justify-between">
@@ -1258,13 +1331,6 @@ function FormEditor({
                 Hide
               </button>
             ) : null}
-            <button
-              type="submit"
-              disabled={submitting}
-              className="rounded-full bg-[var(--color-accent)] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[var(--color-accent-strong)] disabled:opacity-60"
-            >
-              {submitting ? "Saving..." : form ? "Save Changes" : "Save Draft"}
-            </button>
           </div>
         </div>
 
@@ -1307,6 +1373,16 @@ function FormEditor({
           onClose={() => setPreviewOpen(false)}
         />
       ) : null}
+
+      <FloatingSaveBar
+        visible={isDirty || submitting}
+        saved={savedRecently}
+        saving={submitting}
+        formId={formId}
+        saveLabel={form ? "Save changes" : "Save draft"}
+        savingLabel="Saving..."
+        message={form ? "Unsaved form changes" : "Unsaved form draft"}
+      />
 
       <style>{`
         .form-input {

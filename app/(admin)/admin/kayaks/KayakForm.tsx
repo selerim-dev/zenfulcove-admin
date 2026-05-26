@@ -1,9 +1,41 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import FloatingSaveBar from "@/components/FloatingSaveBar";
 import ColorPicker from "@/components/customer/ColorPicker";
 import { createKayak, deleteKayak, updateKayak } from "./actions";
 import type { Kayak } from "@/lib/types";
+
+function kayakSnapshot(kayak?: Kayak) {
+  return JSON.stringify({
+    name: kayak?.name ?? "",
+    code: kayak?.code ?? "",
+    capacity: String(kayak?.capacity ?? 1),
+    length_feet: String(kayak?.length_feet ?? 10),
+    daily_rate: kayak ? (kayak.daily_rate_cents / 100).toFixed(2) : "80",
+    stripe_product_id: kayak?.stripe_product_id ?? "",
+    color: kayak?.color ?? "#2563eb",
+    is_active: kayak?.is_active ?? true,
+    image: "",
+  });
+}
+
+function formSnapshot(form: HTMLFormElement, colorOverride?: string) {
+  const formData = new FormData(form);
+  const image = formData.get("image");
+  return JSON.stringify({
+    name: String(formData.get("name") ?? ""),
+    code: String(formData.get("code") ?? ""),
+    capacity: String(formData.get("capacity") ?? ""),
+    length_feet: String(formData.get("length_feet") ?? ""),
+    daily_rate: String(formData.get("daily_rate") ?? ""),
+    stripe_product_id: String(formData.get("stripe_product_id") ?? ""),
+    color: colorOverride ?? String(formData.get("color") ?? ""),
+    is_active: formData.get("is_active") === "on",
+    image: image instanceof File && image.size > 0 ? image.name : "",
+  });
+}
 
 export default function KayakForm({
   kayak,
@@ -12,15 +44,34 @@ export default function KayakForm({
   kayak?: Kayak;
   onSuccess: () => void;
 }) {
+  const router = useRouter();
   const isEdit = Boolean(kayak);
+  const formRef = useRef<HTMLFormElement>(null);
+  const formId = kayak ? `kayak-form-${kayak.id}` : "kayak-form-create";
+  const initialSnapshot = useMemo(() => kayakSnapshot(kayak), [kayak]);
+  const [savedSnapshot, setSavedSnapshot] = useState(initialSnapshot);
+  const [isDirty, setIsDirty] = useState(!isEdit);
   const [submitting, setSubmitting] = useState(false);
+  const [savedRecently, setSavedRecently] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setSavedSnapshot(initialSnapshot);
+    setIsDirty(!isEdit);
+    setSavedRecently(false);
+  }, [initialSnapshot, isEdit]);
+
+  function syncDirtyState(form: HTMLFormElement, colorOverride?: string) {
+    setSavedRecently(false);
+    setIsDirty(!isEdit || formSnapshot(form, colorOverride) !== savedSnapshot);
+  }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
 
-    const formData = new FormData(e.currentTarget);
+    const form = e.currentTarget;
+    const formData = new FormData(form);
     const file = formData.get("image");
     if (file instanceof File && file.size > 0) {
       if (!file.type.startsWith("image/")) {
@@ -40,7 +91,11 @@ export default function KayakForm({
       } else {
         await createKayak(formData);
       }
-      onSuccess();
+      setSavedSnapshot(formSnapshot(form));
+      setIsDirty(false);
+      setSavedRecently(true);
+      router.refresh();
+      window.setTimeout(onSuccess, 750);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Save failed");
     } finally {
@@ -68,7 +123,13 @@ export default function KayakForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="grid gap-4 sm:grid-cols-2">
+    <form
+      ref={formRef}
+      id={formId}
+      onSubmit={handleSubmit}
+      onChange={(event) => syncDirtyState(event.currentTarget)}
+      className="grid gap-4 sm:grid-cols-2"
+    >
       {isEdit && kayak && (
         <input type="hidden" name="id" value={kayak.id} />
       )}
@@ -79,7 +140,7 @@ export default function KayakForm({
           type="text"
           required
           defaultValue={kayak?.name ?? ""}
-        placeholder="e.g. Rental #10"
+          placeholder="e.g. Rental #10"
           className="form-input"
         />
       </Field>
@@ -138,7 +199,13 @@ export default function KayakForm({
         />
       </Field>
       <Field label="Color">
-        <ColorPicker name="color" defaultValue={kayak?.color ?? "#2563eb"} />
+        <ColorPicker
+          name="color"
+          defaultValue={kayak?.color ?? "#2563eb"}
+          onValueChange={(value) => {
+            if (formRef.current) syncDirtyState(formRef.current, value);
+          }}
+        />
       </Field>
 
       <Field label="Photo" full>
@@ -195,18 +262,17 @@ export default function KayakForm({
         ) : (
           <span />
         )}
-        <button
-          type="submit"
-          disabled={submitting}
-          className="rounded-full bg-[var(--color-accent)] px-5 py-2 text-sm font-medium text-white transition hover:bg-[var(--color-accent-strong)] disabled:opacity-60"
-        >
-          {submitting
-            ? "Saving…"
-            : isEdit
-              ? "Save changes"
-              : "Add rental"}
-        </button>
       </div>
+
+      <FloatingSaveBar
+        visible={isDirty || submitting}
+        saved={savedRecently}
+        saving={submitting}
+        formId={formId}
+        saveLabel={isEdit ? "Save changes" : "Add rental"}
+        savingLabel={isEdit ? "Saving..." : "Adding..."}
+        message={isEdit ? "Unsaved rental changes" : "New rental draft"}
+      />
 
       <style>{`
         .form-input {
