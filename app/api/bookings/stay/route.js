@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { appendLogs } from "@/lib/activity-log";
 import { getConfig } from "@/lib/kv";
 import { getAccessCodeRelease } from "@/lib/access-code-releases";
 import {
@@ -321,6 +322,21 @@ export async function POST(request) {
       });
       release = await getAccessCodeRelease(normalized.id).catch(() => release);
       releasedStatus = Boolean(release?.sent_at || release?.status === "sent");
+      await appendLogs([
+        {
+          timestamp: new Date().toISOString(),
+          automation: "My Stay Access Code Retry",
+          property: propertyName,
+          action: `My Stay retry result for booking ${normalized.id}: ${releaseAttempt.action}`,
+          status:
+            releaseAttempt.status === "failed"
+              ? "failed"
+              : releaseAttempt.status === "success"
+                ? "success"
+                : "info",
+          bookingId: normalized.id,
+        },
+      ]).catch(() => {});
     } catch (err) {
       releaseAttempt = {
         status: "failed",
@@ -329,6 +345,16 @@ export async function POST(request) {
             ? err.message
             : "Failed to retry access-code release.",
       };
+      await appendLogs([
+        {
+          timestamp: new Date().toISOString(),
+          automation: "My Stay Access Code Retry",
+          property: propertyName,
+          action: `My Stay retry failed for booking ${normalized.id}: ${releaseAttempt.action}`,
+          status: "failed",
+          bookingId: normalized.id,
+        },
+      ]).catch(() => {});
     }
   } else if (formSubmitted && !releasedStatus && !bookingEligibleForAccess) {
     releaseAttempt = {

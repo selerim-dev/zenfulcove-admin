@@ -28,6 +28,7 @@ import {
 } from "@/lib/local-forms";
 import {
   getAccessCodeRelease,
+  listJervisAccessCodeReleaseRetries,
 } from "@/lib/access-code-releases";
 import {
   ineligibleBookingStatusMessage,
@@ -323,6 +324,10 @@ function parseSelectedAutomations(request) {
     "access-code": "access-code-release",
     "access-codes": "access-code-release",
     "access-code-release": "access-code-release",
+    "access-code-retry": "access-code-retry",
+    "access-code-retries": "access-code-retry",
+    "jervis-code-retry": "access-code-retry",
+    "jervis-code-retries": "access-code-retry",
     "access-code-day-of": "access-code-day-of",
     "day-of-code": "access-code-day-of",
     "day-of-access-code": "access-code-day-of",
@@ -1141,6 +1146,160 @@ export async function runDayOfDelayedAccessCodeRelease(
     delayedOnly: true,
     messageKind: "code-only",
   });
+}
+
+function retryBookingFromAccessCodeRelease(row = {}) {
+  const nameParts = String(row.guest_name || "Guest").trim().split(/\s+/).filter(Boolean);
+  const raw = row.raw_source && typeof row.raw_source === "object" ? row.raw_source : {};
+  const jervisReservation =
+    raw.jervisReservation && typeof raw.jervisReservation === "object"
+      ? raw.jervisReservation
+      : {};
+
+  return {
+    id: row.booking_id,
+    status: "Booked",
+    property_id: row.property_id,
+    property_name: row.property_name,
+    arrival: row.checkin_date || toDateOnly(jervisReservation.access_start_time),
+    departure: toDateOnly(jervisReservation.access_end_time),
+    guest: {
+      name: row.guest_name || "Guest",
+      firstName: nameParts[0] || "Guest",
+      lastName: nameParts.slice(1).join(" "),
+      email: row.guest_email,
+    },
+  };
+}
+
+export async function runJervisAccessCodeRetries(automationConfig, dryRunOverride, options = {}) {
+  const isDryRun = dryRunOverride !== undefined ? dryRunOverride : DRY_RUN_ENV;
+  const logs = [];
+  const config = automationConfig.accessCodeRelease || {};
+  const waiverConfig = automationConfig.waiverReminders || {};
+  const automationName = options.automationName || "Jervis Access Code Retry";
+
+  if (!config.enabled) {
+    return [
+      {
+        timestamp: new Date().toISOString(),
+        automation: automationName,
+        property: "—",
+        action: "Skipped (disabled)",
+        status: "skipped",
+      },
+    ];
+  }
+
+  const localFormSlug = String(
+    config.localFormSlug || waiverConfig.localFormSlug || waiverConfig.formSlug || ""
+  )
+    .trim()
+    .replace(/^\/?forms\//, "");
+
+  if (!localFormSlug) {
+    return [
+      {
+        timestamp: new Date().toISOString(),
+        automation: automationName,
+        property: "—",
+        action: "Skipped: no internal form slug configured",
+        status: "skipped",
+      },
+    ];
+  }
+
+  let rows = [];
+  try {
+    rows = await listJervisAccessCodeReleaseRetries({
+      limit: options.limit || 50,
+    });
+  } catch (err) {
+    return [
+      {
+        timestamp: new Date().toISOString(),
+        automation: automationName,
+        property: "—",
+        action: `Failed to load Jervis retry rows: ${err.message}`,
+        status: "failed",
+      },
+    ];
+  }
+
+  if (rows.length === 0) {
+    return [
+      {
+        timestamp: new Date().toISOString(),
+        automation: automationName,
+        property: "—",
+        action: "No pending Jervis access-code releases to retry",
+        status: "info",
+      },
+    ];
+  }
+
+  let submissions = [];
+  try {
+    submissions = await listLocalFormSubmissions({
+      formSlugs: [localFormSlug],
+      limit: 10000,
+    });
+  } catch (err) {
+    return [
+      {
+        timestamp: new Date().toISOString(),
+        automation: automationName,
+        property: "—",
+        action: `Failed to load internal form submissions for retry gating: ${err.message}`,
+        status: "failed",
+      },
+    ];
+  }
+
+  logs.push({
+    timestamp: new Date().toISOString(),
+    automation: automationName,
+    property: "—",
+    action: `Retrying ${rows.length} pending Jervis access-code release(s)`,
+    status: "info",
+  });
+
+  for (const row of rows) {
+    const bookingId = String(row.booking_id || "").trim();
+    const propertyName = row.property_name || "Property";
+    if (!bookingHasLocalFormSubmission(bookingId, submissions)) {
+      logs.push({
+        timestamp: new Date().toISOString(),
+        automation: automationName,
+        property: propertyName,
+        action: `Skipped booking ${bookingId}: selected form is not submitted`,
+        status: "skipped",
+        bookingId,
+      });
+      continue;
+    }
+
+    const sendResult = await sendAccessCodeForBooking({
+      booking: retryBookingFromAccessCodeRelease(row),
+      automationConfig,
+      dryRun: isDryRun,
+      persistState: options.persistState !== false,
+      messagePrefix: options.messagePrefix || "",
+    });
+    logs.push({
+      timestamp: sendResult.timestamp || new Date().toISOString(),
+      automation: automationName,
+      property: propertyName,
+      action: sendResult.action || `Retried access code for booking ${bookingId}`,
+      status: sendResult.status || "info",
+      ...(sendResult.decision ? { decision: sendResult.decision } : {}),
+      ...(sendResult.deliveryChannel ? { deliveryChannel: sendResult.deliveryChannel } : {}),
+      ...(sendResult.bookingId ? { bookingId: sendResult.bookingId } : { bookingId }),
+      ...(sendResult.templateData ? { templateData: sendResult.templateData } : {}),
+    });
+  }
+
+  return logs;
 }
 
 // ─── Automation 3: Popup Follow Ups ─────────────────────────────────────────
@@ -3055,6 +3214,14 @@ export async function POST(request) {
       isDryRun
     );
     allLogs.push(...dayOfAccessCodeLogs);
+  }
+
+  if (runAllAutomations || selectedAutomations.has("access-code-retry")) {
+    const jervisRetryLogs = await runJervisAccessCodeRetries(
+      automationConfig,
+      isDryRun
+    );
+    allLogs.push(...jervisRetryLogs);
   }
 
   if (runAllAutomations || selectedAutomations.has("popup")) {

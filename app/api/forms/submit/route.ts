@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { appendLogs } from "@/lib/activity-log";
 import { hasSupabaseAdminEnv } from "@/lib/supabaseEnv";
@@ -17,6 +17,7 @@ import {
 import { maybeSendSameDayAccessCodeForSubmission } from "@/lib/access-code-messages";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const ACCESS_CODE_BACKGROUND_RETRY_DELAYS_MS = [0, 20_000, 45_000, 90_000];
 
 type UploadedInput = {
   fieldName: string;
@@ -235,6 +236,18 @@ async function recordSubmitLog({
     const message = logErr instanceof Error ? logErr.message : String(logErr);
     console.warn("[forms-submit] Failed to write submit activity log:", message);
   }
+}
+
+function shouldRetryAccessCodeRelease(result: { status?: string; action?: string } | null) {
+  if (!result || result.status !== "failed") return false;
+  return /Jervis reservation .* did not return a pincode|access code lookup failed/i.test(
+    String(result.action || "")
+  );
+}
+
+async function wait(ms: number) {
+  if (ms <= 0) return;
+  await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 export async function POST(request: Request) {
@@ -508,48 +521,59 @@ export async function POST(request: Request) {
     await markLocalFormSubmissionsSynced([submission.id]);
   }
 
-  let accessCodeRelease = null;
   if (!isTrustedPreview) {
-    try {
-      accessCodeRelease = await maybeSendSameDayAccessCodeForSubmission({
-        formSlug: resolvedFormSlug,
-        payload: finalSubmissionPayload,
-        contact,
-      });
-    } catch (err) {
-      accessCodeRelease = {
-        status: "failed",
-        action:
-          err instanceof Error
-            ? err.message
-            : "Failed to run same-day access code release.",
-      };
-      await recordSubmitLog({
-        status: "failed",
-        action: `Form submitted, but access-code release failed: ${accessCodeRelease.action}`,
-        formSlug: resolvedFormSlug,
-        parsed,
-        contact,
-        submissionId: submission.id,
-        error: err,
-      });
-    }
-  }
+    after(async () => {
+      let accessCodeRelease = null;
 
-  if (!isTrustedPreview && accessCodeRelease) {
-    await recordSubmitLog({
-      status:
-        accessCodeRelease.status === "failed"
-          ? "failed"
-          : accessCodeRelease.status === "success"
-            ? "success"
-            : "info",
-      action: `Form submitted; access-code release result: ${accessCodeRelease.action}`,
-      formSlug: resolvedFormSlug,
-      parsed,
-      contact,
-      submissionId: submission.id,
-      error: accessCodeRelease.status === "failed" ? accessCodeRelease.action : undefined,
+      for (let attemptIndex = 0; attemptIndex < ACCESS_CODE_BACKGROUND_RETRY_DELAYS_MS.length; attemptIndex += 1) {
+        await wait(ACCESS_CODE_BACKGROUND_RETRY_DELAYS_MS[attemptIndex]);
+        try {
+          accessCodeRelease = await maybeSendSameDayAccessCodeForSubmission({
+            formSlug: resolvedFormSlug,
+            payload: finalSubmissionPayload,
+            contact,
+          });
+        } catch (err) {
+          accessCodeRelease = {
+            status: "failed",
+            action:
+              err instanceof Error
+                ? err.message
+                : "Failed to run same-day access code release.",
+          };
+          await recordSubmitLog({
+            status: "failed",
+            action: `Form submitted, but access-code release failed: ${accessCodeRelease.action}`,
+            formSlug: resolvedFormSlug,
+            parsed,
+            contact,
+            submissionId: submission.id,
+            error: err,
+          });
+        }
+
+        await recordSubmitLog({
+          status:
+            accessCodeRelease.status === "failed"
+              ? "failed"
+              : accessCodeRelease.status === "success"
+                ? "success"
+                : "info",
+          action: `Form submitted; access-code release attempt ${attemptIndex + 1} result: ${accessCodeRelease.action}`,
+          formSlug: resolvedFormSlug,
+          parsed,
+          contact,
+          submissionId: submission.id,
+          error:
+            accessCodeRelease.status === "failed"
+              ? accessCodeRelease.action
+              : undefined,
+        });
+
+        if (!shouldRetryAccessCodeRelease(accessCodeRelease)) {
+          break;
+        }
+      }
     });
   }
 
@@ -568,6 +592,11 @@ export async function POST(request: Request) {
     submissionId: submission.id,
     formSlug: submission.form_slug,
     submittedAt: submission.submitted_at,
-    accessCodeRelease,
+    accessCodeRelease: isTrustedPreview
+      ? null
+      : {
+          status: "queued",
+          action: "Access-code release queued.",
+        },
   });
 }
