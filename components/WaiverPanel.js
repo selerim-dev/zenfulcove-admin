@@ -39,6 +39,8 @@ const DEFAULT_EMAILS = [
 
 const FORM_SOURCE_INTERNAL = "internal";
 const FORM_SOURCE_JOTFORM = "jotform";
+const TEST_MODE_ACCESS_CODE = "access-code";
+const TEST_MODE_REMINDER = "waiver-reminder";
 const PUBLIC_APP_BASE_URL = (
   process.env.NEXT_PUBLIC_SITE_URL ||
   process.env.NEXT_PUBLIC_APP_URL ||
@@ -750,6 +752,7 @@ export default function WaiverPanel({
   const [lodgifyPropertiesStatus, setLodgifyPropertiesStatus] = useState("loading");
   const [selectedPropertyKey, setSelectedPropertyKey] = useState("");
   const [testModalOpen, setTestModalOpen] = useState(false);
+  const [testMode, setTestMode] = useState(TEST_MODE_ACCESS_CODE);
   const [testBookingId, setTestBookingId] = useState("");
   const [testRunning, setTestRunning] = useState(false);
   const [testResult, setTestResult] = useState(null);
@@ -954,6 +957,13 @@ export default function WaiverPanel({
     onChange({ ...safeConfig, emails: emails.filter((_, i) => i !== index) });
   }
 
+  function openTestModal(mode) {
+    setTestMode(mode);
+    setTestError("");
+    setTestResult(null);
+    setTestModalOpen(true);
+  }
+
   async function runAccessCodeTest(dryRun, options = {}) {
     setTestRunning(true);
     setTestError("");
@@ -982,6 +992,37 @@ export default function WaiverPanel({
     }
   }
 
+  async function runReminderTest(dryRun, options = {}) {
+    setTestRunning(true);
+    setTestError("");
+    setTestResult(null);
+    try {
+      const res = await fetch("/api/waiver-reminder-test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          dryRun,
+          sample: Boolean(options.sample),
+          samplePropertyName: selectedProperty?.name || "",
+          samplePropertyId: selectedProperty?.id || "",
+          bookingId: testBookingId.trim(),
+          waiverReminders: safeConfig,
+          accessCodeRelease: codeRelease,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Waiver reminder test failed.");
+      setTestResult(data);
+    } catch (err) {
+      setTestError(err.message || "Waiver reminder test failed.");
+    } finally {
+      setTestRunning(false);
+    }
+  }
+
+  const runCurrentTest =
+    testMode === TEST_MODE_REMINDER ? runReminderTest : runAccessCodeTest;
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -993,7 +1034,16 @@ export default function WaiverPanel({
             form source, templates, and property-specific message values.
           </p>
         </div>
-        <Toggle enabled={safeConfig.enabled} onChange={updateEnabled} />
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => openTestModal(TEST_MODE_REMINDER)}
+            className="rounded-full border border-sand bg-white px-4 py-2 text-sm font-medium text-forest transition hover:border-grove hover:text-grove"
+          >
+            Test reminders
+          </button>
+          <Toggle enabled={safeConfig.enabled} onChange={updateEnabled} />
+        </div>
       </div>
 
       <Card className="space-y-4">
@@ -1166,14 +1216,10 @@ export default function WaiverPanel({
                 <div className="flex items-center gap-3">
                   <button
                     type="button"
-                    onClick={() => {
-                      setTestModalOpen(true);
-                      setTestError("");
-                      setTestResult(null);
-                    }}
+                    onClick={() => openTestModal(TEST_MODE_ACCESS_CODE)}
                     className="rounded-full border border-sand bg-white px-4 py-2 text-sm font-medium text-forest transition hover:border-grove hover:text-grove"
                   >
-                    Test
+                    Test access
                   </button>
                   <Toggle
                     enabled={Boolean(codeRelease.enabled)}
@@ -1458,9 +1504,15 @@ export default function WaiverPanel({
           <div className="max-h-[calc(100vh-3rem)] w-full max-w-3xl overflow-y-auto rounded-xl border border-sand bg-white p-5 shadow-xl">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <h3 className="font-serif text-xl text-forest">Test Access Code Release</h3>
+                <h3 className="font-serif text-xl text-forest">
+                  {testMode === TEST_MODE_REMINDER
+                    ? "Test Waiver Reminders"
+                    : "Test Access Code Release"}
+                </h3>
                 <p className="mt-1 text-sm leading-relaxed text-forest/60">
-                  Sample flow renders fake booked, missing-form, Open, and Cancelled bookings without sending, so the template variables and status guards can be checked together. For Doodle House and Desert Rose it also shows both the no-code welcome and code-only message. Dry run checks real upcoming Lodgify bookings without posting or emailing. A live test requires a Lodgify booking ID.
+                  {testMode === TEST_MODE_REMINDER
+                    ? "Sample flow renders fake booked, completed-form, Open, and Cancelled reminder outcomes without sending. Dry run checks real upcoming Lodgify bookings without posting or emailing. A live reminder test requires a Lodgify booking ID, sends a test-prefixed Lodgify message, and does not mark the reminder as sent."
+                    : "Sample flow renders fake booked, missing-form, Open, and Cancelled bookings without sending, so the template variables and status guards can be checked together. For Doodle House and Desert Rose it also shows both the no-code welcome and code-only message. Dry run checks real upcoming Lodgify bookings without posting or emailing. A live test requires a Lodgify booking ID."}
                 </p>
               </div>
               <button
@@ -1479,7 +1531,11 @@ export default function WaiverPanel({
                 onChange={setTestBookingId}
                 placeholder="20505018"
                 mono
-                helper="Optional for dry run. Required for a live Lodgify test message."
+                helper={
+                  testMode === TEST_MODE_REMINDER
+                    ? "Optional for a focused dry run. Required for a live reminder test message."
+                    : "Optional for dry run. Required for a live Lodgify test message."
+                }
               />
             </div>
 
@@ -1563,7 +1619,7 @@ export default function WaiverPanel({
             <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:justify-end">
               <button
                 type="button"
-                onClick={() => runAccessCodeTest(true, { sample: true })}
+                onClick={() => runCurrentTest(true, { sample: true })}
                 disabled={testRunning}
                 className="rounded-full border border-sand bg-white px-4 py-2 text-sm font-medium text-forest transition hover:border-grove hover:text-grove disabled:opacity-50"
               >
@@ -1571,7 +1627,7 @@ export default function WaiverPanel({
               </button>
               <button
                 type="button"
-                onClick={() => runAccessCodeTest(true)}
+                onClick={() => runCurrentTest(true)}
                 disabled={testRunning}
                 className="rounded-full border border-sand bg-white px-4 py-2 text-sm font-medium text-forest transition hover:border-grove hover:text-grove disabled:opacity-50"
               >
@@ -1579,11 +1635,15 @@ export default function WaiverPanel({
               </button>
               <button
                 type="button"
-                onClick={() => runAccessCodeTest(false)}
+                onClick={() => runCurrentTest(false)}
                 disabled={testRunning || !testBookingId.trim()}
                 className="rounded-full bg-grove px-4 py-2 text-sm font-semibold text-white transition hover:bg-forest disabled:opacity-50"
               >
-                {testRunning ? "Running..." : "Send Lodgify Test"}
+                {testRunning
+                  ? "Running..."
+                  : testMode === TEST_MODE_REMINDER
+                    ? "Send Reminder Test"
+                    : "Send Lodgify Test"}
               </button>
             </div>
           </div>

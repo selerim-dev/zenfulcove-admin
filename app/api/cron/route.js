@@ -618,7 +618,7 @@ async function runVacancyEmails(automationConfig, dryRunOverride) {
 // When it runs is controlled by the cron schedule; reminder offsets and message
 // copy are configured in the dashboard.
 
-async function runWaiverReminders(automationConfig, dryRunOverride) {
+export async function runWaiverReminders(automationConfig, dryRunOverride) {
   const isDryRun = dryRunOverride !== undefined ? dryRunOverride : DRY_RUN_ENV;
   const logs = [];
   const config = automationConfig.waiverReminders || {};
