@@ -13,7 +13,7 @@ export default async function BookPage({
   }>;
 }) {
   const { reservation = "", lastName = "" } = await searchParams;
-  const hasCredentials = reservation.trim() && lastName.trim();
+  const hasCredentials = reservation.trim();
 
   if (hasCredentials) {
     return (
@@ -37,8 +37,8 @@ export default async function BookPage({
               Open your stay.
             </h1>
             <p className="mt-4 max-w-2xl text-sm leading-relaxed text-white/90 md:text-base">
-              Enter the booking ID from your confirmation and your last name to
-              see arrival details, Wi-Fi, forms, and access-code status.
+              Enter the booking ID from your confirmation to see arrival
+              details, Wi-Fi, forms, and access-code status.
             </p>
           </div>
         </div>
