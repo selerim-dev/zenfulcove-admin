@@ -2,7 +2,7 @@
 
 type GuestBookingSession = {
   reservation: string;
-  lastName: string;
+  lastName?: string;
   cabin?: string;
   guestName?: string;
   verifiedAt?: string;
@@ -14,15 +14,13 @@ function clean(value: unknown) {
   return String(value || "").trim();
 }
 
-export function stayHref(reservation: string, lastName: string) {
+export function stayHref(reservation: string, lastName = "") {
   const code = clean(reservation);
   const name = clean(lastName);
-  if (!code || !name) return "/book";
+  if (!code) return "/book";
 
-  const params = new URLSearchParams({
-    reservation: code,
-    lastName: name,
-  });
+  const params = new URLSearchParams({ reservation: code });
+  if (name) params.set("lastName", name);
   return `/book?${params.toString()}`;
 }
 
@@ -35,7 +33,7 @@ export function readGuestBookingSession(): GuestBookingSession | null {
     const parsed = JSON.parse(raw) as Partial<GuestBookingSession>;
     const reservation = clean(parsed.reservation);
     const lastName = clean(parsed.lastName);
-    if (!reservation || !lastName) return null;
+    if (!reservation) return null;
     return {
       reservation,
       lastName,
@@ -53,7 +51,7 @@ export function saveGuestBookingSession(session: GuestBookingSession) {
 
   const reservation = clean(session.reservation);
   const lastName = clean(session.lastName);
-  if (!reservation || !lastName) return;
+  if (!reservation) return;
 
   window.sessionStorage.setItem(
     BOOKING_SESSION_KEY,

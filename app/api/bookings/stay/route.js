@@ -213,9 +213,9 @@ export async function POST(request) {
 
   const reservationId = clean(body.reservationId || body.reservation);
   const lastName = clean(body.lastName);
-  if (!reservationId || !lastName) {
+  if (!reservationId) {
     return NextResponse.json(
-      { error: "Booking ID and last name are required." },
+      { error: "Booking ID is required." },
       { status: 400 }
     );
   }
@@ -241,7 +241,7 @@ export async function POST(request) {
   }
 
   const normalized = normalizeBooking(booking);
-  if (!lastNameMatches(normalized.guest.name, lastName)) {
+  if (lastName && !lastNameMatches(normalized.guest.name, lastName)) {
     return NextResponse.json(
       { error: "That last name does not match the booking." },
       { status: 401 }

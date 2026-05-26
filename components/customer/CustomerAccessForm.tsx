@@ -15,8 +15,8 @@ export default function CustomerAccessForm({ compact = false }: { compact?: bool
     e.preventDefault();
     const code = reservation.trim();
     const name = lastName.trim();
-    if (!code || !name) {
-      setError("Enter your booking code and last name to continue.");
+    if (!code) {
+      setError("Enter your booking code to continue.");
       return;
     }
 
@@ -83,7 +83,7 @@ export default function CustomerAccessForm({ compact = false }: { compact?: bool
             compact ? "text-[var(--color-ink-muted)]" : "text-white/80"
           }`}
         >
-          Last Name
+          Last Name Optional
         </span>
         <input
           type="text"

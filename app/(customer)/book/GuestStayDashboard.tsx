@@ -118,7 +118,7 @@ export default function GuestStayDashboard({
   lastName,
 }: {
   reservation: string;
-  lastName: string;
+  lastName?: string;
 }) {
   const [data, setData] = useState<StayResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -133,7 +133,7 @@ export default function GuestStayDashboard({
     fetch("/api/bookings/stay", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ reservationId: reservation, lastName }),
+      body: JSON.stringify({ reservationId: reservation, lastName: lastName || "" }),
     })
       .then((res) => res.json().then((json) => ({ ok: res.ok, json })))
       .then(({ ok, json }) => {

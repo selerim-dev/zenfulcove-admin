@@ -543,7 +543,7 @@ export default function LocalForm({
       const bookingCode = bookingCodeFromPayload(payload);
       const lastName = lastNameFromPayload(payload);
       const redirectHref =
-        !staffPreview && bookingCode && lastName ? stayHref(bookingCode, lastName) : "";
+        !staffPreview && bookingCode ? stayHref(bookingCode, lastName) : "";
       if (redirectHref) {
         saveGuestBookingSession({
           reservation: bookingCode,

@@ -7,7 +7,7 @@ import { todayIso } from "@/lib/dates";
 
 type ValidatePayload = {
   reservationId: string;
-  lastName: string;
+  lastName?: string;
   dateIso?: string;
 };
 
@@ -35,9 +35,9 @@ export async function POST(req: Request) {
   const lastName = String(body.lastName ?? "").trim();
   const dateIso = typeof body.dateIso === "string" ? body.dateIso : undefined;
 
-  if (!reservationId || !lastName) {
+  if (!reservationId) {
     return NextResponse.json(
-      { error: "Reservation number and last name are required." },
+      { error: "Reservation number is required." },
       { status: 400 }
     );
   }
@@ -63,7 +63,7 @@ export async function POST(req: Request) {
     );
   }
 
-  if (!lastNameMatches(reservation.guestName, lastName)) {
+  if (lastName && !lastNameMatches(reservation.guestName, lastName)) {
     return NextResponse.json(
       { error: "That last name doesn't match the reservation." },
       { status: 401 }
