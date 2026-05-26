@@ -248,6 +248,18 @@ function messagePreviewHtml(value, previewValues = {}) {
     : linkifyEscapedPreviewUrls(escapePreviewHtml(raw));
 }
 
+function compactMessageHtml(value) {
+  return String(value || "")
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n")
+    .split("\n")
+    .map((line) => line.trim())
+    .join("\n")
+    .replace(/>\s+</g, "><")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 function buildPreviewValues({ selectedProperty, selectedMessageData, currentFormSlug }) {
   const formUrl = currentFormSlug
     ? localFormUrl(currentFormSlug)
@@ -572,6 +584,7 @@ function RichMessageField({
   previewValues,
 }) {
   const textareaRef = useRef(null);
+  const [viewMode, setViewMode] = useState("edit");
   const currentValue = value ?? "";
   const previewHtml = messagePreviewHtml(currentValue, previewValues);
 
@@ -600,6 +613,14 @@ function RichMessageField({
     });
   }
 
+  function compactHtml() {
+    const compacted = compactMessageHtml(currentValue);
+    onChange(compacted);
+    window.requestAnimationFrame(() => {
+      textareaRef.current?.focus();
+    });
+  }
+
   return (
     <div className="block text-xs text-forest/60">
       <span className="uppercase tracking-wider">{label}</span>
@@ -618,19 +639,61 @@ function RichMessageField({
               </button>
             ))}
           </div>
-          <VariablesPopover />
+          <div className="flex flex-wrap items-center justify-end gap-1">
+            <button
+              type="button"
+              onClick={compactHtml}
+              disabled={!currentValue.trim()}
+              className="rounded-md border border-sand bg-white px-2.5 py-1 text-xs font-semibold text-forest transition hover:border-grove hover:text-grove disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Compact HTML
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode("edit")}
+              className={`rounded-md border px-2.5 py-1 text-xs font-semibold transition ${
+                viewMode === "edit"
+                  ? "border-grove bg-grove text-white"
+                  : "border-sand bg-white text-forest hover:border-grove hover:text-grove"
+              }`}
+            >
+              Edit
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode("rendered")}
+              disabled={!previewHtml}
+              className={`rounded-md border px-2.5 py-1 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-40 ${
+                viewMode === "rendered"
+                  ? "border-grove bg-grove text-white"
+                  : "border-sand bg-white text-forest hover:border-grove hover:text-grove"
+              }`}
+            >
+              Rendered
+            </button>
+            <VariablesPopover />
+          </div>
         </div>
-        <textarea
-          ref={textareaRef}
-          value={currentValue}
-          onChange={(event) => onChange(event.target.value)}
-          placeholder={placeholder}
-          rows={rows}
-          className="block w-full rounded-b-lg border-0 px-3 py-2 text-sm text-forest focus:outline-none focus:ring-2 focus:ring-grove/30"
-        />
+        {viewMode === "rendered" && previewHtml ? (
+          <div className="min-h-44 rounded-b-lg bg-white px-3 py-3">
+            <div
+              className={MESSAGE_PREVIEW_CLASS}
+              dangerouslySetInnerHTML={{ __html: previewHtml }}
+            />
+          </div>
+        ) : (
+          <textarea
+            ref={textareaRef}
+            value={currentValue}
+            onChange={(event) => onChange(event.target.value)}
+            placeholder={placeholder}
+            rows={rows}
+            className="block w-full rounded-b-lg border-0 px-3 py-2 text-sm text-forest focus:outline-none focus:ring-2 focus:ring-grove/30"
+          />
+        )}
       </div>
       {helper ? <span className="mt-1 block text-xs text-forest/40">{helper}</span> : null}
-      {previewHtml ? (
+      {previewHtml && viewMode !== "rendered" ? (
         <div className="mt-3 rounded-lg border border-sand bg-cream/30 p-3">
           <div className="mb-2 text-[11px] uppercase tracking-wider text-forest/50">
             Lodgify preview
@@ -1378,7 +1441,7 @@ export default function WaiverPanel({
                         }
                         placeholder={CODE_ONLY_MESSAGE_PLACEHOLDER}
                         rows={6}
-                        helper="Leave blank to use the built-in short code-only message."
+                        helper="If set, this exact day-of Lodgify message is sent. If blank, the property access-code message above is used before any global fallback."
                         previewValues={codeOnlyPreviewValues}
                       />
                     </div>
