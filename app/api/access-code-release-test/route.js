@@ -117,6 +117,7 @@ export async function POST(request) {
       const samplePropertyId = clean(body?.samplePropertyId) || "sample-property";
       const sampleBooking = {
         id: "sample-preview",
+        status: "Booked",
         property_id: samplePropertyId,
         property_name: samplePropertyName,
         arrival: dateDaysFromNow(1),

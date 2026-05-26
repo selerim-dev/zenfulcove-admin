@@ -30,7 +30,10 @@ import {
   getAccessCodeRelease,
 } from "@/lib/access-code-releases";
 import {
+  ineligibleBookingStatusMessage,
   isDelayedAccessCodeBooking,
+  isBookedLodgifyStatus,
+  lodgifyBookingStatus,
   sendAccessCodeForBooking,
   sendCheckinInfoForBooking,
   sendWaiverReminderForBooking,
@@ -274,13 +277,7 @@ function extractLodgifyContact(booking) {
       ""
   ).trim();
 
-  const bookingStatus = String(
-    booking?.status ||
-      booking?.booking_status ||
-      booking?.reservationStatus ||
-      booking?.reservation_status ||
-      ""
-  ).trim();
+  const bookingStatus = lodgifyBookingStatus(booking);
 
   const propertyName = getFirstNonEmpty([
     booking?.property_name,
@@ -772,6 +769,20 @@ async function runWaiverReminders(automationConfig, dryRunOverride) {
         const bookingId = String(booking.id);
         const propertyName =
           booking.property_name || booking.propertyName || "Property";
+        const bookingStatus = lodgifyBookingStatus(booking);
+
+        if (!isBookedLodgifyStatus(bookingStatus)) {
+          logs.push({
+            timestamp: new Date().toISOString(),
+            automation: automationName,
+            property: propertyName,
+            action: ineligibleBookingStatusMessage(bookingId, bookingStatus),
+            status: "skipped",
+            bookingId,
+            bookingStatus: bookingStatus || "unknown",
+          });
+          continue;
+        }
 
         try {
           const hasWaiver = usesLocalForm
@@ -1030,13 +1041,15 @@ export async function runAccessCodeRelease(automationConfig, dryRunOverride, opt
       },
     });
 
-    if (isCancelledBooking(contact.bookingStatus) && config.includeCancelledBookings !== true) {
+    if (!isBookedLodgifyStatus(contact.bookingStatus)) {
       logs.push({
         timestamp: new Date().toISOString(),
         automation: automationName,
         property: propertyName,
-        action: `Skipped booking ${bookingId}: booking is cancelled`,
+        action: ineligibleBookingStatusMessage(bookingId, contact.bookingStatus),
         status: "skipped",
+        bookingId,
+        bookingStatus: contact.bookingStatus || "unknown",
       });
       continue;
     }
