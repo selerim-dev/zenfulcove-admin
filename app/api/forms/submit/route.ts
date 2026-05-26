@@ -536,6 +536,23 @@ export async function POST(request: Request) {
     }
   }
 
+  if (!isTrustedPreview && accessCodeRelease) {
+    await recordSubmitLog({
+      status:
+        accessCodeRelease.status === "failed"
+          ? "failed"
+          : accessCodeRelease.status === "success"
+            ? "success"
+            : "info",
+      action: `Form submitted; access-code release result: ${accessCodeRelease.action}`,
+      formSlug: resolvedFormSlug,
+      parsed,
+      contact,
+      submissionId: submission.id,
+      error: accessCodeRelease.status === "failed" ? accessCodeRelease.action : undefined,
+    });
+  }
+
   await recordSubmitLog({
     status: "success",
     action: "Internal form submitted successfully.",

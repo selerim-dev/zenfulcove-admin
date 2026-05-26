@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import { getConfig } from "@/lib/kv";
 import { getAccessCodeRelease } from "@/lib/access-code-releases";
-import { buildAccessCodeTemplateData, localFormUrl } from "@/lib/access-code-messages";
+import {
+  buildAccessCodeTemplateData,
+  localFormUrl,
+  maybeSendSameDayAccessCodeForSubmission,
+} from "@/lib/access-code-messages";
 import { getBookingById, getProperties } from "@/lib/lodgify";
 import {
   bookingHasLocalFormSubmission,
@@ -279,8 +283,51 @@ export async function POST(request) {
   const formSubmitted =
     Boolean(formSubmission) ||
     (formSlug ? await hasSubmittedInternalForm(normalized.id, formSlug) : false);
-  const release = await getAccessCodeRelease(normalized.id).catch(() => null);
-  const releasedStatus = Boolean(release?.sent_at || release?.status === "sent");
+  let release = await getAccessCodeRelease(normalized.id).catch(() => null);
+  let releaseAttempt = null;
+  let releasedStatus = Boolean(release?.sent_at || release?.status === "sent");
+
+  if (
+    formSubmitted &&
+    !releasedStatus &&
+    config.accessCodeRelease?.enabled &&
+    formSlug
+  ) {
+    try {
+      releaseAttempt = await maybeSendSameDayAccessCodeForSubmission({
+        formSlug,
+        payload: {
+          ...(formSubmission?.payload && typeof formSubmission.payload === "object"
+            ? formSubmission.payload
+            : {}),
+          bookingCode: normalized.id,
+          stayDates: {
+            checkIn: normalized.arrivalIso,
+            checkOut: normalized.departureIso,
+          },
+          stayUnit: propertyName,
+        },
+        contact: {
+          bookingCode: normalized.id,
+          email: normalized.guest.email,
+          firstName: normalized.guest.firstName,
+          lastName: normalized.guest.lastName,
+          phone: normalized.guest.phone,
+        },
+      });
+      release = await getAccessCodeRelease(normalized.id).catch(() => release);
+      releasedStatus = Boolean(release?.sent_at || release?.status === "sent");
+    } catch (err) {
+      releaseAttempt = {
+        status: "failed",
+        action:
+          err instanceof Error
+            ? err.message
+            : "Failed to retry access-code release.",
+      };
+    }
+  }
+
   const accessCode = releasedStatus ? clean(release?.access_code) : "";
   const accessCodeReleased = Boolean(releasedStatus && accessCode);
   const templateData = buildAccessCodeTemplateData({
@@ -355,6 +402,7 @@ export async function POST(request) {
       released: accessCodeReleased,
       formSubmitted,
       status: release?.status || "pending",
+      releaseAttempt,
       message: accessCodeReleased
         ? "Your access code is ready."
         : formSubmitted
