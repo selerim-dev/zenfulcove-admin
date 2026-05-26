@@ -2,6 +2,7 @@
 
 import SendGridListPicker from "./SendGridListPicker";
 import PropertyVariablesSettings from "./PropertyVariablesSettings";
+import ReservationFormTermsSettings from "./ReservationFormTermsSettings";
 
 export default function SettingsPanel({
   config,
@@ -92,6 +93,8 @@ export default function SettingsPanel({
         config={accessCodeRelease || {}}
         onChange={onAccessCodeReleaseChange}
       />
+
+      <ReservationFormTermsSettings accessCodeRelease={accessCodeRelease || {}} />
 
       <h2 className="font-serif text-2xl text-forest pt-4">
         Guest Portal Navigation
