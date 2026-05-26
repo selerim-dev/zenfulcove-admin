@@ -42,6 +42,7 @@ type StayResponse = {
     code: string;
     released: boolean;
     formSubmitted: boolean;
+    eligible?: boolean;
     status: string;
     message: string;
   };
@@ -247,6 +248,7 @@ export default function GuestStayDashboard({
   const stay = data.stay;
   const access = data.access;
   const formComplete = Boolean(access?.formSubmitted);
+  const accessBlocked = access?.eligible === false;
   const mapsAddress = cleanText(stay.googleMapsAddress || stay.address);
   const mapsUrl =
     stay.googleMapsUrl ||
@@ -312,7 +314,13 @@ export default function GuestStayDashboard({
         />
         <InfoTile
           label="Access"
-          value={access?.released && access.code ? access.code : "Pending"}
+          value={
+            access?.released && access.code
+              ? access.code
+              : accessBlocked
+                ? "Blocked"
+                : "Pending"
+          }
           helper={access?.message}
         />
       </section>

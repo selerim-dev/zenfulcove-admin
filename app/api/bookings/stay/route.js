@@ -3,6 +3,8 @@ import { getConfig } from "@/lib/kv";
 import { getAccessCodeRelease } from "@/lib/access-code-releases";
 import {
   buildAccessCodeTemplateData,
+  ineligibleBookingStatusMessage,
+  isBookedLodgifyStatus,
   localFormUrl,
   maybeSendSameDayAccessCodeForSubmission,
 } from "@/lib/access-code-messages";
@@ -283,6 +285,7 @@ export async function POST(request) {
   const formSubmitted =
     Boolean(formSubmission) ||
     (formSlug ? await hasSubmittedInternalForm(normalized.id, formSlug) : false);
+  const bookingEligibleForAccess = isBookedLodgifyStatus(normalized.status);
   let release = await getAccessCodeRelease(normalized.id).catch(() => null);
   let releaseAttempt = null;
   let releasedStatus = Boolean(release?.sent_at || release?.status === "sent");
@@ -291,6 +294,7 @@ export async function POST(request) {
     formSubmitted &&
     !releasedStatus &&
     config.accessCodeRelease?.enabled &&
+    bookingEligibleForAccess &&
     formSlug
   ) {
     try {
@@ -326,6 +330,13 @@ export async function POST(request) {
             : "Failed to retry access-code release.",
       };
     }
+  } else if (formSubmitted && !releasedStatus && !bookingEligibleForAccess) {
+    releaseAttempt = {
+      status: "skipped",
+      action: ineligibleBookingStatusMessage(normalized.id, normalized.status),
+      bookingId: normalized.id,
+      bookingStatus: normalized.status || "unknown",
+    };
   }
 
   const accessCode = releasedStatus ? clean(release?.access_code) : "";
@@ -401,10 +412,13 @@ export async function POST(request) {
       code: accessCode,
       released: accessCodeReleased,
       formSubmitted,
+      eligible: bookingEligibleForAccess,
       status: release?.status || "pending",
       releaseAttempt,
       message: accessCodeReleased
         ? "Your access code is ready."
+        : !bookingEligibleForAccess
+          ? `This booking is not active in Lodgify (${normalized.status || "unknown"}), so access-code release is blocked.`
         : formSubmitted
           ? "Your form is complete. Access code release is pending check-in timing."
           : "Complete the reservation form to unlock access-code release.",

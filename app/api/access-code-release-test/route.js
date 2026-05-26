@@ -29,7 +29,6 @@ function mergeConfig(base, body = {}) {
     accessCodeRelease: {
       ...base.accessCodeRelease,
       ...(body.accessCodeRelease || {}),
-      enabled: true,
     },
   };
 }
