@@ -120,7 +120,7 @@ async function notifyInboundMessage({ twilioNumber, contactPhone, body }) {
 
 function buildDashboardDeepLink({ base, twilioNumber, contactPhone }) {
   const rawBase =
-    String(base || "").trim() || "https://zenfulcove-admin.vercel.app/";
+    String(base || "").trim() || "https://stay.zenfulcove.com/";
   if (!rawBase) return "";
   try {
     const url = new URL(rawBase);

@@ -44,7 +44,7 @@ const TEST_MODE_REMINDER = "waiver-reminder";
 const PUBLIC_APP_BASE_URL = (
   process.env.NEXT_PUBLIC_SITE_URL ||
   process.env.NEXT_PUBLIC_APP_URL ||
-  "https://zenfulcove-admin.vercel.app"
+  "https://stay.zenfulcove.com"
 ).replace(/\/+$/, "");
 
 const TEMPLATE_VARIABLES = [

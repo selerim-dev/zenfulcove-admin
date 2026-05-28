@@ -3,6 +3,7 @@ import Stripe from "stripe";
 type KayakStripeMode = "test" | "live";
 
 const cachedStripeClients: Partial<Record<KayakStripeMode, Stripe>> = {};
+const CANONICAL_APP_BASE_URL = "https://stay.zenfulcove.com";
 
 function truthyEnv(value: string | undefined) {
   return ["1", "true", "yes", "on"].includes(
@@ -93,12 +94,16 @@ export function getAppBaseUrl(request?: Request) {
     return configured.replace(/\/+$/, "");
   }
 
-  if (process.env.VERCEL_URL) {
-    return `https://${process.env.VERCEL_URL}`.replace(/\/+$/, "");
+  if (process.env.VERCEL_ENV === "production") {
+    return CANONICAL_APP_BASE_URL;
   }
 
   if (request) {
     return new URL(request.url).origin.replace(/\/+$/, "");
+  }
+
+  if (process.env.VERCEL_URL) {
+    return `https://${process.env.VERCEL_URL}`.replace(/\/+$/, "");
   }
 
   return "http://localhost:3001";

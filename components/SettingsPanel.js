@@ -180,13 +180,13 @@ export default function SettingsPanel({
             type="url"
             value={notif.dashboardUrl || ""}
             onChange={(e) => updateNotif("dashboardUrl", e.target.value)}
-            placeholder="https://zenfulcove-admin.vercel.app/"
+            placeholder="https://stay.zenfulcove.com/"
             className="border border-sand rounded-lg px-3 py-2 text-sm w-full focus:outline-none focus:ring-2 focus:ring-grove/30"
           />
           <p className="text-xs text-forest/50 mt-1">
             Base URL used to build deep links in the alert emails. Leave blank
             to use the default production URL
-            (https://zenfulcove-admin.vercel.app/).
+            (https://stay.zenfulcove.com/).
           </p>
         </div>
       </div>
