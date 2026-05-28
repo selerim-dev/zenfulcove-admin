@@ -13,6 +13,8 @@ type PublishedFormNavItem = {
 type CustomerPortalNavigation = {
   rentals: boolean;
   availability: boolean;
+  packages?: boolean;
+  timing?: boolean;
   forms: boolean;
   terms: boolean;
 };

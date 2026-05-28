@@ -12,6 +12,7 @@ type StayResponse = {
     status: string;
     guestName: string;
     guestFirstName: string;
+    propertyId?: string;
     propertyName: string;
     arrivalIso: string;
     departureIso: string;
@@ -73,6 +74,67 @@ function cleanText(value?: unknown) {
 }
 
 const URL_PATTERN = /\b((?:https?:\/\/|www\.)[^\s<>"']+)/gi;
+const VISIT_ELGIN_URL = "https://www.elgintexas.gov/1251/Visit-Elgin";
+const EXPLORE_ELGIN_URL = "https://www.elgintexas.gov/196/Explore-Elgin";
+const DEFAULT_HEADER_IMAGE = "/landing.jpg";
+const STAY_HEADER_IMAGES = [
+  {
+    imageUrl: "/stays/fairy.jpg",
+    propertyIds: ["608952"],
+    names: ["fairy house", "fairy"],
+  },
+  {
+    imageUrl: "/stays/desert.jpg",
+    propertyIds: ["608953"],
+    names: ["desert rose", "desert"],
+  },
+  {
+    imageUrl: "/stays/sky.jpg",
+    propertyIds: ["608954"],
+    names: ["sky castle", "sky"],
+  },
+  {
+    imageUrl: "/stays/bird.jpg",
+    propertyIds: ["608955"],
+    names: ["bird house", "bird"],
+  },
+  {
+    imageUrl: "/stays/doodle.jpg",
+    propertyIds: ["754651"],
+    names: ["doodle house", "doodle"],
+  },
+];
+
+function normalizeStayLookup(value?: unknown) {
+  return cleanText(value).toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
+function headerImageForStay({
+  propertyId,
+  propertyName,
+  propertyDisplayName,
+}: {
+  propertyId?: string;
+  propertyName?: string;
+  propertyDisplayName?: string;
+}) {
+  const normalizedId = cleanText(propertyId);
+  const nameKeys = [propertyDisplayName, propertyName].map(normalizeStayLookup);
+
+  const match = STAY_HEADER_IMAGES.find((item) => {
+    if (normalizedId && item.propertyIds.includes(normalizedId)) return true;
+    const itemNames = item.names.map(normalizeStayLookup);
+    return nameKeys.some(
+      (key) =>
+        key &&
+        itemNames.some(
+          (name) => key === name || key.includes(name) || name.includes(key)
+        )
+    );
+  });
+
+  return match?.imageUrl || DEFAULT_HEADER_IMAGE;
+}
 
 function splitUrlTrailingPunctuation(url: string) {
   const match = url.match(/[),.!?:;]+$/);
@@ -153,18 +215,23 @@ function InfoTile({
 }
 
 function SectionCard({
+  id,
   eyebrow,
   title,
   action,
   children,
 }: {
+  id?: string;
   eyebrow: string;
   title: string;
   action?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
-    <article className="rounded-[24px] border border-[var(--color-border)] bg-white p-6 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-[var(--color-accent)] hover:shadow-lg">
+    <article
+      id={id}
+      className="scroll-mt-24 rounded-[24px] border border-[var(--color-border)] bg-white p-6 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-[var(--color-accent)] hover:shadow-lg"
+    >
       <div className="flex items-start justify-between gap-4">
         <div>
           <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--color-accent)]">
@@ -301,6 +368,11 @@ export default function GuestStayDashboard({
   const booking = data.booking;
   const stay = data.stay;
   const access = data.access;
+  const headerImageUrl = headerImageForStay({
+    propertyId: booking.propertyId,
+    propertyName: booking.propertyName,
+    propertyDisplayName: stay.propertyDisplayName,
+  });
   const formComplete = Boolean(access?.formSubmitted);
   const accessBlocked = access?.eligible === false;
   const mapsAddress = cleanText(stay.googleMapsAddress || stay.address);
@@ -320,6 +392,12 @@ export default function GuestStayDashboard({
   ].filter((item) => item.value);
   const goodToKnowText = cleanText(stay.goodToKnowText || stay.additionalRulesText);
   const amenitiesText = cleanText(stay.amenitiesText);
+  const specialPackagesHref = `mailto:contact@zenfulcove.com?subject=${encodeURIComponent(
+    `Special package request for booking ${booking.id}`
+  )}`;
+  const timingRequestHref = `mailto:contact@zenfulcove.com?subject=${encodeURIComponent(
+    `Late check out / early check in request for booking ${booking.id}`
+  )}`;
   const hasPropertyInfo =
     locationItems.length > 0 ||
     Boolean(mapsUrl) ||
@@ -332,7 +410,7 @@ export default function GuestStayDashboard({
       <section className="overflow-hidden rounded-[28px] border border-[var(--color-border)] bg-white shadow-sm">
         <div
           className="min-h-[320px] bg-cover bg-center"
-          style={{ backgroundImage: "url(/landing.jpg)" }}
+          style={{ backgroundImage: `url("${headerImageUrl}")` }}
         >
           <div className="flex min-h-[320px] flex-col justify-end bg-black/35 p-6 text-white md:p-10">
             <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-white/85">
@@ -452,7 +530,7 @@ export default function GuestStayDashboard({
           ) : null}
 
           {goodToKnowText ? (
-            <SectionCard eyebrow="Good to know" title="Stay notes">
+            <SectionCard eyebrow="Details" title="Good to Know">
               <p className="whitespace-pre-line text-sm leading-relaxed text-[var(--color-ink)]">
                 <LinkifiedText text={goodToKnowText} />
               </p>
@@ -468,6 +546,91 @@ export default function GuestStayDashboard({
           ) : null}
         </section>
       ) : null}
+
+      <section className="grid gap-4 md:grid-cols-2">
+        <SectionCard
+          id="things-to-do-in-elgin"
+          eyebrow="Local Guide"
+          title="Things To Do In Elgin"
+          action={
+            <a
+              href={VISIT_ELGIN_URL}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex rounded-full border border-[var(--color-border)] bg-white px-3 py-1.5 text-xs font-medium text-[var(--color-ink)] transition hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]"
+            >
+              Visit Guide
+            </a>
+          }
+        >
+          <p className="text-sm leading-relaxed text-[var(--color-ink)]">
+            Explore Elgin dining, shopping, parks, events, arts, and history
+            during your stay.
+          </p>
+        </SectionCard>
+
+        <SectionCard
+          id="elgin-spotlight"
+          eyebrow="Around Town"
+          title="Elgin Spotlight"
+          action={
+            <a
+              href={EXPLORE_ELGIN_URL}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex rounded-full border border-[var(--color-border)] bg-white px-3 py-1.5 text-xs font-medium text-[var(--color-ink)] transition hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]"
+            >
+              Explore
+            </a>
+          }
+        >
+          <p className="text-sm leading-relaxed text-[var(--color-ink)]">
+            Start with historic downtown for local food, shops, art, and
+            small-town stops close to Zenfulcove.
+          </p>
+        </SectionCard>
+      </section>
+
+      <section className="grid gap-4 md:grid-cols-2">
+        <SectionCard
+          id="special-packages"
+          eyebrow="Add Ons"
+          title="Special Packages and More"
+          action={
+            <a
+              href={specialPackagesHref}
+              className="inline-flex rounded-full border border-[var(--color-border)] bg-white px-3 py-1.5 text-xs font-medium text-[var(--color-ink)] transition hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]"
+            >
+              Request
+            </a>
+          }
+        >
+          <p className="text-sm leading-relaxed text-[var(--color-ink)]">
+            Ask about celebration touches, local extras, or custom additions for
+            your reservation.
+          </p>
+        </SectionCard>
+
+        <SectionCard
+          id="early-check-in"
+          eyebrow="Stay Timing"
+          title="Late Check Out/Early Check In"
+          action={
+            <a
+              href={timingRequestHref}
+              className="inline-flex rounded-full border border-[var(--color-border)] bg-white px-3 py-1.5 text-xs font-medium text-[var(--color-ink)] transition hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]"
+            >
+              Ask
+            </a>
+          }
+        >
+          <p className="text-sm leading-relaxed text-[var(--color-ink)]">
+            Timing requests depend on cleaning schedules and nearby
+            reservations. Send your preferred time and we will confirm what is
+            available.
+          </p>
+        </SectionCard>
+      </section>
     </div>
   );
 }

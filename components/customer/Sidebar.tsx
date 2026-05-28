@@ -1,21 +1,35 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { savedStayHref } from "./bookingSession";
+import { savedStayHref, savedStayHrefWithHash } from "./bookingSession";
 
 type CustomerPortalNavigation = {
   rentals: boolean;
   availability: boolean;
+  packages?: boolean;
+  timing?: boolean;
   forms: boolean;
   terms: boolean;
 };
+
+type IconType =
+  | "stay"
+  | "calendar"
+  | "terms"
+  | "form"
+  | "login"
+  | "chevron"
+  | "kayak"
+  | "gift"
+  | "clock";
 
 function Icon({
   type,
   className = "",
 }: {
-  type: "stay" | "calendar" | "terms" | "form" | "login" | "chevron";
+  type: IconType;
   className?: string;
 }) {
   if (type === "stay") {
@@ -44,6 +58,35 @@ function Icon({
         <path d="M14 2v5h5" />
         <path d="M9 13h6" />
         <path d="M9 17h4" />
+      </svg>
+    );
+  }
+  if (type === "kayak") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className={className}>
+        <path d="M4 15c3 3 13 3 16 0" />
+        <path d="M6 12c3-2 9-2 12 0" />
+        <path d="M12 4v16" />
+        <path d="M9 7l6 10" />
+      </svg>
+    );
+  }
+  if (type === "gift") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className={className}>
+        <path d="M20 12v8H4v-8" />
+        <path d="M2 7h20v5H2z" />
+        <path d="M12 7v13" />
+        <path d="M12 7H8.5a2.5 2.5 0 1 1 2.1-3.85C11.4 4.4 12 7 12 7z" />
+        <path d="M12 7h3.5a2.5 2.5 0 1 0-2.1-3.85C12.6 4.4 12 7 12 7z" />
+      </svg>
+    );
+  }
+  if (type === "clock") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className={className}>
+        <circle cx="12" cy="12" r="9" />
+        <path d="M12 7v5l3 2" />
       </svg>
     );
   }
@@ -76,10 +119,25 @@ const items: {
   key: keyof CustomerPortalNavigation;
   href: string;
   label: string;
-  icon: "stay" | "calendar" | "terms";
+  icon: IconType;
+  stayHash?: string;
 }[] = [
   { key: "rentals", href: "/book", label: "My Stay", icon: "stay" },
-  { key: "availability", href: "/fleet", label: "Kayak Availability", icon: "calendar" },
+  { key: "availability", href: "/fleet", label: "Rent a Kayak", icon: "kayak" },
+  {
+    key: "packages",
+    href: "/book#special-packages",
+    label: "Special Packages and More",
+    icon: "gift",
+    stayHash: "special-packages",
+  },
+  {
+    key: "timing",
+    href: "/book#early-check-in",
+    label: "Late Check Out/Early Check In",
+    icon: "clock",
+    stayHash: "early-check-in",
+  },
   { key: "terms", href: "/terms", label: "Terms", icon: "terms" },
 ];
 
@@ -105,8 +163,19 @@ export default function Sidebar({
 }) {
   const pathname = usePathname();
   const router = useRouter();
+  const [currentHash, setCurrentHash] = useState("");
   const visibleItems = items.filter((item) => navigation[item.key] !== false);
   const showForms = navigation.forms !== false && publishedForms.length > 0;
+
+  useEffect(() => {
+    function syncHash() {
+      setCurrentHash(window.location.hash.replace(/^#/, ""));
+    }
+
+    syncHash();
+    window.addEventListener("hashchange", syncHash);
+    return () => window.removeEventListener("hashchange", syncHash);
+  }, [pathname]);
 
   function navClass(active: boolean) {
     return `flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${
@@ -114,6 +183,20 @@ export default function Sidebar({
         ? "bg-[var(--color-accent)] text-white shadow-sm"
         : "text-[var(--color-ink)] hover:bg-[var(--color-bg)]"
     } ${collapsed ? "md:justify-center" : ""}`;
+  }
+
+  function isActive(item: (typeof items)[number]) {
+    if (item.stayHash) {
+      return pathname === "/book" && currentHash === item.stayHash;
+    }
+
+    return pathname === item.href || pathname.startsWith(`${item.href}/`);
+  }
+
+  function targetHrefFor(item: (typeof items)[number]) {
+    if (item.stayHash) return savedStayHrefWithHash(item.stayHash);
+    if (item.key === "rentals") return savedStayHref();
+    return item.href;
   }
 
   return (
@@ -152,18 +235,17 @@ export default function Sidebar({
 
         <nav className="flex w-full flex-col gap-1">
           {visibleItems.map((item) => {
-            const active = pathname.startsWith(item.href);
+            const active = isActive(item);
             return (
               <Link
                 key={item.href}
                 href={item.href}
                 onClick={(event) => {
-                  if (item.key === "rentals") {
-                    const href = savedStayHref();
-                    if (href !== item.href) {
-                      event.preventDefault();
-                      router.push(href);
-                    }
+                  const href = targetHrefFor(item);
+                  if (href !== item.href) {
+                    event.preventDefault();
+                    router.push(href);
+                    if (item.stayHash) setCurrentHash(item.stayHash);
                   }
                   onNavigate();
                 }}
