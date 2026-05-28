@@ -1,9 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { savedStayHref, savedStayHrefWithHash } from "./bookingSession";
+import { savedStayHref } from "./bookingSession";
 
 type CustomerPortalNavigation = {
   rentals: boolean;
@@ -120,23 +119,20 @@ const items: {
   href: string;
   label: string;
   icon: IconType;
-  stayHash?: string;
 }[] = [
   { key: "rentals", href: "/book", label: "My Stay", icon: "stay" },
   { key: "availability", href: "/fleet", label: "Rent a Kayak", icon: "kayak" },
   {
     key: "packages",
-    href: "/book#special-packages",
+    href: "/special-packages",
     label: "Special Packages and More",
     icon: "gift",
-    stayHash: "special-packages",
   },
   {
     key: "timing",
-    href: "/book#early-check-in",
+    href: "/stay-timing",
     label: "Late Check Out/Early Check In",
     icon: "clock",
-    stayHash: "early-check-in",
   },
   { key: "terms", href: "/terms", label: "Terms", icon: "terms" },
 ];
@@ -163,19 +159,8 @@ export default function Sidebar({
 }) {
   const pathname = usePathname();
   const router = useRouter();
-  const [currentHash, setCurrentHash] = useState("");
   const visibleItems = items.filter((item) => navigation[item.key] !== false);
   const showForms = navigation.forms !== false && publishedForms.length > 0;
-
-  useEffect(() => {
-    function syncHash() {
-      setCurrentHash(window.location.hash.replace(/^#/, ""));
-    }
-
-    syncHash();
-    window.addEventListener("hashchange", syncHash);
-    return () => window.removeEventListener("hashchange", syncHash);
-  }, [pathname]);
 
   function navClass(active: boolean) {
     return `flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${
@@ -186,15 +171,10 @@ export default function Sidebar({
   }
 
   function isActive(item: (typeof items)[number]) {
-    if (item.stayHash) {
-      return pathname === "/book" && currentHash === item.stayHash;
-    }
-
     return pathname === item.href || pathname.startsWith(`${item.href}/`);
   }
 
   function targetHrefFor(item: (typeof items)[number]) {
-    if (item.stayHash) return savedStayHrefWithHash(item.stayHash);
     if (item.key === "rentals") return savedStayHref();
     return item.href;
   }
@@ -245,7 +225,6 @@ export default function Sidebar({
                   if (href !== item.href) {
                     event.preventDefault();
                     router.push(href);
-                    if (item.stayHash) setCurrentHash(item.stayHash);
                   }
                   onNavigate();
                 }}

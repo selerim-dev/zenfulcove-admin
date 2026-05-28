@@ -24,12 +24,6 @@ export function stayHref(reservation: string, lastName = "") {
   return `/book?${params.toString()}`;
 }
 
-export function stayHrefWithHash(reservation: string, lastName = "", hash = "") {
-  const href = stayHref(reservation, lastName);
-  const normalizedHash = clean(hash).replace(/^#/, "");
-  return normalizedHash ? `${href}#${normalizedHash}` : href;
-}
-
 export function readGuestBookingSession(): GuestBookingSession | null {
   if (typeof window === "undefined") return null;
 
@@ -73,10 +67,4 @@ export function saveGuestBookingSession(session: GuestBookingSession) {
 export function savedStayHref() {
   const session = readGuestBookingSession();
   return session ? stayHref(session.reservation, session.lastName) : "/book";
-}
-
-export function savedStayHrefWithHash(hash = "") {
-  const session = readGuestBookingSession();
-  if (!session) return stayHrefWithHash("", "", hash);
-  return stayHrefWithHash(session.reservation, session.lastName, hash);
 }

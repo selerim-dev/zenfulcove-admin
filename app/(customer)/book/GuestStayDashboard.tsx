@@ -392,12 +392,6 @@ export default function GuestStayDashboard({
   ].filter((item) => item.value);
   const goodToKnowText = cleanText(stay.goodToKnowText || stay.additionalRulesText);
   const amenitiesText = cleanText(stay.amenitiesText);
-  const specialPackagesHref = `mailto:contact@zenfulcove.com?subject=${encodeURIComponent(
-    `Special package request for booking ${booking.id}`
-  )}`;
-  const timingRequestHref = `mailto:contact@zenfulcove.com?subject=${encodeURIComponent(
-    `Late check out / early check in request for booking ${booking.id}`
-  )}`;
   const hasPropertyInfo =
     locationItems.length > 0 ||
     Boolean(mapsUrl) ||
@@ -587,47 +581,6 @@ export default function GuestStayDashboard({
           <p className="text-sm leading-relaxed text-[var(--color-ink)]">
             Start with historic downtown for local food, shops, art, and
             small-town stops close to Zenfulcove.
-          </p>
-        </SectionCard>
-      </section>
-
-      <section className="grid gap-4 md:grid-cols-2">
-        <SectionCard
-          id="special-packages"
-          eyebrow="Add Ons"
-          title="Special Packages and More"
-          action={
-            <a
-              href={specialPackagesHref}
-              className="inline-flex rounded-full border border-[var(--color-border)] bg-white px-3 py-1.5 text-xs font-medium text-[var(--color-ink)] transition hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]"
-            >
-              Request
-            </a>
-          }
-        >
-          <p className="text-sm leading-relaxed text-[var(--color-ink)]">
-            Ask about celebration touches, local extras, or custom additions for
-            your reservation.
-          </p>
-        </SectionCard>
-
-        <SectionCard
-          id="early-check-in"
-          eyebrow="Stay Timing"
-          title="Late Check Out/Early Check In"
-          action={
-            <a
-              href={timingRequestHref}
-              className="inline-flex rounded-full border border-[var(--color-border)] bg-white px-3 py-1.5 text-xs font-medium text-[var(--color-ink)] transition hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]"
-            >
-              Ask
-            </a>
-          }
-        >
-          <p className="text-sm leading-relaxed text-[var(--color-ink)]">
-            Timing requests depend on cleaning schedules and nearby
-            reservations. Send your preferred time and we will confirm what is
-            available.
           </p>
         </SectionCard>
       </section>
