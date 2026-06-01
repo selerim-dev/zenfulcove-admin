@@ -4,6 +4,19 @@ import SendGridListPicker from "./SendGridListPicker";
 import PropertyVariablesSettings from "./PropertyVariablesSettings";
 import ReservationFormTermsSettings from "./ReservationFormTermsSettings";
 
+const MY_STAY_CONTENT_SECTIONS = [
+  {
+    key: "thingsToDoInElgin",
+    label: "Things To Do In Elgin",
+    description: "Guest-facing local guide card on the My Stay page.",
+  },
+  {
+    key: "elginSpotlight",
+    label: "Elgin Spotlight",
+    description: "Guest-facing around-town card on the My Stay page.",
+  },
+];
+
 export default function SettingsPanel({
   config,
   onChange,
@@ -18,6 +31,7 @@ export default function SettingsPanel({
   const notif = messageNotifications || {};
   const portal = customerPortal || {};
   const portalNav = portal.navigation || {};
+  const myStaySections = portal.myStaySections || {};
 
   function update(field, value) {
     onChange({ ...sg, [field]: value });
@@ -33,6 +47,19 @@ export default function SettingsPanel({
       navigation: {
         ...portalNav,
         [field]: value,
+      },
+    });
+  }
+
+  function updateMyStaySection(sectionKey, field, value) {
+    onCustomerPortalChange({
+      ...portal,
+      myStaySections: {
+        ...myStaySections,
+        [sectionKey]: {
+          ...(myStaySections[sectionKey] || {}),
+          [field]: value,
+        },
       },
     });
   }
@@ -122,6 +149,119 @@ export default function SettingsPanel({
             />
           </label>
         ))}
+      </div>
+
+      <h2 className="font-serif text-2xl text-forest pt-4">
+        My Stay Content
+      </h2>
+      <p className="text-sm text-forest/70">
+        Edit the guest-facing content cards that appear on the My Stay page.
+      </p>
+
+      <div className="grid gap-4">
+        {MY_STAY_CONTENT_SECTIONS.map((section) => {
+          const value = myStaySections[section.key] || {};
+          return (
+            <div
+              key={section.key}
+              className="bg-white rounded-xl shadow-sm border border-sand p-5 space-y-4"
+            >
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <h3 className="font-serif text-xl text-forest">
+                    {section.label}
+                  </h3>
+                  <p className="mt-1 text-sm text-forest/60">
+                    {section.description}
+                  </p>
+                </div>
+                <label className="flex items-center gap-2 text-sm text-forest">
+                  <input
+                    type="checkbox"
+                    checked={value.enabled !== false}
+                    onChange={(e) =>
+                      updateMyStaySection(
+                        section.key,
+                        "enabled",
+                        e.target.checked
+                      )
+                    }
+                    className="h-4 w-4 accent-grove"
+                  />
+                  Enabled
+                </label>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <label className="block text-xs text-forest/60 uppercase tracking-wider">
+                  Eyebrow
+                  <input
+                    type="text"
+                    value={value.eyebrow || ""}
+                    onChange={(e) =>
+                      updateMyStaySection(section.key, "eyebrow", e.target.value)
+                    }
+                    placeholder="Local Guide"
+                    className="mt-1 block w-full rounded-lg border border-sand bg-white px-3 py-2 text-sm text-forest focus:outline-none focus:ring-2 focus:ring-grove/30"
+                  />
+                </label>
+                <label className="block text-xs text-forest/60 uppercase tracking-wider">
+                  Title
+                  <input
+                    type="text"
+                    value={value.title || ""}
+                    onChange={(e) =>
+                      updateMyStaySection(section.key, "title", e.target.value)
+                    }
+                    placeholder={section.label}
+                    className="mt-1 block w-full rounded-lg border border-sand bg-white px-3 py-2 text-sm text-forest focus:outline-none focus:ring-2 focus:ring-grove/30"
+                  />
+                </label>
+                <label className="block text-xs text-forest/60 uppercase tracking-wider">
+                  Link Label
+                  <input
+                    type="text"
+                    value={value.linkLabel || ""}
+                    onChange={(e) =>
+                      updateMyStaySection(
+                        section.key,
+                        "linkLabel",
+                        e.target.value
+                      )
+                    }
+                    placeholder="Explore"
+                    className="mt-1 block w-full rounded-lg border border-sand bg-white px-3 py-2 text-sm text-forest focus:outline-none focus:ring-2 focus:ring-grove/30"
+                  />
+                </label>
+                <label className="block text-xs text-forest/60 uppercase tracking-wider">
+                  Link URL
+                  <input
+                    type="url"
+                    value={value.linkUrl || ""}
+                    onChange={(e) =>
+                      updateMyStaySection(section.key, "linkUrl", e.target.value)
+                    }
+                    placeholder="https://www.elgintexas.gov/"
+                    className="mt-1 block w-full rounded-lg border border-sand bg-white px-3 py-2 text-sm text-forest focus:outline-none focus:ring-2 focus:ring-grove/30"
+                  />
+                </label>
+              </div>
+
+              <label className="block text-xs text-forest/60 uppercase tracking-wider">
+                Body
+                <textarea
+                  value={value.body || ""}
+                  onChange={(e) =>
+                    updateMyStaySection(section.key, "body", e.target.value)
+                  }
+                  rows={3}
+                  placeholder="Guest-facing description..."
+                  className="mt-1 block w-full resize-y rounded-lg border border-sand bg-white px-3 py-2 text-sm text-forest focus:outline-none focus:ring-2 focus:ring-grove/30"
+                />
+              </label>
+            </div>
+          );
+        })}
       </div>
 
       <h2 className="font-serif text-2xl text-forest pt-4">

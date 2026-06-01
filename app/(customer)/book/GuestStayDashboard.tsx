@@ -4,6 +4,16 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { saveGuestBookingSession } from "@/components/customer/bookingSession";
 
+type MyStayContentSection = {
+  enabled?: boolean;
+  id?: string;
+  eyebrow?: string;
+  title?: string;
+  body?: string;
+  linkLabel?: string;
+  linkUrl?: string;
+};
+
 type StayResponse = {
   ok?: boolean;
   error?: string;
@@ -38,6 +48,7 @@ type StayResponse = {
       text?: string;
     }[];
     reservationFormUrl: string;
+    myStaySections?: Record<string, MyStayContentSection>;
   };
   access?: {
     code: string;
@@ -73,10 +84,47 @@ function cleanText(value?: unknown) {
   return String(value || "").trim();
 }
 
+function visibleMyStaySections(
+  sections?: Record<string, MyStayContentSection>
+) {
+  const configured = sections || {};
+  return Object.entries(DEFAULT_MY_STAY_SECTIONS)
+    .map(([key, defaultSection]) => ({
+      key,
+      ...defaultSection,
+      ...(configured[key] || {}),
+    }))
+    .filter(
+      (section) =>
+        section.enabled !== false &&
+        (cleanText(section.title) ||
+          cleanText(section.body) ||
+          cleanText(section.linkUrl))
+    );
+}
+
 const URL_PATTERN = /\b((?:https?:\/\/|www\.)[^\s<>"']+)/gi;
-const VISIT_ELGIN_URL = "https://www.elgintexas.gov/1251/Visit-Elgin";
-const EXPLORE_ELGIN_URL = "https://www.elgintexas.gov/196/Explore-Elgin";
 const DEFAULT_HEADER_IMAGE = "/landing.jpg";
+const DEFAULT_MY_STAY_SECTIONS: Record<string, MyStayContentSection> = {
+  thingsToDoInElgin: {
+    enabled: true,
+    id: "things-to-do-in-elgin",
+    eyebrow: "Local Guide",
+    title: "Things To Do In Elgin",
+    body: "Explore Elgin dining, shopping, parks, events, arts, and history during your stay.",
+    linkLabel: "Visit Guide",
+    linkUrl: "https://www.elgintexas.gov/1251/Visit-Elgin",
+  },
+  elginSpotlight: {
+    enabled: true,
+    id: "elgin-spotlight",
+    eyebrow: "Around Town",
+    title: "Elgin Spotlight",
+    body: "Start with historic downtown for local food, shops, art, and small-town stops close to Zenfulcove.",
+    linkLabel: "Explore",
+    linkUrl: "https://www.elgintexas.gov/196/Explore-Elgin",
+  },
+};
 const STAY_HEADER_IMAGES = [
   {
     imageUrl: "/stays/fairy.jpg",
@@ -392,6 +440,7 @@ export default function GuestStayDashboard({
   ].filter((item) => item.value);
   const goodToKnowText = cleanText(stay.goodToKnowText || stay.additionalRulesText);
   const amenitiesText = cleanText(stay.amenitiesText);
+  const myStaySections = visibleMyStaySections(stay.myStaySections);
   const hasPropertyInfo =
     locationItems.length > 0 ||
     Boolean(mapsUrl) ||
@@ -541,49 +590,41 @@ export default function GuestStayDashboard({
         </section>
       ) : null}
 
-      <section className="grid gap-4 md:grid-cols-2">
-        <SectionCard
-          id="things-to-do-in-elgin"
-          eyebrow="Local Guide"
-          title="Things To Do In Elgin"
-          action={
-            <a
-              href={VISIT_ELGIN_URL}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex rounded-full border border-[var(--color-border)] bg-white px-3 py-1.5 text-xs font-medium text-[var(--color-ink)] transition hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]"
-            >
-              Visit Guide
-            </a>
-          }
-        >
-          <p className="text-sm leading-relaxed text-[var(--color-ink)]">
-            Explore Elgin dining, shopping, parks, events, arts, and history
-            during your stay.
-          </p>
-        </SectionCard>
-
-        <SectionCard
-          id="elgin-spotlight"
-          eyebrow="Around Town"
-          title="Elgin Spotlight"
-          action={
-            <a
-              href={EXPLORE_ELGIN_URL}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex rounded-full border border-[var(--color-border)] bg-white px-3 py-1.5 text-xs font-medium text-[var(--color-ink)] transition hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]"
-            >
-              Explore
-            </a>
-          }
-        >
-          <p className="text-sm leading-relaxed text-[var(--color-ink)]">
-            Start with historic downtown for local food, shops, art, and
-            small-town stops close to Zenfulcove.
-          </p>
-        </SectionCard>
-      </section>
+      {myStaySections.length > 0 ? (
+        <section className="grid gap-4 md:grid-cols-2">
+          {myStaySections.map((section) => {
+            const body = cleanText(section.body);
+            const linkUrl = cleanText(section.linkUrl);
+            const linkLabel = cleanText(section.linkLabel) || "Explore";
+            return (
+              <SectionCard
+                key={section.key}
+                id={section.id}
+                eyebrow={cleanText(section.eyebrow) || "Local Guide"}
+                title={cleanText(section.title) || "Local Guide"}
+                action={
+                  linkUrl ? (
+                    <a
+                      href={hrefForUrl(linkUrl)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex rounded-full border border-[var(--color-border)] bg-white px-3 py-1.5 text-xs font-medium text-[var(--color-ink)] transition hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]"
+                    >
+                      {linkLabel}
+                    </a>
+                  ) : null
+                }
+              >
+                {body ? (
+                  <p className="text-sm leading-relaxed text-[var(--color-ink)]">
+                    <LinkifiedText text={body} />
+                  </p>
+                ) : null}
+              </SectionCard>
+            );
+          })}
+        </section>
+      ) : null}
     </div>
   );
 }

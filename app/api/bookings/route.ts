@@ -120,7 +120,7 @@ export async function POST(req: Request) {
   const cabin = PROPERTY_TO_CABIN[reservation.propertyId];
   if (!cabin) {
     return NextResponse.json(
-      { error: "That reservation isn't for one of our cabins." },
+      { error: "That reservation isn't for one of our houses." },
       { status: 400 }
     );
   }

@@ -219,6 +219,14 @@ export async function POST(request) {
           ...updates.customerPortal.navigation,
         };
       }
+      if (updates.customerPortal.myStaySections !== undefined) {
+        updated.customerPortal.myStaySections =
+          updates.customerPortal.myStaySections &&
+          typeof updates.customerPortal.myStaySections === "object" &&
+          !Array.isArray(updates.customerPortal.myStaySections)
+            ? updates.customerPortal.myStaySections
+            : {};
+      }
     }
 
     await setConfig(updated);
