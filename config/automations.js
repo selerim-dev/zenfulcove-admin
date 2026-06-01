@@ -191,8 +191,28 @@ export const automationConfig = {
     navigation: {
       rentals: true,
       availability: true,
+      packages: true,
+      timing: true,
       forms: true,
       terms: true,
+    },
+    myStaySections: {
+      thingsToDoInElgin: {
+        enabled: true,
+        eyebrow: "Local Guide",
+        title: "Things To Do In Elgin",
+        body: "Explore Elgin dining, shopping, parks, events, arts, and history during your stay.",
+        linkLabel: "Visit Guide",
+        linkUrl: "https://www.elgintexas.gov/1251/Visit-Elgin",
+      },
+      elginSpotlight: {
+        enabled: true,
+        eyebrow: "Around Town",
+        title: "Elgin Spotlight",
+        body: "Start with historic downtown for local food, shops, art, and small-town stops close to Zenfulcove.",
+        linkLabel: "Explore",
+        linkUrl: "https://www.elgintexas.gov/196/Explore-Elgin",
+      },
     },
   },
 };

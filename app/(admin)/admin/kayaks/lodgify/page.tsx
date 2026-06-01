@@ -121,7 +121,7 @@ export default async function LodgifyTestPage() {
           Reservations
         </h1>
         <p className="mt-3 text-sm text-[var(--color-ink-muted)]">
-          Active and upcoming Lodgify bookings across all five cabins, with the
+          Active and upcoming Lodgify bookings across all five houses, with the
           status of each reservation&apos;s complimentary kayak.
         </p>
       </header>
@@ -162,7 +162,7 @@ export default async function LodgifyTestPage() {
                   <thead className="bg-[var(--color-bg)] text-left text-[11px] uppercase tracking-wider text-[var(--color-ink-muted)]">
                     <tr>
                       <th className="px-4 py-3">Reservation #</th>
-                      <th className="px-4 py-3">Cabin</th>
+                      <th className="px-4 py-3">House</th>
                       <th className="px-4 py-3">Guest</th>
                       <th className="px-4 py-3">Arrival</th>
                       <th className="px-4 py-3">Departure</th>
@@ -241,7 +241,7 @@ export default async function LodgifyTestPage() {
                 <tr>
                   <th className="px-4 py-3">ID</th>
                   <th className="px-4 py-3">Name</th>
-                  <th className="px-4 py-3">Cabin label</th>
+                  <th className="px-4 py-3">House label</th>
                 </tr>
               </thead>
               <tbody>

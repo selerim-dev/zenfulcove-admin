@@ -433,6 +433,7 @@ export async function POST(request) {
       hostName: templateData.hostName,
       urgentPhone: templateData.urgentPhone,
       reservationFormUrl: reservationFormUrlFor(formSlug, normalized.id),
+      myStaySections: config.customerPortal?.myStaySections || {},
     },
     access: {
       code: accessCode,
