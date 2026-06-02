@@ -68,8 +68,7 @@ export default async function StayMessagesPage({
               Open your stay messages.
             </h1>
             <p className="mt-4 max-w-2xl text-sm leading-relaxed text-white/90 md:text-base">
-              Enter your booking ID and last name to open the conversation for
-              your stay.
+              Enter your booking ID to open the conversation for your stay.
             </p>
           </div>
         </div>
