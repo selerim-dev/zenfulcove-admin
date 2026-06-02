@@ -25,10 +25,6 @@ export default function CustomerAccessForm({
       setError("Enter your booking code to continue.");
       return;
     }
-    if (!name) {
-      setError("Enter the last name on your booking to continue.");
-      return;
-    }
 
     setSubmitting(true);
     setError("");
@@ -93,7 +89,7 @@ export default function CustomerAccessForm({
             compact ? "text-[var(--color-ink-muted)]" : "text-white/80"
           }`}
         >
-          Last Name
+          Last Name Optional
         </span>
         <input
           type="text"

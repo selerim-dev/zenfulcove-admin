@@ -196,15 +196,7 @@ async function requireGuestBooking({ reservationId, lastName }) {
   }
 
   const normalized = normalizeBooking(booking);
-  if (!clean(lastName)) {
-    return {
-      response: NextResponse.json(
-        { error: "Last name is required to open messages for this stay." },
-        { status: 401 }
-      ),
-    };
-  }
-  if (!lastNameMatches(normalized.guest.name, lastName)) {
+  if (clean(lastName) && !lastNameMatches(normalized.guest.name, lastName)) {
     return {
       response: NextResponse.json(
         { error: "That last name does not match the booking." },

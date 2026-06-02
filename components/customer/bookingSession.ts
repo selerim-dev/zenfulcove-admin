@@ -27,10 +27,10 @@ export function stayHref(reservation: string, lastName = "") {
 export function stayMessagesHref(reservation: string, lastName = "") {
   const code = clean(reservation);
   const name = clean(lastName);
-  if (!code || !name) return "/book/messages";
+  if (!code) return "/book/messages";
 
   const params = new URLSearchParams({ reservation: code });
-  params.set("lastName", name);
+  if (name) params.set("lastName", name);
   return `/book/messages?${params.toString()}`;
 }
 
