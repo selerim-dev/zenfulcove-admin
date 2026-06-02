@@ -42,6 +42,7 @@ type ThreadResponse = {
 };
 
 const MAX_FILES = 5;
+const URL_PATTERN = /\b((?:https?:\/\/|www\.)[^\s<>"']+)/gi;
 
 function clean(value?: unknown) {
   return String(value || "").trim();
@@ -70,6 +71,158 @@ function attachmentUrl(attachment: StayMessageAttachment) {
 
 function fileKey(file: File) {
   return `${file.name}-${file.size}-${file.lastModified}`;
+}
+
+function splitUrlTrailingPunctuation(url: string) {
+  const match = url.match(/[),.!?:;]+$/);
+  if (!match) return { hrefText: url, trailing: "" };
+  const trailing = match[0];
+  return {
+    hrefText: url.slice(0, -trailing.length),
+    trailing,
+  };
+}
+
+function hrefForUrl(value: string) {
+  return /^https?:\/\//i.test(value) ? value : `https://${value}`;
+}
+
+function LinkifiedText({
+  text,
+  className = "",
+}: {
+  text: string;
+  className?: string;
+}) {
+  const parts: React.ReactNode[] = [];
+  let lastIndex = 0;
+
+  for (const match of text.matchAll(URL_PATTERN)) {
+    const rawUrl = match[0];
+    const index = match.index ?? 0;
+    const { hrefText, trailing } = splitUrlTrailingPunctuation(rawUrl);
+
+    if (index > lastIndex) parts.push(text.slice(lastIndex, index));
+
+    if (hrefText) {
+      parts.push(
+        <a
+          key={`${hrefText}-${index}`}
+          href={hrefForUrl(hrefText)}
+          target="_blank"
+          rel="noreferrer"
+          className={`break-all underline underline-offset-2 ${className}`}
+        >
+          {hrefText}
+        </a>
+      );
+    }
+
+    if (trailing) parts.push(trailing);
+    lastIndex = index + rawUrl.length;
+  }
+
+  if (lastIndex < text.length) parts.push(text.slice(lastIndex));
+  return <>{parts.length > 0 ? parts : text}</>;
+}
+
+function MessageBody({
+  text,
+  fromGuest,
+}: {
+  text: string;
+  fromGuest: boolean;
+}) {
+  const normalized = clean(text).replace(/\r\n/g, "\n").replace(/\n{3,}/g, "\n\n");
+  const lines = normalized.split("\n");
+  const blocks: React.ReactNode[] = [];
+  let paragraph: string[] = [];
+  const linkClass = fromGuest
+    ? "text-white decoration-white/50 hover:decoration-white"
+    : "text-[var(--color-accent)] decoration-[var(--color-accent)]/40 hover:text-[var(--color-accent-strong)]";
+
+  function flushParagraph() {
+    if (paragraph.length === 0) return;
+    const value = paragraph.join("\n");
+    blocks.push(
+      <p
+        key={`p-${blocks.length}`}
+        className="whitespace-pre-line break-words text-sm leading-relaxed"
+      >
+        <LinkifiedText text={value} className={linkClass} />
+      </p>
+    );
+    paragraph = [];
+  }
+
+  lines.forEach((line, index) => {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      flushParagraph();
+      return;
+    }
+
+    if (/^-{3,}$/.test(trimmed)) {
+      flushParagraph();
+      blocks.push(
+        <hr
+          key={`hr-${index}`}
+          className={fromGuest ? "border-white/25" : "border-[var(--color-border)]"}
+        />
+      );
+      return;
+    }
+
+    const keyValue = trimmed.match(/^([^:]{2,42}):\s*(.+)$/);
+    if (keyValue && !/^https?:\/\//i.test(trimmed)) {
+      flushParagraph();
+      blocks.push(
+        <div
+          key={`kv-${index}`}
+          className={`grid gap-1 rounded-xl px-3 py-2 text-sm sm:grid-cols-[minmax(110px,170px)_1fr] ${
+            fromGuest ? "bg-white/10" : "bg-[var(--color-bg)]"
+          }`}
+        >
+          <span
+            className={`text-xs font-semibold uppercase tracking-[0.1em] ${
+              fromGuest ? "text-white/70" : "text-[var(--color-ink-muted)]"
+            }`}
+          >
+            {keyValue[1].trim()}
+          </span>
+          <span className="min-w-0 break-words">
+            <LinkifiedText text={keyValue[2].trim()} className={linkClass} />
+          </span>
+        </div>
+      );
+      return;
+    }
+
+    const next = clean(lines[index + 1]);
+    const looksLikeHeading =
+      trimmed.length <= 72 &&
+      /^[A-Za-z0-9][A-Za-z0-9 '&/().-]+$/.test(trimmed) &&
+      (next === "" || /:/.test(next));
+    if (looksLikeHeading) {
+      flushParagraph();
+      blocks.push(
+        <h3
+          key={`h-${index}`}
+          className={`pt-1 text-sm font-semibold ${
+            fromGuest ? "text-white" : "text-[var(--color-ink)]"
+          }`}
+        >
+          {trimmed}
+        </h3>
+      );
+      return;
+    }
+
+    paragraph.push(line);
+  });
+  flushParagraph();
+
+  return <div className="mt-3 space-y-3">{blocks}</div>;
 }
 
 function PaperclipIcon({ className = "" }: { className?: string }) {
@@ -275,7 +428,7 @@ export default function GuestStayMessages({
   }
 
   return (
-    <div className="mx-auto flex max-w-6xl flex-col gap-4">
+    <div className="mx-auto flex w-full max-w-[1500px] flex-col gap-4">
       <section className="rounded-[24px] border border-[var(--color-border)] bg-white p-4 shadow-sm md:p-5">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
@@ -339,10 +492,10 @@ export default function GuestStayMessages({
                     className={`flex ${fromGuest ? "justify-end" : "justify-start"}`}
                   >
                     <div
-                      className={`max-w-[86%] rounded-2xl px-4 py-3 shadow-sm md:max-w-[68%] ${
+                      className={`max-w-[94%] rounded-2xl px-4 py-3 shadow-sm ${
                         fromGuest
-                          ? "rounded-br-md bg-[var(--color-accent)] text-white"
-                          : "rounded-bl-md border border-[var(--color-border)] bg-white text-[var(--color-ink)]"
+                          ? "rounded-br-md bg-[var(--color-accent)] text-white md:max-w-[58%]"
+                          : "rounded-bl-md border border-[var(--color-border)] bg-white text-[var(--color-ink)] md:max-w-[84%] xl:max-w-[78%]"
                       }`}
                     >
                       <div className="flex items-baseline justify-between gap-3">
@@ -362,9 +515,7 @@ export default function GuestStayMessages({
                         </time>
                       </div>
                       {clean(message.body) ? (
-                        <p className="mt-2 whitespace-pre-line break-words text-sm leading-relaxed">
-                          {message.body}
-                        </p>
+                        <MessageBody text={message.body || ""} fromGuest={fromGuest} />
                       ) : null}
                       {message.attachments?.length ? (
                         <div className="mt-3 space-y-2">

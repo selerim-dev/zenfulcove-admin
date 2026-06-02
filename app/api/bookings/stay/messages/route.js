@@ -265,33 +265,19 @@ async function messagesFeatureResponseIfDisabled() {
 }
 
 async function postGuestMessageToLodgify({ booking, message }) {
-  try {
-    await sendBookingMessage(booking.id, {
-      subject: `Guest message for ${booking.propertyName || "stay"} ${booking.id}`,
-      message,
-      type: "Guest",
-      sendNotification: true,
-    });
-    return { mode: "guest" };
-  } catch (guestTypeError) {
-    const fallbackMessage = [
-      `Guest portal message from ${booking.guest.firstName || booking.guest.name || "Guest"}:`,
-      "",
-      message,
-    ].join("\n");
+  const fallbackMessage = [
+    `Guest portal message from ${booking.guest.firstName || booking.guest.name || "Guest"}:`,
+    "",
+    message,
+  ].join("\n");
 
-    try {
-      await sendBookingMessage(booking.id, {
-        subject: `Guest portal message for ${booking.propertyName || "stay"} ${booking.id}`,
-        message: fallbackMessage,
-        type: "Owner",
-        sendNotification: false,
-      });
-      return { mode: "owner-note", guestTypeError };
-    } catch (fallbackError) {
-      throw fallbackError;
-    }
-  }
+  await sendBookingMessage(booking.id, {
+    subject: `Guest portal message for ${booking.propertyName || "stay"} ${booking.id}`,
+    message: fallbackMessage,
+    type: "Owner",
+    sendNotification: false,
+  });
+  return { mode: "owner-note" };
 }
 
 async function notifyGuestPortalMessage({ booking, body, attachments = [] }) {
