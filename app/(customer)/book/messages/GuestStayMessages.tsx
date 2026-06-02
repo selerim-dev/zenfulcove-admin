@@ -275,17 +275,17 @@ export default function GuestStayMessages({
   }
 
   return (
-    <div className="mx-auto flex max-w-6xl flex-col gap-5">
-      <section className="rounded-[28px] border border-[var(--color-border)] bg-white p-5 shadow-sm md:p-6">
+    <div className="mx-auto flex max-w-6xl flex-col gap-4">
+      <section className="rounded-[24px] border border-[var(--color-border)] bg-white p-4 shadow-sm md:p-5">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--color-accent)]">
               My Stay Messages
             </p>
-            <h1 className="mt-1 font-serif text-4xl font-medium tracking-tight text-[var(--color-ink)]">
+            <h1 className="mt-1 font-serif text-3xl font-medium tracking-tight text-[var(--color-ink)] md:text-4xl">
               Chat with Zenfulcove
             </h1>
-            <p className="mt-2 text-sm leading-relaxed text-[var(--color-ink-muted)]">
+            <p className="mt-1 text-sm leading-relaxed text-[var(--color-ink-muted)]">
               {data?.booking?.propertyName || "Your stay"} - Booking {data?.booking?.id || reservation}
             </p>
           </div>
@@ -309,7 +309,7 @@ export default function GuestStayMessages({
         </div>
       </section>
 
-      <section className="flex min-h-[620px] flex-col overflow-hidden rounded-[28px] border border-[var(--color-border)] bg-white shadow-sm">
+      <section className="flex h-[calc(100vh-210px)] min-h-[360px] max-h-[760px] flex-col overflow-hidden rounded-[24px] border border-[var(--color-border)] bg-white shadow-sm md:min-h-[460px]">
         <div className="border-b border-[var(--color-border)] px-5 py-3">
           <p className="text-xs font-medium text-[var(--color-ink-muted)]">
             Messages are tied to this booking thread. Replies from staff may also appear in your original booking channel depending on its rules.

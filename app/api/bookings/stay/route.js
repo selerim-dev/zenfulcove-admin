@@ -447,6 +447,10 @@ export async function POST(request) {
         ? "Your access code is ready."
         : !bookingEligibleForAccess
           ? `This booking is not active in Lodgify (${normalized.status || "unknown"}), so access-code release is blocked.`
+        : releaseAttempt?.status === "failed"
+          ? "Access-code release needs staff review. Please message us if you are checking in now."
+        : release?.status === "failed" && release?.last_error
+          ? "Access-code release needs staff review. Please message us if you are checking in now."
         : formSubmitted
           ? "Your form is complete. Access code release is pending check-in timing."
           : "Complete the reservation form to unlock access-code release.",

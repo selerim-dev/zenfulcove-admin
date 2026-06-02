@@ -64,6 +64,10 @@ type StayResponse = {
   };
 };
 
+function isFailureStatus(status?: string) {
+  return cleanText(status).toLowerCase() === "failed";
+}
+
 function formatDate(value?: string) {
   if (!value) return "Not set";
   const date = new Date(`${value}T12:00:00`);
@@ -244,13 +248,22 @@ function InfoTile({
   label,
   value,
   helper,
+  tone = "neutral",
 }: {
   label: string;
   value: string;
   helper?: string;
+  tone?: "neutral" | "success" | "danger";
 }) {
+  const toneClass =
+    tone === "success"
+      ? "border-emerald-200 bg-emerald-50/30"
+      : tone === "danger"
+        ? "border-red-200 bg-red-50/30"
+        : "border-[var(--color-border)] bg-white";
+
   return (
-    <div className="rounded-2xl border border-[var(--color-border)] bg-white p-4 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-[var(--color-accent)] hover:shadow-lg">
+    <div className={`min-h-[128px] rounded-2xl border p-4 shadow-sm ${toneClass}`}>
       <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--color-ink-muted)]">
         {label}
       </p>
@@ -282,7 +295,7 @@ function SectionCard({
   return (
     <article
       id={id}
-      className="scroll-mt-24 rounded-[24px] border border-[var(--color-border)] bg-white p-6 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-[var(--color-accent)] hover:shadow-lg"
+      className="scroll-mt-24 rounded-[24px] border border-[var(--color-border)] bg-white p-5 shadow-sm"
     >
       <div className="flex items-start justify-between gap-4">
         <div>
@@ -295,7 +308,7 @@ function SectionCard({
         </div>
         {action ? <div className="shrink-0">{action}</div> : null}
       </div>
-      <div className="mt-5">{children}</div>
+      <div className="mt-4 max-h-[min(360px,45vh)] overflow-y-auto pr-1">{children}</div>
     </article>
   );
 }
@@ -334,7 +347,7 @@ function StayCard({
 }) {
   return (
     <div
-      className={`rounded-3xl border border-[var(--color-border)] bg-white p-6 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-[var(--color-accent)] hover:shadow-lg ${className}`}
+      className={`rounded-3xl border border-[var(--color-border)] bg-white p-5 shadow-sm ${className}`}
     >
       {children}
     </div>
@@ -426,6 +439,7 @@ export default function GuestStayDashboard({
     propertyDisplayName: stay.propertyDisplayName,
   });
   const formComplete = Boolean(access?.formSubmitted);
+  const accessFailed = isFailureStatus(access?.status);
   const accessBlocked = access?.eligible === false;
   const mapsAddress = cleanText(stay.googleMapsAddress || stay.address);
   const mapsUrl =
@@ -453,20 +467,20 @@ export default function GuestStayDashboard({
     Boolean(amenitiesText);
 
   return (
-    <div className="mx-auto max-w-6xl space-y-8">
-      <section className="overflow-hidden rounded-[28px] border border-[var(--color-border)] bg-white shadow-sm">
+    <div className="mx-auto max-w-6xl space-y-5">
+      <section className="overflow-hidden rounded-[24px] border border-[var(--color-border)] bg-white shadow-sm">
         <div
-          className="min-h-[320px] bg-cover bg-center"
+          className="min-h-[220px] bg-cover bg-center md:min-h-[250px]"
           style={{ backgroundImage: `url("${headerImageUrl}")` }}
         >
-          <div className="flex min-h-[320px] flex-col justify-end bg-black/35 p-6 text-white md:p-10">
+          <div className="flex min-h-[220px] flex-col justify-end bg-black/35 p-5 text-white md:min-h-[250px] md:p-8">
             <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-white/85">
               Zenfulcove Glamping Stay
             </p>
-            <h1 className="mt-3 max-w-3xl font-serif text-5xl font-medium leading-[1.02] tracking-tight md:text-6xl">
+            <h1 className="mt-2 max-w-3xl font-serif text-4xl font-medium leading-[1.02] tracking-tight md:text-5xl">
               {stay.propertyDisplayName || booking.propertyName}
             </h1>
-            <p className="mt-4 max-w-2xl text-sm leading-relaxed text-white/90 md:text-base">
+            <p className="mt-3 max-w-2xl text-sm leading-relaxed text-white/90">
               Welcome, {booking.guestFirstName || booking.guestName}. Your
               reservation details, arrival notes, Wi-Fi, and access status are
               collected here for your stay.
@@ -474,7 +488,7 @@ export default function GuestStayDashboard({
             {stay.messagesEnabled !== false ? (
               <Link
                 href={stayMessagesHref(reservation, lastName || "")}
-                className="mt-5 inline-flex w-fit rounded-full bg-white px-5 py-2.5 text-sm font-medium text-[var(--color-ink)] shadow-sm transition hover:bg-white/90"
+                className="mt-4 inline-flex w-fit rounded-full bg-white px-4 py-2 text-sm font-medium text-[var(--color-ink)] shadow-sm transition hover:bg-white/90"
                 style={{ textShadow: "none" }}
               >
                 Messages
@@ -505,11 +519,20 @@ export default function GuestStayDashboard({
           value={
             access?.released && access.code
               ? access.code
+              : accessFailed
+                ? "Failed"
               : accessBlocked
                 ? "Blocked"
                 : "Pending"
           }
           helper={access?.message}
+          tone={
+            access?.released && access.code
+              ? "success"
+              : accessFailed || accessBlocked
+                ? "danger"
+                : "neutral"
+          }
         />
       </section>
 
