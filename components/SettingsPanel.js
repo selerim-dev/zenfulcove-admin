@@ -133,6 +133,7 @@ export default function SettingsPanel({
       <div className="bg-white rounded-xl shadow-sm border border-sand p-5 space-y-3">
         {[
           ["rentals", "My Stay"],
+          ["messages", "Messages"],
           ["availability", "Rent a Kayak"],
           ["packages", "Special Packages and More"],
           ["timing", "Late Check Out/Early Check In"],
@@ -143,7 +144,7 @@ export default function SettingsPanel({
             <span className="text-sm font-medium text-forest">{label}</span>
             <input
               type="checkbox"
-              checked={portalNav[key] !== false}
+              checked={key === "messages" ? portalNav[key] === true : portalNav[key] !== false}
               onChange={(e) => updatePortalNav(key, e.target.checked)}
               className="h-4 w-4 accent-grove"
             />

@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { savedStayHref } from "./bookingSession";
+import { savedStayHref, savedStayMessagesHref } from "./bookingSession";
 
 type CustomerPortalNavigation = {
   rentals: boolean;
+  messages?: boolean;
   availability: boolean;
   packages?: boolean;
   timing?: boolean;
@@ -15,6 +16,7 @@ type CustomerPortalNavigation = {
 
 type IconType =
   | "stay"
+  | "message"
   | "calendar"
   | "terms"
   | "form"
@@ -47,6 +49,15 @@ function Icon({
         <path d="M8 2v4" />
         <path d="M16 2v4" />
         <path d="M3 10h18" />
+      </svg>
+    );
+  }
+  if (type === "message") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className={className}>
+        <path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z" />
+        <path d="M8 9h8" />
+        <path d="M8 13h5" />
       </svg>
     );
   }
@@ -121,6 +132,7 @@ const items: {
   icon: IconType;
 }[] = [
   { key: "rentals", href: "/book", label: "My Stay", icon: "stay" },
+  { key: "messages", href: "/book/messages", label: "Messages", icon: "message" },
   { key: "availability", href: "/fleet", label: "Rent a Kayak", icon: "kayak" },
   {
     key: "packages",
@@ -171,11 +183,20 @@ export default function Sidebar({
   }
 
   function isActive(item: (typeof items)[number]) {
+    if (item.key === "rentals") {
+      return pathname === "/book" || (
+        pathname.startsWith("/book/") && !pathname.startsWith("/book/messages")
+      );
+    }
+    if (item.key === "messages") {
+      return pathname === "/book/messages" || pathname.startsWith("/book/messages/");
+    }
     return pathname === item.href || pathname.startsWith(`${item.href}/`);
   }
 
   function targetHrefFor(item: (typeof items)[number]) {
     if (item.key === "rentals") return savedStayHref();
+    if (item.key === "messages") return savedStayMessagesHref();
     return item.href;
   }
 

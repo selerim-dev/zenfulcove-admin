@@ -24,6 +24,16 @@ export function stayHref(reservation: string, lastName = "") {
   return `/book?${params.toString()}`;
 }
 
+export function stayMessagesHref(reservation: string, lastName = "") {
+  const code = clean(reservation);
+  const name = clean(lastName);
+  if (!code || !name) return "/book/messages";
+
+  const params = new URLSearchParams({ reservation: code });
+  params.set("lastName", name);
+  return `/book/messages?${params.toString()}`;
+}
+
 export function readGuestBookingSession(): GuestBookingSession | null {
   if (typeof window === "undefined") return null;
 
@@ -67,4 +77,11 @@ export function saveGuestBookingSession(session: GuestBookingSession) {
 export function savedStayHref() {
   const session = readGuestBookingSession();
   return session ? stayHref(session.reservation, session.lastName) : "/book";
+}
+
+export function savedStayMessagesHref() {
+  const session = readGuestBookingSession();
+  return session
+    ? stayMessagesHref(session.reservation, session.lastName)
+    : "/book/messages";
 }

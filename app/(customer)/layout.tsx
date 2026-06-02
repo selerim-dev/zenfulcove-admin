@@ -10,6 +10,7 @@ type PublishedFormNavItem = {
 
 type CustomerPortalNavigation = {
   rentals: boolean;
+  messages?: boolean;
   availability: boolean;
   packages?: boolean;
   timing?: boolean;
@@ -19,6 +20,7 @@ type CustomerPortalNavigation = {
 
 const DEFAULT_CUSTOMER_PORTAL_NAVIGATION: CustomerPortalNavigation = {
   rentals: true,
+  messages: false,
   availability: true,
   packages: true,
   timing: true,

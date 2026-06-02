@@ -190,6 +190,7 @@ export const automationConfig = {
   customerPortal: {
     navigation: {
       rentals: true,
+      messages: false,
       availability: true,
       packages: true,
       timing: true,

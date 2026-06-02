@@ -434,6 +434,7 @@ export async function POST(request) {
       urgentPhone: templateData.urgentPhone,
       reservationFormUrl: reservationFormUrlFor(formSlug, normalized.id),
       myStaySections: config.customerPortal?.myStaySections || {},
+      messagesEnabled: config.customerPortal?.navigation?.messages === true,
     },
     access: {
       code: accessCode,

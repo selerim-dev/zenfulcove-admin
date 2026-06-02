@@ -2,7 +2,10 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { saveGuestBookingSession } from "@/components/customer/bookingSession";
+import {
+  saveGuestBookingSession,
+  stayMessagesHref,
+} from "@/components/customer/bookingSession";
 
 type MyStayContentSection = {
   enabled?: boolean;
@@ -48,6 +51,7 @@ type StayResponse = {
       text?: string;
     }[];
     reservationFormUrl: string;
+    messagesEnabled?: boolean;
     myStaySections?: Record<string, MyStayContentSection>;
   };
   access?: {
@@ -467,6 +471,15 @@ export default function GuestStayDashboard({
               reservation details, arrival notes, Wi-Fi, and access status are
               collected here for your stay.
             </p>
+            {stay.messagesEnabled !== false ? (
+              <Link
+                href={stayMessagesHref(reservation, lastName || "")}
+                className="mt-5 inline-flex w-fit rounded-full bg-white px-5 py-2.5 text-sm font-medium text-[var(--color-ink)] shadow-sm transition hover:bg-white/90"
+                style={{ textShadow: "none" }}
+              >
+                Messages
+              </Link>
+            ) : null}
           </div>
         </div>
       </section>

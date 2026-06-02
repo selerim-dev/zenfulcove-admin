@@ -2,9 +2,15 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { saveGuestBookingSession, stayHref } from "./bookingSession";
+import { saveGuestBookingSession, stayHref, stayMessagesHref } from "./bookingSession";
 
-export default function CustomerAccessForm({ compact = false }: { compact?: boolean }) {
+export default function CustomerAccessForm({
+  compact = false,
+  target = "stay",
+}: {
+  compact?: boolean;
+  target?: "stay" | "messages";
+}) {
   const router = useRouter();
   const [reservation, setReservation] = useState("");
   const [lastName, setLastName] = useState("");
@@ -17,6 +23,10 @@ export default function CustomerAccessForm({ compact = false }: { compact?: bool
     const name = lastName.trim();
     if (!code) {
       setError("Enter your booking code to continue.");
+      return;
+    }
+    if (!name) {
+      setError("Enter the last name on your booking to continue.");
       return;
     }
 
@@ -39,7 +49,7 @@ export default function CustomerAccessForm({ compact = false }: { compact?: bool
         cabin: json.cabin ?? "",
         guestName: json.guestName ?? "",
       });
-      router.push(stayHref(code, name));
+      router.push(target === "messages" ? stayMessagesHref(code, name) : stayHref(code, name));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Verification failed.");
     } finally {
@@ -83,7 +93,7 @@ export default function CustomerAccessForm({ compact = false }: { compact?: bool
             compact ? "text-[var(--color-ink-muted)]" : "text-white/80"
           }`}
         >
-          Last Name Optional
+          Last Name
         </span>
         <input
           type="text"
