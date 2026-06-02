@@ -265,15 +265,19 @@ async function messagesFeatureResponseIfDisabled() {
 }
 
 async function postGuestMessageToLodgify({ booking, message }) {
-  const fallbackMessage = [
-    `Guest portal message from ${booking.guest.firstName || booking.guest.name || "Guest"}:`,
+  const guestLabel = booking.guest.name || booking.guest.firstName || "Guest";
+  const relayMessage = [
+    "Guest portal submission for this booking.",
+    `Portal guest: ${guestLabel}`,
+    `Booking: ${booking.id}`,
     "",
+    "Message:",
     message,
   ].join("\n");
 
   await sendBookingMessage(booking.id, {
-    subject: `Guest portal message for ${booking.propertyName || "stay"} ${booking.id}`,
-    message: fallbackMessage,
+    subject: `Guest portal submission for ${booking.propertyName || "stay"} ${booking.id}`,
+    message: relayMessage,
     type: "Owner",
     sendNotification: false,
   });
