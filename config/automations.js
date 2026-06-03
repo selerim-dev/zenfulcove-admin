@@ -64,7 +64,7 @@ export const automationConfig = {
     lodgifyMessageType: "Owner",
     lodgifySendNotification: true,
     lodgifyPlainTextSources: ["BookingCom"], // Source keys that should avoid Lodgify HTML formatting.
-    lodgifyMaskedLinkSources: ["BookingCom"], // Source keys that should receive readable, non-clickable URLs.
+    lodgifyMaskedLinkSources: [], // Source keys that should receive readable, non-clickable URLs.
     localFormSlug: "welcome-to-zenfulcove",
     jotformFormId: "251834442091050", // fallback while historical Jotform forms are still active
     propertyIds: [],
