@@ -42,16 +42,27 @@ export type Booking = {
   updated_at: string;
 };
 
+export type BookingSuccessKayakCode = {
+  kayakId: string;
+  name: string;
+  code: string | null;
+};
+
 export type BookingSuccess = {
   bookingId: string;
+  bookingIds?: string[];
   referenceCode: string;
+  referenceCodes?: string[];
   lockboxCode: string | null;
+  lockboxCodes?: BookingSuccessKayakCode[];
   customerName: string;
   dateIso: string;
   kayak: Kayak;
+  kayaks?: Kayak[];
   stayLocation: string;
   isComplimentary: boolean;
   amountCents: number;
+  totalAmountCents?: number;
 };
 
 // Lodgify property ID → cabin display name. Source of truth for which
@@ -62,6 +73,36 @@ export const PROPERTY_TO_CABIN: Record<number, string> = {
   608954: "Sky Castle",
   608955: "Bird House",
   754651: "Doodle House",
+};
+
+export type IncludedStayKayak = {
+  itemName: string;
+  code: string | null;
+  note?: string;
+};
+
+export const PROPERTY_INCLUDED_KAYAKS: Record<number, IncludedStayKayak> = {
+  608952: {
+    itemName: "Paddle boat",
+    code: null,
+    note: "Fairy House includes a paddle boat instead of a kayak.",
+  },
+  608953: {
+    itemName: "Included kayak",
+    code: "3546",
+  },
+  608954: {
+    itemName: "Included kayak",
+    code: "1010",
+  },
+  608955: {
+    itemName: "Included kayak",
+    code: "3126",
+  },
+  754651: {
+    itemName: "Included kayak",
+    code: "1521",
+  },
 };
 
 export const STAY_OPTIONS = Object.values(PROPERTY_TO_CABIN);

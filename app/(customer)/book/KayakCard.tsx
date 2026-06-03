@@ -11,10 +11,12 @@ function describeKayak(k: Kayak): string {
 export default function KayakCard({
   kayak,
   isOut = false,
+  isSelected = false,
   onClick,
 }: {
   kayak: Kayak;
   isOut?: boolean;
+  isSelected?: boolean;
   onClick?: () => void;
 }) {
   return (
@@ -25,11 +27,15 @@ export default function KayakCard({
       aria-label={
         isOut
           ? `${kayak.name} — out for this day`
-          : `Reserve ${kayak.name}`
+          : isSelected
+            ? `Remove ${kayak.name} from checkout`
+            : `Select ${kayak.name}`
       }
       className={`group block w-full overflow-hidden rounded-3xl border border-[var(--color-border)] bg-[var(--color-surface)] text-left transition ${
         isOut
           ? "cursor-not-allowed opacity-60"
+          : isSelected
+            ? "cursor-pointer ring-2 ring-[var(--color-accent)]"
           : "cursor-pointer hover:-translate-y-0.5 hover:shadow-lg"
       }`}
     >
@@ -54,10 +60,12 @@ export default function KayakCard({
           className={`absolute right-3 top-3 rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-wider ${
             isOut
               ? "border border-[var(--color-border)] bg-white text-[var(--color-ink-muted)]"
+              : isSelected
+                ? "bg-emerald-600 text-white shadow-sm"
               : "bg-[var(--color-accent)] text-white shadow-sm"
           }`}
         >
-          {isOut ? "Out" : "Open"}
+          {isOut ? "Out" : isSelected ? "Selected" : "Open"}
         </span>
       </div>
       <div className="space-y-3 p-5">
@@ -78,11 +86,13 @@ export default function KayakCard({
           className={`pt-1 text-sm font-medium ${
             isOut
               ? "invisible"
+              : isSelected
+                ? "text-emerald-700"
               : "text-[var(--color-accent-strong)] group-hover:underline"
           }`}
           aria-hidden={isOut}
         >
-          Reserve →
+          {isSelected ? "Selected" : "Select"}
         </div>
       </div>
     </button>

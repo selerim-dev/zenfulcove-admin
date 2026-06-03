@@ -30,18 +30,60 @@ export default function FleetCalendar({
   bookedByKayak: Record<string, string[]>;
 }) {
   const [active, setActive] = useState<{
-    kayak: Kayak;
+    kayaks: Kayak[];
     dateIso: string;
+  } | null>(null);
+  const [checkoutSelection, setCheckoutSelection] = useState<{
+    dateIso: string;
+    kayakIds: string[];
   } | null>(null);
   const [selectedKayakId, setSelectedKayakId] = useState(kayaks[0]?.id ?? "");
   const dateRailRef = useRef<HTMLDivElement>(null);
   const gridScrollRef = useRef<HTMLDivElement>(null);
   const selectedKayak =
     kayaks.find((kayak) => kayak.id === selectedKayakId) ?? kayaks[0] ?? null;
+  const selectedCheckoutKayaks = checkoutSelection
+    ? kayaks.filter((kayak) => checkoutSelection.kayakIds.includes(kayak.id))
+    : [];
+  const checkoutTotal = selectedCheckoutKayaks.reduce(
+    (sum, kayak) => sum + Number(kayak.daily_rate_cents || 0),
+    0
+  );
 
-  function openBooking(kayak: Kayak, dateIso: string) {
+  function isBooked(kayakId: string, dateIso: string) {
+    return (bookedByKayak[kayakId] ?? []).includes(dateIso);
+  }
+
+  function isSelectedForCheckout(kayakId: string, dateIso: string) {
+    return (
+      checkoutSelection?.dateIso === dateIso &&
+      checkoutSelection.kayakIds.includes(kayakId)
+    );
+  }
+
+  function toggleCheckoutSelection(kayak: Kayak, dateIso: string) {
+    if (isBooked(kayak.id, dateIso)) return;
     setSelectedKayakId(kayak.id);
-    setActive({ kayak, dateIso });
+    setCheckoutSelection((current) => {
+      if (!current || current.dateIso !== dateIso) {
+        return { dateIso, kayakIds: [kayak.id] };
+      }
+
+      if (current.kayakIds.includes(kayak.id)) {
+        const nextIds = current.kayakIds.filter((id) => id !== kayak.id);
+        return nextIds.length > 0 ? { dateIso, kayakIds: nextIds } : null;
+      }
+
+      return { dateIso, kayakIds: [...current.kayakIds, kayak.id] };
+    });
+  }
+
+  function openSelectedCheckout() {
+    if (!checkoutSelection || selectedCheckoutKayaks.length === 0) return;
+    setActive({
+      dateIso: checkoutSelection.dateIso,
+      kayaks: selectedCheckoutKayaks,
+    });
   }
 
   function scrollByPage(
@@ -127,18 +169,24 @@ export default function FleetCalendar({
                 >
                   <div className="flex min-w-max gap-2">
                     {days.map((day) => {
-                      const isOut = (
-                        bookedByKayak[selectedKayak.id] ?? []
-                      ).includes(day.iso);
+                      const isOut = isBooked(selectedKayak.id, day.iso);
+                      const isSelected = isSelectedForCheckout(
+                        selectedKayak.id,
+                        day.iso
+                      );
                       return (
                         <button
                           key={day.iso}
                           type="button"
                           disabled={isOut}
-                          onClick={() => openBooking(selectedKayak, day.iso)}
+                          onClick={() =>
+                            toggleCheckoutSelection(selectedKayak, day.iso)
+                          }
                           className={`min-h-20 w-24 shrink-0 rounded-xl border px-3 py-2 text-left text-sm transition ${
                             isOut
                               ? "cursor-not-allowed border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-ink-muted)] opacity-60"
+                              : isSelected
+                                ? "cursor-pointer border-[var(--color-accent)] bg-[var(--color-accent)] text-white"
                               : "cursor-pointer border-emerald-200 bg-emerald-50 text-emerald-950 hover:border-emerald-400 hover:bg-emerald-100"
                           }`}
                         >
@@ -152,7 +200,7 @@ export default function FleetCalendar({
                             {day.dow}
                           </span>
                           <span className="mt-2 block text-[10px] font-semibold uppercase tracking-[0.12em]">
-                            {isOut ? "Out" : "Open"}
+                            {isOut ? "Out" : isSelected ? "Selected" : "Open"}
                           </span>
                         </button>
                       );
@@ -265,6 +313,7 @@ export default function FleetCalendar({
                   </td>
                   {days.map((d) => {
                     const out = bookedSet.has(d.iso);
+                    const selected = isSelectedForCheckout(k.id, d.iso);
                     if (out) {
                       return (
                         <td key={d.iso} className="min-w-20 px-3 py-3 text-center">
@@ -280,11 +329,15 @@ export default function FleetCalendar({
                           type="button"
                           onClick={(event) => {
                             event.stopPropagation();
-                            openBooking(k, d.iso);
+                            toggleCheckoutSelection(k, d.iso);
                           }}
-                          className="inline-flex cursor-pointer items-center justify-center rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-emerald-800 transition hover:bg-emerald-200"
+                          className={`inline-flex cursor-pointer items-center justify-center rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider transition ${
+                            selected
+                              ? "bg-[var(--color-accent)] text-white"
+                              : "bg-emerald-100 text-emerald-800 hover:bg-emerald-200"
+                          }`}
                         >
-                          Open
+                          {selected ? "Selected" : "Open"}
                         </button>
                       </td>
                     );
@@ -297,8 +350,33 @@ export default function FleetCalendar({
         </div>
       </div>
 
+      <div className="sticky bottom-4 z-20 rounded-2xl border border-[var(--color-border)] bg-white/95 p-4 shadow-lg backdrop-blur">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--color-ink-muted)]">
+              Selected rentals
+            </p>
+            <p className="mt-1 text-sm font-medium text-[var(--color-ink)]">
+              {checkoutSelection && selectedCheckoutKayaks.length > 0
+                ? `${selectedCheckoutKayaks.length} ${
+                    selectedCheckoutKayaks.length === 1 ? "kayak" : "kayaks"
+                  } on ${checkoutSelection.dateIso} · ${formatMoney(checkoutTotal)}`
+                : "Choose one or more open kayaks on the same day"}
+            </p>
+          </div>
+          <button
+            type="button"
+            disabled={!checkoutSelection || selectedCheckoutKayaks.length === 0}
+            onClick={openSelectedCheckout}
+            className="inline-flex cursor-pointer items-center justify-center rounded-full bg-[var(--color-accent)] px-5 py-3 text-sm font-medium text-white transition hover:bg-[var(--color-accent-strong)] disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            Reserve selected
+          </button>
+        </div>
+      </div>
+
       <BookingModal
-        kayak={active?.kayak ?? null}
+        kayaks={active?.kayaks ?? []}
         dateIso={active?.dateIso ?? null}
         open={active !== null}
         onClose={() => setActive(null)}

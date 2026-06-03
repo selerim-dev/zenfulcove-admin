@@ -28,10 +28,20 @@ export default function BookingConfirmation({
   onDone?: () => void;
 }) {
   const [revealed, setRevealed] = useState(false);
-  const code = booking.lockboxCode ?? "—";
+  const kayaks = booking.kayaks && booking.kayaks.length > 0
+    ? booking.kayaks
+    : [booking.kayak];
+  const firstCode =
+    booking.lockboxCodes?.find((item) => item.code)?.code ??
+    booking.lockboxCode ??
+    "—";
   const dateLabel = formatDate(booking.dateIso);
-  const paddlers = booking.kayak.capacity;
+  const paddlers = kayaks.reduce((sum, kayak) => sum + kayak.capacity, 0);
   const jacketLabel = paddlers === 1 ? "1 jacket" : `${paddlers} jackets`;
+  const total =
+    typeof booking.totalAmountCents === "number"
+      ? booking.totalAmountCents
+      : booking.amountCents;
 
   return (
     <div className="space-y-6">
@@ -54,7 +64,9 @@ export default function BookingConfirmation({
           You&apos;re booked, {booking.customerName}.
         </h2>
         <p className="text-sm text-[var(--color-ink-muted)]">
-          {booking.kayak.name} is yours for {dateLabel}.
+          {kayaks.length === 1
+            ? `${kayaks[0].name} is yours for ${dateLabel}.`
+            : `${kayaks.length} kayak rentals are yours for ${dateLabel}.`}
         </p>
       </div>
 
@@ -71,20 +83,20 @@ export default function BookingConfirmation({
         <button
           type="button"
           onClick={() => setRevealed(true)}
-          disabled={revealed || !booking.lockboxCode}
+          disabled={revealed || firstCode === "—"}
           className="mx-auto my-5 block w-full cursor-pointer text-center disabled:cursor-default"
         >
           <span
             className={`font-mono text-4xl font-bold tracking-[0.3em] transition-[filter] duration-200 ${
-              revealed || !booking.lockboxCode
+              revealed || firstCode === "—"
                 ? ""
                 : "select-none blur-md"
             }`}
           >
-            {code}
+            {firstCode}
           </span>
         </button>
-        {!revealed && booking.lockboxCode && (
+        {!revealed && firstCode !== "—" && (
           <p className="-mt-3 mb-3 text-center text-[11px] uppercase tracking-wider text-[var(--color-ink-muted)]">
             Tap to reveal
           </p>
@@ -95,7 +107,10 @@ export default function BookingConfirmation({
       </div>
 
       <div className="overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)]">
-        <Row label="Kayak" value={describeKayak(booking.kayak)} />
+        <Row
+          label={kayaks.length === 1 ? "Kayak" : "Kayaks"}
+          value={kayaks.map((kayak) => describeKayak(kayak)).join("\n")}
+        />
         <Row label="Paddler" value={`${paddlers} (${jacketLabel})`} />
         <Row label="Stay" value={booking.stayLocation} />
         <Row
@@ -103,7 +118,7 @@ export default function BookingConfirmation({
           value={
             booking.isComplimentary
               ? "Complimentary"
-              : `${formatMoney(booking.amountCents)} · due at checkout`
+              : `${formatMoney(total)} · due at checkout`
           }
         />
         <Row label="Booking #" value={`#${booking.referenceCode}`} />
@@ -128,7 +143,7 @@ function Row({ label, value }: { label: string; value: string }) {
       <span className="text-[11px] font-semibold uppercase tracking-wider text-[var(--color-ink-muted)]">
         {label}
       </span>
-      <span className="text-right text-sm font-medium text-[var(--color-ink)]">
+      <span className="whitespace-pre-line text-right text-sm font-medium text-[var(--color-ink)]">
         {value}
       </span>
     </div>

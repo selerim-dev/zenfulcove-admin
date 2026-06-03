@@ -6,6 +6,7 @@ import {
   saveGuestBookingSession,
   stayMessagesHref,
 } from "@/components/customer/bookingSession";
+import { formatMoney } from "@/lib/types";
 
 type MyStayContentSection = {
   enabled?: boolean;
@@ -42,6 +43,24 @@ type StayResponse = {
     wifiPassword: string;
     unitDirections: string;
     parkingInstructions: string;
+    includedKayak?: {
+      itemName: string;
+      code: string | null;
+      note?: string;
+    } | null;
+    rentalKayaks?: {
+      bookingId: string;
+      referenceCode: string;
+      dateIso: string;
+      startsAt: string;
+      endsAt: string;
+      amountCents: number;
+      name: string;
+      code: string;
+      capacity: number;
+      lengthFeet: number | null;
+      color: string;
+    }[];
     amenitiesText: string;
     goodToKnowText: string;
     additionalRulesText: string;
@@ -354,6 +373,99 @@ function StayCard({
   );
 }
 
+function KayakStaySummary({
+  included,
+  rentals = [],
+}: {
+  included?: NonNullable<StayResponse["stay"]>["includedKayak"];
+  rentals?: NonNullable<StayResponse["stay"]>["rentalKayaks"];
+}) {
+  if (!included && rentals.length === 0) return null;
+
+  return (
+    <StayCard>
+      <div>
+        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--color-accent)]">
+          Kayaks
+        </p>
+        <h2 className="mt-1 font-serif text-2xl font-medium tracking-tight">
+          Stay and rental access
+        </h2>
+      </div>
+
+      <div className="mt-5 grid gap-5 md:grid-cols-2">
+        {included ? (
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--color-ink-muted)]">
+              Included with stay
+            </p>
+            <p className="mt-2 text-sm font-medium text-[var(--color-ink)]">
+              {included.itemName}
+            </p>
+            {included.code ? (
+              <p className="mt-2 font-mono text-2xl font-semibold tracking-[0.18em] text-[var(--color-ink)]">
+                {included.code}
+              </p>
+            ) : null}
+            {included.note ? (
+              <p className="mt-2 text-xs leading-relaxed text-[var(--color-ink-muted)]">
+                {included.note}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--color-ink-muted)]">
+            Paid rental kayaks
+          </p>
+          {rentals.length > 0 ? (
+            <div className="mt-3 divide-y divide-[var(--color-border)]">
+              {rentals.map((rental) => {
+                const details = [
+                  rental.lengthFeet ? `${rental.lengthFeet} ft` : "",
+                  rental.capacity
+                    ? `${rental.capacity} ${
+                        rental.capacity === 1 ? "paddler" : "paddlers"
+                      }`
+                    : "",
+                ]
+                  .filter(Boolean)
+                  .join(" · ");
+                return (
+                  <div key={rental.bookingId} className="py-3 first:pt-0">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <p className="text-sm font-medium text-[var(--color-ink)]">
+                          {rental.name}
+                        </p>
+                        <p className="mt-1 text-xs text-[var(--color-ink-muted)]">
+                          {formatDate(rental.dateIso)}
+                          {details ? ` · ${details}` : ""}
+                          {` · ${formatMoney(rental.amountCents)}`}
+                        </p>
+                      </div>
+                      {rental.code ? (
+                        <p className="font-mono text-lg font-semibold tracking-[0.16em] text-[var(--color-ink)]">
+                          {rental.code}
+                        </p>
+                      ) : null}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="mt-3 text-sm leading-relaxed text-[var(--color-ink-muted)]">
+              No paid kayak rentals are confirmed for this reservation yet.
+            </p>
+          )}
+        </div>
+      </div>
+    </StayCard>
+  );
+}
+
 export default function GuestStayDashboard({
   reservation,
   lastName,
@@ -535,6 +647,11 @@ export default function GuestStayDashboard({
           }
         />
       </section>
+
+      <KayakStaySummary
+        included={stay.includedKayak}
+        rentals={stay.rentalKayaks || []}
+      />
 
       <StayCard
         className={

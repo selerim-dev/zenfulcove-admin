@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { formatMoney, type BookingSuccess, type Kayak } from "@/lib/types";
 
@@ -45,13 +45,15 @@ const labelClass =
 
 export default function BookingForm({
   kayak,
+  kayaks,
   dateIso,
   onSuccess,
   onValidationChange,
   initialReservation = "",
   initialLastName = "",
 }: {
-  kayak: Kayak;
+  kayak?: Kayak;
+  kayaks?: Kayak[];
   dateIso: string;
   onSuccess?: (result: BookingSuccess) => void;
   onValidationChange?: (validation: Validation) => void;
@@ -59,6 +61,14 @@ export default function BookingForm({
   initialLastName?: string;
 }) {
   const router = useRouter();
+  const selectedKayaks = useMemo(
+    () => (kayaks && kayaks.length > 0 ? kayaks : kayak ? [kayak] : []),
+    [kayak, kayaks]
+  );
+  const totalAmount = selectedKayaks.reduce(
+    (sum, item) => sum + Number(item.daily_rate_cents || 0),
+    0
+  );
   const [reservation, setReservation] = useState(initialReservation);
   const [lastName, setLastName] = useState(initialLastName);
   const [waiver, setWaiver] = useState(false);
@@ -103,7 +113,7 @@ export default function BookingForm({
         } else {
           setValidation({
             status: "ok",
-            isFree: Boolean(json.isFree),
+            isFree: false,
             cabin: typeof json.cabin === "string" ? json.cabin : "",
             guestName: json.guestName ?? null,
           });
@@ -120,6 +130,7 @@ export default function BookingForm({
   }, [reservation, lastName, dateIso]);
 
   const lookupReady =
+    selectedKayaks.length > 0 &&
     reservation.trim().length > 0 &&
     lastName.trim().length > 0 &&
     validation.status === "ok";
@@ -154,7 +165,8 @@ export default function BookingForm({
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          kayakId: kayak.id,
+          kayakId: selectedKayaks[0]?.id,
+          kayakIds: selectedKayaks.map((item) => item.id),
           dateIso,
           reservationId: reservation.trim(),
           lastName: lastName.trim(),
@@ -171,15 +183,27 @@ export default function BookingForm({
 
       const result: BookingSuccess = {
         bookingId: json.bookingId,
+        bookingIds: Array.isArray(json.bookingIds) ? json.bookingIds : undefined,
         referenceCode: json.referenceCode,
+        referenceCodes: Array.isArray(json.referenceCodes)
+          ? json.referenceCodes
+          : undefined,
         lockboxCode: json.lockboxCode ?? null,
+        lockboxCodes: Array.isArray(json.lockboxCodes)
+          ? json.lockboxCodes
+          : undefined,
         customerName: typeof json.customerName === "string" ? json.customerName : "",
         dateIso,
-        kayak,
+        kayak: selectedKayaks[0],
+        kayaks: selectedKayaks,
         stayLocation: json.cabin ?? "",
-        isComplimentary: Boolean(json.isComplimentary),
+        isComplimentary: false,
         amountCents:
-          typeof json.amountCents === "number" ? json.amountCents : 0,
+          typeof json.amountCents === "number" ? json.amountCents : totalAmount,
+        totalAmountCents:
+          typeof json.totalAmountCents === "number"
+            ? json.totalAmountCents
+            : totalAmount,
       };
 
       if (onSuccess) {
@@ -202,12 +226,9 @@ export default function BookingForm({
   const inputBad = "border-red-500 focus:border-red-500";
 
   const submitDisabled = submitting || !lookupReady;
-  let submitLabel = "Confirm reservation";
-  if (submitting) submitLabel = "Reserving…";
-  else if (validation.status === "loading") submitLabel = "Checking…";
-  else if (validation.status === "ok" && validation.isFree === false) {
-    submitLabel = `Continue to checkout · ${formatMoney(kayak.daily_rate_cents)}`;
-  }
+  let submitLabel = `Continue to checkout · ${formatMoney(totalAmount)}`;
+  if (submitting) submitLabel = "Reserving...";
+  else if (validation.status === "loading") submitLabel = "Checking...";
 
   return (
     <form onSubmit={handleSubmit} noValidate className="space-y-6">
@@ -261,9 +282,7 @@ export default function BookingForm({
         <p className="rounded-lg bg-emerald-50 p-3 text-xs text-emerald-900">
           Verified · {validation.cabin}
           {validation.guestName ? ` · ${validation.guestName}` : ""}
-          {validation.isFree
-            ? " · Included with this stay"
-            : ` · ${formatMoney(kayak.daily_rate_cents)} due at checkout`}
+          {` · ${formatMoney(totalAmount)} due at checkout`}
         </p>
       )}
 
@@ -299,7 +318,7 @@ export default function BookingForm({
               onClick={(e) => e.stopPropagation()}
               className="font-medium text-[var(--color-accent)] underline underline-offset-2 hover:text-[var(--color-accent-strong)]"
             >
-              View full terms ↗
+              View full terms
             </a>
           </span>
         </span>

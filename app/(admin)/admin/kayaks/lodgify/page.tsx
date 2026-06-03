@@ -7,9 +7,7 @@ import {
   type LodgifyProperty,
   type NormalizedReservation,
 } from "@/lib/customer/lodgify";
-import { createSupabaseAdminClient } from "@/lib/supabaseAdmin";
-import { hasSupabaseAdminEnv } from "@/lib/supabaseEnv";
-import { PROPERTY_TO_CABIN } from "@/lib/types";
+import { PROPERTY_INCLUDED_KAYAKS, PROPERTY_TO_CABIN } from "@/lib/types";
 import { todayIso } from "@/lib/dates";
 
 export const dynamic = "force-dynamic";
@@ -57,26 +55,6 @@ async function fetchReservations(): Promise<ReservationsResult> {
   }
 }
 
-async function fetchUsedComplimentary(
-  reservationIds: string[]
-): Promise<Set<string>> {
-  if (reservationIds.length === 0) return new Set();
-  if (!hasSupabaseAdminEnv()) return new Set();
-
-  const supabase = createSupabaseAdminClient();
-  const { data } = await supabase
-    .from("bookings")
-    .select("lodgify_reservation_id")
-    .in("lodgify_reservation_id", reservationIds)
-    .eq("is_complimentary", true)
-    .in("status", ["pending", "confirmed", "completed"]);
-  return new Set(
-    (data ?? [])
-      .map((b) => b.lodgify_reservation_id)
-      .filter((x): x is string => typeof x === "string")
-  );
-}
-
 function formatDate(iso: string): string {
   const d = new Date(`${iso}T12:00:00Z`);
   return d.toLocaleDateString("en-US", {
@@ -89,7 +67,6 @@ function formatDate(iso: string): string {
 
 export default async function LodgifyTestPage() {
   const today = todayIso();
-  const isSupabaseConfigured = hasSupabaseAdminEnv();
   const [propertiesResult, reservationsResult] = await Promise.all([
     fetchProperties(),
     fetchReservations(),
@@ -103,14 +80,6 @@ export default async function LodgifyTestPage() {
         .sort((a, b) => a.arrivalIso.localeCompare(b.arrivalIso))
     : [];
 
-  const usedComplimentary = await fetchUsedComplimentary(
-    validReservations.map((r) => r.id)
-  );
-
-  const availableCount = isSupabaseConfigured
-    ? validReservations.filter((r) => !usedComplimentary.has(r.id)).length
-    : 0;
-
   return (
     <AdminRouteShell activeCategory="kayaks" activeTitle="Lodgify Reservations">
       <header className="rounded-2xl border border-[var(--color-border)] bg-white p-5 shadow-sm">
@@ -122,7 +91,7 @@ export default async function LodgifyTestPage() {
         </h1>
         <p className="mt-3 text-sm text-[var(--color-ink-muted)]">
           Active and upcoming Lodgify bookings across all five houses, with the
-          status of each reservation&apos;s complimentary kayak.
+          included watercraft assigned to each house.
         </p>
       </header>
 
@@ -146,9 +115,7 @@ export default async function LodgifyTestPage() {
                 Valid bookings ({validReservations.length})
               </h2>
               <p className="text-sm text-[var(--color-ink-muted)]">
-                {isSupabaseConfigured
-                  ? `${availableCount} complimentary kayak${availableCount === 1 ? "" : "s"} still available`
-                  : "Complimentary status needs Supabase"}
+                Rental fleet kayaks are paid separately.
               </p>
             </div>
 
@@ -166,14 +133,14 @@ export default async function LodgifyTestPage() {
                       <th className="px-4 py-3">Guest</th>
                       <th className="px-4 py-3">Arrival</th>
                       <th className="px-4 py-3">Departure</th>
-                      <th className="px-4 py-3">Free kayak</th>
+                      <th className="px-4 py-3">Included watercraft</th>
                     </tr>
                   </thead>
                   <tbody>
                     {validReservations.map((r) => {
                       const cabin =
                         PROPERTY_TO_CABIN[r.propertyId] ?? "Unknown";
-                      const used = usedComplimentary.has(r.id);
+                      const included = PROPERTY_INCLUDED_KAYAKS[r.propertyId];
                       return (
                         <tr
                           key={r.id}
@@ -193,19 +160,22 @@ export default async function LodgifyTestPage() {
                             {formatDate(r.departureIso)}
                           </td>
                           <td className="px-4 py-3">
-                            <span
-                              className={`inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider ${
-                                !isSupabaseConfigured || used
-                                  ? "border border-[var(--color-border)] bg-white text-[var(--color-ink-muted)]"
-                                  : "bg-[var(--color-accent)] text-white"
-                              }`}
-                            >
-                              {!isSupabaseConfigured
-                                ? "Unknown"
-                                : used
-                                  ? "Used"
-                                  : "Available"}
-                            </span>
+                            {included ? (
+                              <div>
+                                <p className="font-medium">
+                                  {included.itemName}
+                                </p>
+                                <p className="mt-1 text-xs text-[var(--color-ink-muted)]">
+                                  {included.code
+                                    ? `Code ${included.code}`
+                                    : included.note || "No kayak code"}
+                                </p>
+                              </div>
+                            ) : (
+                              <span className="text-[var(--color-ink-muted)]">
+                                Unknown
+                              </span>
+                            )}
                           </td>
                         </tr>
                       );

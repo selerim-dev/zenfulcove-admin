@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import Modal from "./Modal";
 import KayakIllustration from "./KayakIllustration";
 import BookingForm, {
@@ -18,13 +18,15 @@ function firstNameOf(value: string | null | undefined): string {
 
 export default function BookingModal({
   kayak,
+  kayaks,
   dateIso,
   open,
   onClose,
   initialReservation,
   initialLastName,
 }: {
-  kayak: Kayak | null;
+  kayak?: Kayak | null;
+  kayaks?: Kayak[] | null;
   dateIso: string | null;
   open: boolean;
   onClose: () => void;
@@ -33,6 +35,14 @@ export default function BookingModal({
 }) {
   const [success, setSuccess] = useState<BookingSuccess | null>(null);
   const [validation, setValidation] = useState<Validation>({ status: "idle" });
+  const selectedKayaks = useMemo(
+    () => (kayaks && kayaks.length > 0 ? kayaks : kayak ? [kayak] : []),
+    [kayak, kayaks]
+  );
+  const total = selectedKayaks.reduce(
+    (sum, item) => sum + Number(item.daily_rate_cents || 0),
+    0
+  );
 
   const handleValidation = useCallback((value: Validation) => {
     setValidation(value);
@@ -44,7 +54,6 @@ export default function BookingModal({
     onClose();
   }
 
-  const isFree = validation.status === "ok" && validation.isFree;
   const greetingName =
     validation.status === "ok" ? firstNameOf(validation.guestName) : "";
   const heading = greetingName
@@ -53,7 +62,7 @@ export default function BookingModal({
 
   return (
     <Modal open={open} onClose={handleClose} title="">
-      {kayak &&
+      {selectedKayaks.length > 0 &&
         dateIso &&
         (success ? (
           <BookingConfirmation booking={success} onDone={handleClose} />
@@ -67,53 +76,61 @@ export default function BookingModal({
                 {heading}
               </h2>
             </div>
-            <header className="flex items-center gap-4 rounded-2xl bg-[var(--color-bg)] p-4">
-              <div className="relative aspect-square h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-[var(--color-surface)]">
-                {kayak.image_url ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={kayak.image_url}
-                    alt={kayak.name}
-                    className="absolute inset-0 h-full w-full object-cover"
-                  />
-                ) : (
-                  <div className="flex h-full w-full items-center justify-center">
-                    <KayakIllustration
-                      color={kayak.color}
-                      capacity={kayak.capacity}
-                      className="h-3/5 w-auto"
-                    />
-                  </div>
-                )}
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="font-serif text-lg font-medium tracking-tight">
-                  {kayak.name}
-                </p>
-                <p className="text-xs text-[var(--color-ink-muted)]">
-                  {kayak.capacity === 1 ? "Solo" : `${kayak.capacity}-seat`}
-                  {kayak.length_feet ? ` · ${kayak.length_feet} ft` : ""}
-                </p>
-              </div>
-              <div className="text-right">
-                {isFree ? (
-                  <>
-                    <p className="text-xs font-medium text-[var(--color-ink-muted)] line-through">
-                      {formatMoney(kayak.daily_rate_cents)}/day
-                    </p>
-                    <p className="mt-0.5 text-sm font-semibold text-[var(--color-accent-strong)]">
-                      Free
-                    </p>
-                  </>
-                ) : (
-                  <p className="text-sm font-medium text-[var(--color-accent-strong)]">
-                    {formatMoney(kayak.daily_rate_cents)}/day
+            <header className="rounded-2xl bg-[var(--color-bg)] p-4">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="font-serif text-lg font-medium tracking-tight">
+                    {selectedKayaks.length === 1
+                      ? selectedKayaks[0].name
+                      : `${selectedKayaks.length} kayak rentals`}
                   </p>
-                )}
+                  <p className="mt-1 text-xs text-[var(--color-ink-muted)]">
+                    Paid rental fleet checkout
+                  </p>
+                </div>
+                <p className="shrink-0 text-sm font-medium text-[var(--color-accent-strong)]">
+                  {formatMoney(total)}/day
+                </p>
+              </div>
+              <div className="mt-4 space-y-3">
+                {selectedKayaks.map((item) => (
+                  <div key={item.id} className="flex items-center gap-3">
+                    <div className="relative aspect-square h-12 w-12 shrink-0 overflow-hidden rounded-xl bg-[var(--color-surface)]">
+                      {item.image_url ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={item.image_url}
+                          alt={item.name}
+                          className="absolute inset-0 h-full w-full object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center">
+                          <KayakIllustration
+                            color={item.color}
+                            capacity={item.capacity}
+                            className="h-3/5 w-auto"
+                          />
+                        </div>
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium">{item.name}</p>
+                      <p className="text-xs text-[var(--color-ink-muted)]">
+                        {item.capacity === 1
+                          ? "Solo"
+                          : `${item.capacity}-seat`}
+                        {item.length_feet ? ` · ${item.length_feet} ft` : ""}
+                      </p>
+                    </div>
+                    <p className="shrink-0 text-xs font-medium text-[var(--color-accent-strong)]">
+                      {formatMoney(item.daily_rate_cents)}
+                    </p>
+                  </div>
+                ))}
               </div>
             </header>
             <BookingForm
-              kayak={kayak}
+              kayaks={selectedKayaks}
               dateIso={dateIso}
               onSuccess={setSuccess}
               onValidationChange={handleValidation}

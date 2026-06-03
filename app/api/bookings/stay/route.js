@@ -15,8 +15,9 @@ import {
   findLocalFormSubmissionForBooking,
   listLocalFormSubmissions,
 } from "@/lib/local-forms";
+import { createSupabaseAdminClient } from "@/lib/supabaseAdmin";
 import { hasSupabaseAdminEnv } from "@/lib/supabaseEnv";
-import { PROPERTY_TO_CABIN } from "@/lib/types";
+import { PROPERTY_INCLUDED_KAYAKS, PROPERTY_TO_CABIN } from "@/lib/types";
 
 function clean(value) {
   return String(value || "").trim();
@@ -211,6 +212,52 @@ async function hasSubmittedInternalForm(bookingId, formSlug) {
   }
 }
 
+async function loadConfirmedKayakRentals(reservationId) {
+  if (!hasSupabaseAdminEnv() || !reservationId) return [];
+
+  const supabase = createSupabaseAdminClient();
+  const { data: bookings, error } = await supabase
+    .from("bookings")
+    .select(
+      "id, reference_code, kayak_id, starts_at, ends_at, amount_cents, status"
+    )
+    .eq("lodgify_reservation_id", reservationId)
+    .eq("status", "confirmed")
+    .gt("amount_cents", 0)
+    .order("starts_at", { ascending: true });
+
+  if (error || !Array.isArray(bookings) || bookings.length === 0) return [];
+
+  const kayakIds = Array.from(
+    new Set(bookings.map((booking) => clean(booking.kayak_id)).filter(Boolean))
+  );
+  const { data: kayaks, error: kayakError } = await supabase
+    .from("kayaks")
+    .select("id, name, code, capacity, length_feet, color")
+    .in("id", kayakIds);
+
+  if (kayakError) return [];
+
+  const kayaksById = new Map((kayaks || []).map((kayak) => [kayak.id, kayak]));
+
+  return bookings.map((booking) => {
+    const kayak = kayaksById.get(booking.kayak_id) || {};
+    return {
+      bookingId: booking.id,
+      referenceCode: booking.reference_code || "",
+      dateIso: toDateOnly(booking.starts_at),
+      startsAt: booking.starts_at,
+      endsAt: booking.ends_at,
+      amountCents: Number(booking.amount_cents || 0),
+      name: clean(kayak.name) || "Kayak rental",
+      code: clean(kayak.code),
+      capacity: Number(kayak.capacity || 0),
+      lengthFeet: kayak.length_feet ? Number(kayak.length_feet) : null,
+      color: clean(kayak.color),
+    };
+  });
+}
+
 function reservationFormUrlFor(formSlug, bookingId) {
   if (!formSlug) return "";
   const url = new URL(localFormUrl(formSlug));
@@ -367,6 +414,8 @@ export async function POST(request) {
 
   const accessCode = releasedStatus ? clean(release?.access_code) : "";
   const accessCodeReleased = Boolean(releasedStatus && accessCode);
+  const includedKayak = PROPERTY_INCLUDED_KAYAKS[Number(normalized.propertyId)] || null;
+  const rentalKayaks = await loadConfirmedKayakRentals(normalized.id);
   const templateData = buildAccessCodeTemplateData({
     booking: {
       ...booking,
@@ -426,6 +475,8 @@ export async function POST(request) {
       dedicatedKayakText: templateData.dedicatedKayakText,
       additionalKayakText: templateData.additionalKayakText,
       lifeJacketText: templateData.lifeJacketText,
+      includedKayak,
+      rentalKayaks,
       amenitiesText: templateData.amenitiesText,
       goodToKnowText: templateData.goodToKnowText,
       additionalRulesText: templateData.additionalRulesText,

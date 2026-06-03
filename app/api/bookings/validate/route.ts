@@ -1,6 +1,4 @@
 import { NextResponse } from "next/server";
-import { createSupabaseAdminClient } from "@/lib/supabaseAdmin";
-import { hasSupabaseAdminEnv } from "@/lib/supabaseEnv";
 import { fetchReservationById, LodgifyError } from "@/lib/customer/lodgify";
 import { PROPERTY_TO_CABIN } from "@/lib/types";
 import { todayIso } from "@/lib/dates";
@@ -99,21 +97,9 @@ export async function POST(req: Request) {
     );
   }
 
-  let isFree: boolean | null = null;
-  if (hasSupabaseAdminEnv()) {
-    const supabase = createSupabaseAdminClient();
-    const { count } = await supabase
-      .from("bookings")
-      .select("*", { count: "exact", head: true })
-      .eq("lodgify_reservation_id", reservation.id)
-      .in("status", ["pending", "confirmed", "completed"]);
-
-    isFree = (count ?? 0) === 0;
-  }
-
   return NextResponse.json({
     ok: true,
-    isFree,
+    isFree: false,
     cabin,
     guestName: reservation.guestName,
     arrivalIso: reservation.arrivalIso,

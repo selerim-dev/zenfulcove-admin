@@ -1,51 +1,121 @@
+import type Stripe from "stripe";
 import { createSupabaseAdminClient } from "@/lib/supabaseAdmin";
 import { hasSupabaseAdminEnv } from "@/lib/supabaseEnv";
-import { formatMoney, type Booking } from "@/lib/types";
+import { colorLabel, formatMoney, type Booking } from "@/lib/types";
 import { createStripeClient, hasStripeSecretEnv } from "@/lib/stripe";
+import {
+  bookingIdsFromStripeMetadata,
+  sendKayakRentalConfirmationMessage,
+} from "@/lib/kayakRentalMessages";
 import { notFound } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
-async function confirmCheckoutFromSuccessUrl(booking: Booking, sessionId: string) {
-  if (
-    !sessionId ||
-    !hasStripeSecretEnv() ||
-    booking.status !== "pending" ||
-    booking.stripe_checkout_session_id !== sessionId
-  ) {
-    return booking;
-  }
+type KayakForConfirmation = {
+  id: string;
+  name: string;
+  code: string | null;
+  color: string;
+  capacity: number;
+  length_feet: number | null;
+};
 
-  const stripe = createStripeClient();
-  const session = await stripe.checkout.sessions.retrieve(sessionId);
-  if (session.payment_status !== "paid") return booking;
+function paymentIntentId(session: Stripe.Checkout.Session) {
+  const paymentIntent = session.payment_intent;
+  return typeof paymentIntent === "string"
+    ? paymentIntent
+    : paymentIntent?.id ?? null;
+}
 
-  const paymentIntentId =
-    typeof session.payment_intent === "string"
-      ? session.payment_intent
-      : session.payment_intent?.id ?? null;
+function orderBookings(bookings: Booking[], bookingIds: string[]) {
+  const byId = new Map(bookings.map((booking) => [booking.id, booking]));
+  return bookingIds
+    .map((id) => byId.get(id))
+    .filter((booking): booking is Booking => Boolean(booking));
+}
 
+async function confirmCheckoutFromSuccessUrl(
+  primaryBooking: Booking,
+  sessionId: string
+) {
   const supabase = createSupabaseAdminClient();
-  const update: Record<string, string | null> = {
-    status: "confirmed",
-    stripe_payment_intent_id: paymentIntentId,
-  };
-  if (session.customer_details?.email) {
-    update.customer_email = session.customer_details.email;
-  }
-  if (session.customer_details?.phone) {
-    update.customer_phone = session.customer_details.phone;
+  let bookingIds = [primaryBooking.id];
+
+  if (
+    sessionId &&
+    hasStripeSecretEnv() &&
+    primaryBooking.stripe_checkout_session_id === sessionId
+  ) {
+    const stripe = createStripeClient();
+    const session = await stripe.checkout.sessions.retrieve(sessionId);
+    bookingIds = bookingIdsFromStripeMetadata(
+      session.metadata,
+      session.client_reference_id
+    );
+    if (bookingIds.length === 0) bookingIds = [primaryBooking.id];
+
+    if (session.payment_status === "paid") {
+      const update: Record<string, string | null> = {
+        status: "confirmed",
+        stripe_payment_intent_id: paymentIntentId(session),
+      };
+      if (session.customer_details?.email) {
+        update.customer_email = session.customer_details.email;
+      }
+      if (session.customer_details?.phone) {
+        update.customer_phone = session.customer_details.phone;
+      }
+
+      const { data: updated } = await supabase
+        .from("bookings")
+        .update(update)
+        .in("id", bookingIds)
+        .eq("status", "pending")
+        .select("id");
+
+      if ((updated ?? []).length > 0) {
+        await sendKayakRentalConfirmationMessage(supabase, bookingIds).catch(
+          (err) => {
+            console.error(
+              `Could not send Lodgify kayak rental message for ${sessionId}:`,
+              err
+            );
+          }
+        );
+      }
+    }
   }
 
   const { data } = await supabase
     .from("bookings")
-    .update(update)
-    .eq("id", booking.id)
-    .eq("stripe_checkout_session_id", sessionId)
     .select("*")
-    .maybeSingle();
+    .in("id", bookingIds);
 
-  return (data as Booking | null) ?? booking;
+  const bookings = orderBookings((data as Booking[] | null) || [], bookingIds);
+  return bookings.length > 0 ? bookings : [primaryBooking];
+}
+
+function describeKayak(kayak: KayakForConfirmation) {
+  const details = [colorLabel(kayak.color)];
+  if (kayak.length_feet) details.push(`${kayak.length_feet} ft`);
+  details.push(
+    `${kayak.capacity} ${kayak.capacity === 1 ? "paddler" : "paddlers"}`
+  );
+  return `${kayak.name} · ${details.join(" · ")}`;
+}
+
+function statusCopy(bookings: Booking[]) {
+  const allConfirmed = bookings.every((booking) => booking.status === "confirmed");
+  const anyPending = bookings.some((booking) => booking.status === "pending");
+  const allPaid = bookings.every((booking) => Number(booking.amount_cents) > 0);
+
+  if (allConfirmed && allPaid) {
+    return "Payment received. Your kayak rental is confirmed.";
+  }
+  if (anyPending) {
+    return "Payment is still pending. If you already paid, refresh this page in a moment.";
+  }
+  return `This rental is ${bookings[0]?.status || "not active"}.`;
 }
 
 export default async function ConfirmationPage({
@@ -75,49 +145,80 @@ export default async function ConfirmationPage({
     .eq("id", bookingId)
     .maybeSingle();
 
-  let booking = data as Booking | null;
-  if (!booking) notFound();
-  booking = await confirmCheckoutFromSuccessUrl(booking, sessionId);
+  const primaryBooking = data as Booking | null;
+  if (!primaryBooking) notFound();
+  const bookings = await confirmCheckoutFromSuccessUrl(primaryBooking, sessionId);
+  const kayakIds = bookings.map((booking) => booking.kayak_id);
 
-  const { data: kayak } = await supabase
+  const { data: kayakRows } = await supabase
     .from("kayaks")
-    .select("name, code")
-    .eq("id", booking.kayak_id)
-    .maybeSingle();
+    .select("id, name, code, color, capacity, length_feet")
+    .in("id", kayakIds);
 
-  const isPaidBooking = booking.amount_cents > 0;
-  const statusCopy =
-    booking.status === "confirmed"
-      ? isPaidBooking
-        ? "Payment received. Your rental is confirmed."
-        : "Your included rental is confirmed."
-      : booking.status === "pending"
-        ? "Payment is still pending. If you already paid, refresh this page in a moment."
-        : `This rental is ${booking.status}.`;
+  const kayaksById = new Map(
+    ((kayakRows as KayakForConfirmation[] | null) || []).map((kayak) => [
+      kayak.id,
+      kayak,
+    ])
+  );
+  const total = bookings.reduce(
+    (sum, booking) => sum + Number(booking.amount_cents || 0),
+    0
+  );
+  const first = bookings[0];
 
   return (
-    <div className="mx-auto max-w-xl space-y-6 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-8">
+    <div className="mx-auto max-w-2xl space-y-6 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-8">
       <h1 className="text-2xl font-semibold tracking-tight">
         Reservation received
       </h1>
       <p className="text-sm text-[var(--color-ink-muted)]">
-        <strong className="text-[var(--color-ink)]">{statusCopy}</strong>
+        <strong className="text-[var(--color-ink)]">{statusCopy(bookings)}</strong>
       </p>
       <dl className="grid gap-3 text-sm">
-        <Row label="Booking ID" value={booking.id} />
+        <Row label="Booking ID" value={first.id} />
         <Row
           label="Window"
-          value={`${new Date(booking.starts_at).toLocaleString()} → ${new Date(
-            booking.ends_at
+          value={`${new Date(first.starts_at).toLocaleString()} -> ${new Date(
+            first.ends_at
           ).toLocaleString()}`}
         />
-        <Row label="Rate" value={booking.rate_type} />
-        <Row label="Total" value={formatMoney(booking.amount_cents)} />
-        {kayak?.name ? <Row label="Rental" value={kayak.name} /> : null}
-        {booking.status === "confirmed" && kayak?.code ? (
-          <Row label="Access Code" value={kayak.code} />
-        ) : null}
+        <Row label="Rate" value={first.rate_type} />
+        <Row label="Total" value={formatMoney(total)} />
       </dl>
+
+      <div className="overflow-hidden rounded-xl border border-[var(--color-border)] bg-white">
+        {bookings.map((booking) => {
+          const kayak = kayaksById.get(booking.kayak_id);
+          return (
+            <div
+              key={booking.id}
+              className="border-b border-[var(--color-border)] p-4 last:border-b-0"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="font-medium text-[var(--color-ink)]">
+                    {kayak ? describeKayak(kayak) : "Kayak rental"}
+                  </p>
+                  <p className="mt-1 text-xs text-[var(--color-ink-muted)]">
+                    Reference #{booking.reference_code || booking.id}
+                  </p>
+                </div>
+                {booking.status === "confirmed" && kayak?.code ? (
+                  <div className="text-right">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--color-ink-muted)]">
+                      Lock code
+                    </p>
+                    <p className="font-mono text-xl font-semibold tracking-[0.18em]">
+                      {kayak.code}
+                    </p>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

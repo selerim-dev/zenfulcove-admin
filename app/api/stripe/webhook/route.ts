@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { createSupabaseAdminClient } from "@/lib/supabaseAdmin";
 import { createStripeClient, getStripeWebhookSecret } from "@/lib/stripe";
+import {
+  bookingIdsFromStripeMetadata,
+  sendKayakRentalConfirmationMessage,
+} from "@/lib/kayakRentalMessages";
 
 export const runtime = "nodejs";
 
@@ -13,9 +17,11 @@ function paymentIntentId(session: Stripe.Checkout.Session) {
 }
 
 async function confirmPaidSession(session: Stripe.Checkout.Session) {
-  const bookingId =
-    session.metadata?.bookingId || session.client_reference_id || "";
-  if (!bookingId || session.payment_status !== "paid") return;
+  const bookingIds = bookingIdsFromStripeMetadata(
+    session.metadata,
+    session.client_reference_id
+  );
+  if (bookingIds.length === 0 || session.payment_status !== "paid") return;
 
   const supabase = createSupabaseAdminClient();
   const update: Record<string, string | null> = {
@@ -30,17 +36,36 @@ async function confirmPaidSession(session: Stripe.Checkout.Session) {
     update.customer_phone = session.customer_details.phone;
   }
 
-  await supabase
+  const { data: updated, error } = await supabase
     .from("bookings")
     .update(update)
-    .eq("id", bookingId)
-    .eq("stripe_checkout_session_id", session.id);
+    .in("id", bookingIds)
+    .eq("status", "pending")
+    .select("id");
+
+  if (error) {
+    console.error(`Could not confirm kayak checkout ${session.id}:`, error);
+    return;
+  }
+
+  if ((updated ?? []).length > 0) {
+    await sendKayakRentalConfirmationMessage(supabase, bookingIds).catch(
+      (err) => {
+        console.error(
+          `Could not send Lodgify kayak rental message for ${session.id}:`,
+          err
+        );
+      }
+    );
+  }
 }
 
 async function cancelExpiredSession(session: Stripe.Checkout.Session) {
-  const bookingId =
-    session.metadata?.bookingId || session.client_reference_id || "";
-  if (!bookingId) return;
+  const bookingIds = bookingIdsFromStripeMetadata(
+    session.metadata,
+    session.client_reference_id
+  );
+  if (bookingIds.length === 0) return;
 
   const supabase = createSupabaseAdminClient();
   await supabase
@@ -49,8 +74,7 @@ async function cancelExpiredSession(session: Stripe.Checkout.Session) {
       status: "cancelled",
       notes: "Stripe checkout expired before payment was completed.",
     })
-    .eq("id", bookingId)
-    .eq("stripe_checkout_session_id", session.id)
+    .in("id", bookingIds)
     .eq("status", "pending");
 }
 

@@ -4,6 +4,10 @@ import { createSupabaseAdminClient } from "@/lib/supabaseAdmin";
 import { hasSupabaseAdminEnv } from "@/lib/supabaseEnv";
 import { createStripeClient, hasStripeSecretEnv } from "@/lib/stripe";
 import { verifyBookingCancelToken } from "@/lib/bookingCancelToken";
+import {
+  bookingIdsFromStripeMetadata,
+  sendKayakRentalConfirmationMessage,
+} from "@/lib/kayakRentalMessages";
 
 export const dynamic = "force-dynamic";
 
@@ -112,6 +116,10 @@ export async function GET(
     );
 
     if (stripeSession?.payment_status === "paid") {
+      const bookingIds = bookingIdsFromStripeMetadata(
+        stripeSession.metadata,
+        typedBooking.id
+      );
       await supabase
         .from("bookings")
         .update({
@@ -120,8 +128,18 @@ export async function GET(
           customer_email: stripeSession.customer_details?.email || null,
           customer_phone: stripeSession.customer_details?.phone || null,
         })
-        .eq("id", typedBooking.id)
-        .eq("stripe_checkout_session_id", stripeSession.id);
+        .in("id", bookingIds.length > 0 ? bookingIds : [typedBooking.id])
+        .eq("status", "pending");
+
+      await sendKayakRentalConfirmationMessage(
+        supabase,
+        bookingIds.length > 0 ? bookingIds : [typedBooking.id]
+      ).catch((err) => {
+        console.error(
+          `Could not send Lodgify kayak rental message for ${stripeSession.id}:`,
+          err
+        );
+      });
 
       const confirmationUrl = new URL(
         `/book/confirmation/${typedBooking.id}`,
@@ -137,7 +155,10 @@ export async function GET(
         status: "cancelled",
         notes: "Customer cancelled Stripe checkout before payment was completed.",
       })
-      .eq("id", typedBooking.id)
+      .in(
+        "id",
+        bookingIdsFromStripeMetadata(stripeSession?.metadata, typedBooking.id)
+      )
       .eq("status", "pending");
   }
 
