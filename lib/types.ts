@@ -108,6 +108,47 @@ export const PROPERTY_INCLUDED_KAYAKS: Record<number, IncludedStayKayak> = {
 export const STAY_OPTIONS = Object.values(PROPERTY_TO_CABIN);
 export type StayOption = string;
 
+export type CommerceProduct = {
+  id: string;
+  title: string;
+  sku: string;
+  description: string;
+  price_cents: number;
+  image_urls: string[];
+  is_active: boolean;
+  display_order: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CommercePurchaseStatus = "pending" | "paid" | "cancelled";
+
+export type CommercePurchaseItem = {
+  product_id: string;
+  title: string;
+  sku: string;
+  quantity: number;
+  unit_amount_cents: number;
+  amount_cents: number;
+  image_url: string | null;
+};
+
+export type CommercePurchase = {
+  id: string;
+  reservation_id: string;
+  customer_name: string;
+  stay_location: string | null;
+  status: CommercePurchaseStatus;
+  amount_cents: number;
+  items: CommercePurchaseItem[];
+  stripe_checkout_session_id: string | null;
+  stripe_payment_intent_id: string | null;
+  customer_email: string | null;
+  customer_phone: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export const COLOR_OPTIONS: { value: string; label: string }[] = [
   { value: "#dc2626", label: "Red" },
   { value: "#ea580c", label: "Orange" },

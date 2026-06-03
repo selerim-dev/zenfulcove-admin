@@ -85,6 +85,27 @@ const CATEGORIES = [
     ),
   },
   {
+    id: "products",
+    label: "Products",
+    href: "/admin/products",
+    icon: (
+      <svg
+        width="20"
+        height="20"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M6 2l1.5 4h9L18 2" />
+        <path d="M5 6h14l-1 16H6L5 6z" />
+        <path d="M9 10a3 3 0 006 0" />
+      </svg>
+    ),
+  },
+  {
     id: "promotions",
     label: "One-Off Promotions",
     icon: (
@@ -219,7 +240,7 @@ const GROUPS = [
       "event-popup",
     ],
   },
-  { label: "Customer Portal", ids: ["forms", "kayaks"] },
+  { label: "Customer Portal", ids: ["forms", "kayaks", "products"] },
 ];
 
 const CATEGORY_BY_ID = Object.fromEntries(

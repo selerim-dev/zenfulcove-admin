@@ -34,6 +34,16 @@ export function stayMessagesHref(reservation: string, lastName = "") {
   return `/book/messages?${params.toString()}`;
 }
 
+export function specialPackagesHref(reservation: string, lastName = "") {
+  const code = clean(reservation);
+  const name = clean(lastName);
+  if (!code) return "/special-packages";
+
+  const params = new URLSearchParams({ reservation: code });
+  if (name) params.set("lastName", name);
+  return `/special-packages?${params.toString()}`;
+}
+
 export function readGuestBookingSession(): GuestBookingSession | null {
   if (typeof window === "undefined") return null;
 
@@ -84,4 +94,11 @@ export function savedStayMessagesHref() {
   return session
     ? stayMessagesHref(session.reservation, session.lastName)
     : "/book/messages";
+}
+
+export function savedSpecialPackagesHref() {
+  const session = readGuestBookingSession();
+  return session
+    ? specialPackagesHref(session.reservation, session.lastName)
+    : "/special-packages";
 }

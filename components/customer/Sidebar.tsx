@@ -2,7 +2,11 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { savedStayHref, savedStayMessagesHref } from "./bookingSession";
+import {
+  savedSpecialPackagesHref,
+  savedStayHref,
+  savedStayMessagesHref,
+} from "./bookingSession";
 
 type CustomerPortalNavigation = {
   rentals: boolean;
@@ -197,6 +201,7 @@ export default function Sidebar({
   function targetHrefFor(item: (typeof items)[number]) {
     if (item.key === "rentals") return savedStayHref();
     if (item.key === "messages") return savedStayMessagesHref();
+    if (item.key === "packages") return savedSpecialPackagesHref();
     return item.href;
   }
 

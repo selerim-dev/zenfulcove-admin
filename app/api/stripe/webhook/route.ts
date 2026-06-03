@@ -3,6 +3,10 @@ import type Stripe from "stripe";
 import { createSupabaseAdminClient } from "@/lib/supabaseAdmin";
 import { createStripeClient, getStripeWebhookSecret } from "@/lib/stripe";
 import {
+  getCommercePurchase,
+  saveCommercePurchase,
+} from "@/lib/kv";
+import {
   bookingIdsFromStripeMetadata,
   sendKayakRentalConfirmationMessage,
 } from "@/lib/kayakRentalMessages";
@@ -78,6 +82,42 @@ async function cancelExpiredSession(session: Stripe.Checkout.Session) {
     .eq("status", "pending");
 }
 
+async function confirmCommercePurchase(session: Stripe.Checkout.Session) {
+  const purchaseId =
+    session.metadata?.purchaseId || session.client_reference_id || "";
+  if (!purchaseId || session.payment_status !== "paid") return;
+
+  const purchase = await getCommercePurchase(purchaseId);
+  if (!purchase || purchase.status === "paid") return;
+
+  await saveCommercePurchase({
+    ...purchase,
+    status: "paid",
+    stripe_checkout_session_id: session.id,
+    stripe_payment_intent_id: paymentIntentId(session),
+    customer_email: session.customer_details?.email || purchase.customer_email,
+    customer_phone: session.customer_details?.phone || purchase.customer_phone,
+    updated_at: new Date().toISOString(),
+  });
+}
+
+async function cancelCommercePurchase(session: Stripe.Checkout.Session) {
+  const purchaseId =
+    session.metadata?.purchaseId || session.client_reference_id || "";
+  if (!purchaseId) return;
+
+  const purchase = await getCommercePurchase(purchaseId);
+  if (!purchase || purchase.status !== "pending") return;
+
+  await saveCommercePurchase({
+    ...purchase,
+    status: "cancelled",
+    stripe_checkout_session_id:
+      session.id || purchase.stripe_checkout_session_id,
+    updated_at: new Date().toISOString(),
+  });
+}
+
 export async function POST(request: Request) {
   const stripe = createStripeClient();
   const signature = request.headers.get("stripe-signature");
@@ -109,14 +149,24 @@ export async function POST(request: Request) {
     event.type === "checkout.session.completed" ||
     event.type === "checkout.session.async_payment_succeeded"
   ) {
-    await confirmPaidSession(event.data.object as Stripe.Checkout.Session);
+    const session = event.data.object as Stripe.Checkout.Session;
+    if (session.metadata?.kind === "commerce_purchase") {
+      await confirmCommercePurchase(session);
+    } else {
+      await confirmPaidSession(session);
+    }
   }
 
   if (
     event.type === "checkout.session.expired" ||
     event.type === "checkout.session.async_payment_failed"
   ) {
-    await cancelExpiredSession(event.data.object as Stripe.Checkout.Session);
+    const session = event.data.object as Stripe.Checkout.Session;
+    if (session.metadata?.kind === "commerce_purchase") {
+      await cancelCommercePurchase(session);
+    } else {
+      await cancelExpiredSession(session);
+    }
   }
 
   return NextResponse.json({ received: true });
