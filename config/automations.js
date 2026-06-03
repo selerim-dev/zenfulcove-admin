@@ -28,7 +28,7 @@ export const automationConfig = {
   waiverReminders: {
     enabled: true,
     propertyIds: [], // Lodgify property IDs to restrict to (e.g. Zenfulcove Glamping only). Empty = all properties.
-    formSource: "jotform", // "jotform" sends legacy SendGrid templates. "internal" posts Lodgify messages with the internal form link.
+    formSource: "internal", // "internal" posts Lodgify messages with the internal form link. "jotform" sends legacy SendGrid templates.
     localFormSlug: "welcome-to-zenfulcove", // Internal Zenfulcove Glamping form slug. Used only when formSource is "internal".
     jotformFormId: "251834442091050", // Legacy Jotform waiver form ID fallback during migration.
     emails: [
@@ -63,6 +63,8 @@ export const automationConfig = {
     missingFormMessageTemplate: "",
     lodgifyMessageType: "Owner",
     lodgifySendNotification: true,
+    lodgifyPlainTextSources: ["BookingCom"], // Source keys that should avoid Lodgify HTML formatting.
+    lodgifyMaskedLinkSources: ["BookingCom"], // Source keys that should receive readable, non-clickable URLs.
     localFormSlug: "welcome-to-zenfulcove",
     jotformFormId: "251834442091050", // fallback while historical Jotform forms are still active
     propertyIds: [],

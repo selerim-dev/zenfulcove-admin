@@ -40,6 +40,7 @@ import {
   ineligibleBookingStatusMessage,
   isDelayedAccessCodeBooking,
   isBookedLodgifyStatus,
+  lodgifyBookingSource,
   lodgifyBookingStatus,
   lodgifyPropertyName,
   sendAccessCodeForBooking,
@@ -777,16 +778,24 @@ export async function runWaiverReminders(automationConfig, dryRunOverride) {
         const bookingId = String(booking.id);
         const propertyName = lodgifyPropertyName(booking) || "Property";
         const bookingStatus = lodgifyBookingStatus(booking);
+        const bookingSource = lodgifyBookingSource(booking);
 
         if (!isBookedLodgifyStatus(bookingStatus)) {
           logs.push({
             timestamp: new Date().toISOString(),
             automation: automationName,
             property: propertyName,
-            action: ineligibleBookingStatusMessage(bookingId, bookingStatus),
+            action: ineligibleBookingStatusMessage(
+              bookingId,
+              bookingStatus,
+              bookingSource.label
+            ),
             status: "skipped",
             bookingId,
             bookingStatus: bookingStatus || "unknown",
+            ...(bookingSource.label ? { bookingChannel: bookingSource.label } : {}),
+            ...(bookingSource.source ? { bookingSource: bookingSource.source } : {}),
+            ...(bookingSource.sourceText ? { bookingSourceText: bookingSource.sourceText } : {}),
           });
           continue;
         }
@@ -820,6 +829,13 @@ export async function runWaiverReminders(automationConfig, dryRunOverride) {
               ...(reminderResult.deliveryChannel ? { deliveryChannel: reminderResult.deliveryChannel } : {}),
               ...(reminderResult.templateId ? { templateId: reminderResult.templateId } : {}),
               ...(reminderResult.bookingId ? { bookingId: reminderResult.bookingId } : {}),
+              ...(reminderResult.bookingChannel ? { bookingChannel: reminderResult.bookingChannel } : {}),
+              ...(reminderResult.bookingSource ? { bookingSource: reminderResult.bookingSource } : {}),
+              ...(reminderResult.bookingSourceText ? { bookingSourceText: reminderResult.bookingSourceText } : {}),
+              ...(reminderResult.messageFormat ? { messageFormat: reminderResult.messageFormat } : {}),
+              ...(reminderResult.messageChars ? { messageChars: reminderResult.messageChars } : {}),
+              ...(reminderResult.messageLinkHosts ? { messageLinkHosts: reminderResult.messageLinkHosts } : {}),
+              ...(reminderResult.messageLinksMasked ? { messageLinksMasked: reminderResult.messageLinksMasked } : {}),
               ...(reminderResult.templateData ? { templateData: reminderResult.templateData } : {}),
             });
           } else {
@@ -1037,6 +1053,7 @@ export async function runAccessCodeRelease(automationConfig, dryRunOverride, opt
     const propertyName = lodgifyPropertyName(booking, {
       propertyName: contact.propertyName,
     }) || "Property";
+    const bookingSource = lodgifyBookingSource(booking);
     const delayedAccess = isDelayedAccessCodeBooking({
       booking,
       automationConfig,
@@ -1051,10 +1068,17 @@ export async function runAccessCodeRelease(automationConfig, dryRunOverride, opt
         timestamp: new Date().toISOString(),
         automation: automationName,
         property: propertyName,
-        action: ineligibleBookingStatusMessage(bookingId, contact.bookingStatus),
+        action: ineligibleBookingStatusMessage(
+          bookingId,
+          contact.bookingStatus,
+          bookingSource.label
+        ),
         status: "skipped",
         bookingId,
         bookingStatus: contact.bookingStatus || "unknown",
+        ...(bookingSource.label ? { bookingChannel: bookingSource.label } : {}),
+        ...(bookingSource.source ? { bookingSource: bookingSource.source } : {}),
+        ...(bookingSource.sourceText ? { bookingSourceText: bookingSource.sourceText } : {}),
       });
       continue;
     }
@@ -1130,6 +1154,13 @@ export async function runAccessCodeRelease(automationConfig, dryRunOverride, opt
       ...(sendResult.decision ? { decision: sendResult.decision } : {}),
       ...(sendResult.deliveryChannel ? { deliveryChannel: sendResult.deliveryChannel } : {}),
       ...(sendResult.bookingId ? { bookingId: sendResult.bookingId } : {}),
+      ...(sendResult.bookingChannel ? { bookingChannel: sendResult.bookingChannel } : {}),
+      ...(sendResult.bookingSource ? { bookingSource: sendResult.bookingSource } : {}),
+      ...(sendResult.bookingSourceText ? { bookingSourceText: sendResult.bookingSourceText } : {}),
+      ...(sendResult.messageFormat ? { messageFormat: sendResult.messageFormat } : {}),
+      ...(sendResult.messageChars ? { messageChars: sendResult.messageChars } : {}),
+      ...(sendResult.messageLinkHosts ? { messageLinkHosts: sendResult.messageLinkHosts } : {}),
+      ...(sendResult.messageLinksMasked ? { messageLinksMasked: sendResult.messageLinksMasked } : {}),
       ...(sendResult.templateData ? { templateData: sendResult.templateData } : {}),
     });
   }
@@ -1314,15 +1345,23 @@ export async function runJervisAccessCodeRetries(automationConfig, dryRunOverrid
     }
 
     const liveStatus = lodgifyBookingStatus(liveBooking);
+    const liveSource = lodgifyBookingSource(liveBooking);
     if (!isBookedLodgifyStatus(liveStatus)) {
       logs.push({
         timestamp: new Date().toISOString(),
         automation: automationName,
         property: propertyName,
-        action: ineligibleBookingStatusMessage(bookingId, liveStatus),
+        action: ineligibleBookingStatusMessage(
+          bookingId,
+          liveStatus,
+          liveSource.label
+        ),
         status: "skipped",
         bookingId,
         bookingStatus: liveStatus || "unknown",
+        ...(liveSource.label ? { bookingChannel: liveSource.label } : {}),
+        ...(liveSource.source ? { bookingSource: liveSource.source } : {}),
+        ...(liveSource.sourceText ? { bookingSourceText: liveSource.sourceText } : {}),
       });
       continue;
     }
@@ -1347,6 +1386,13 @@ export async function runJervisAccessCodeRetries(automationConfig, dryRunOverrid
       ...(sendResult.decision ? { decision: sendResult.decision } : {}),
       ...(sendResult.deliveryChannel ? { deliveryChannel: sendResult.deliveryChannel } : {}),
       ...(sendResult.bookingId ? { bookingId: sendResult.bookingId } : { bookingId }),
+      ...(sendResult.bookingChannel ? { bookingChannel: sendResult.bookingChannel } : {}),
+      ...(sendResult.bookingSource ? { bookingSource: sendResult.bookingSource } : {}),
+      ...(sendResult.bookingSourceText ? { bookingSourceText: sendResult.bookingSourceText } : {}),
+      ...(sendResult.messageFormat ? { messageFormat: sendResult.messageFormat } : {}),
+      ...(sendResult.messageChars ? { messageChars: sendResult.messageChars } : {}),
+      ...(sendResult.messageLinkHosts ? { messageLinkHosts: sendResult.messageLinkHosts } : {}),
+      ...(sendResult.messageLinksMasked ? { messageLinksMasked: sendResult.messageLinksMasked } : {}),
       ...(sendResult.templateData ? { templateData: sendResult.templateData } : {}),
     });
   }

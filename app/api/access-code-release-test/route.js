@@ -75,6 +75,13 @@ function resultLog(sendResult, property) {
     ...(sendResult.deliveryChannel ? { deliveryChannel: sendResult.deliveryChannel } : {}),
     ...(sendResult.templateId ? { templateId: sendResult.templateId } : {}),
     ...(sendResult.bookingId ? { bookingId: sendResult.bookingId } : {}),
+    ...(sendResult.bookingChannel ? { bookingChannel: sendResult.bookingChannel } : {}),
+    ...(sendResult.bookingSource ? { bookingSource: sendResult.bookingSource } : {}),
+    ...(sendResult.bookingSourceText ? { bookingSourceText: sendResult.bookingSourceText } : {}),
+    ...(sendResult.messageFormat ? { messageFormat: sendResult.messageFormat } : {}),
+    ...(sendResult.messageChars ? { messageChars: sendResult.messageChars } : {}),
+    ...(sendResult.messageLinkHosts ? { messageLinkHosts: sendResult.messageLinkHosts } : {}),
+    ...(sendResult.messageLinksMasked ? { messageLinksMasked: sendResult.messageLinksMasked } : {}),
     ...(sendResult.templateData ? { templateData: sendResult.templateData } : {}),
   };
 }
