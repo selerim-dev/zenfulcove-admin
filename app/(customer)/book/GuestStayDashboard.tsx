@@ -382,18 +382,11 @@ function KayakStaySummary({
 }) {
   if (!included && rentals.length === 0) return null;
 
-  return (
-    <StayCard>
-      <div>
-        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--color-accent)]">
-          Kayaks
-        </p>
-        <h2 className="mt-1 font-serif text-2xl font-medium tracking-tight">
-          Stay and rental access
-        </h2>
-      </div>
+  const twoColumn = Boolean(included);
 
-      <div className="mt-5 grid gap-5 md:grid-cols-2">
+  return (
+    <SectionCard eyebrow="Kayaks" title="Stay and rental access">
+      <div className={`grid gap-6 ${twoColumn ? "md:grid-cols-2" : ""}`}>
         {included ? (
           <div>
             <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--color-ink-muted)]">
@@ -462,7 +455,7 @@ function KayakStaySummary({
           )}
         </div>
       </div>
-    </StayCard>
+    </SectionCard>
   );
 }
 
