@@ -101,11 +101,13 @@ export default function BookingModal({
                       : `${selectedKayaks.length} kayak rentals`}
                   </p>
                   <p className="mt-1 text-xs text-[var(--color-ink-muted)]">
-                    Paid rental fleet checkout
+                    {rentalDays === 1
+                      ? "Paid rental fleet checkout"
+                      : `Paid rental fleet checkout · ${rentalDays} days`}
                   </p>
                 </div>
                 <p className="shrink-0 text-sm font-medium text-[var(--color-accent-strong)]">
-                  {formatMoney(total)}/day
+                  {formatMoney(total)}
                 </p>
               </div>
               <div className="mt-4 space-y-3">
@@ -139,7 +141,7 @@ export default function BookingModal({
                       </p>
                     </div>
                     <p className="shrink-0 text-xs font-medium text-[var(--color-accent-strong)]">
-                      {formatMoney(item.daily_rate_cents)}
+                      {formatMoney(item.daily_rate_cents)}/day
                     </p>
                   </div>
                 ))}
