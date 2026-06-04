@@ -17,7 +17,13 @@ import {
 import { maybeSendSameDayAccessCodeForSubmission } from "@/lib/access-code-messages";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const ACCESS_CODE_BACKGROUND_RETRY_DELAYS_MS = [0, 20_000, 45_000, 90_000];
+const ACCESS_CODE_BACKGROUND_RETRY_DELAYS_MS = [
+  0,
+  20_000,
+  45_000,
+  90_000,
+  120_000,
+];
 
 type UploadedInput = {
   fieldName: string;
