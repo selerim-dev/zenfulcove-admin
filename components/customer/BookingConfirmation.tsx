@@ -35,7 +35,10 @@ export default function BookingConfirmation({
     booking.lockboxCodes?.find((item) => item.code)?.code ??
     booking.lockboxCode ??
     "—";
-  const dateLabel = formatDate(booking.dateIso);
+  const dateLabel =
+    (booking.days ?? 1) > 1 && booking.endDateIso
+      ? `${formatDate(booking.dateIso)} → ${formatDate(booking.endDateIso)} (${booking.days} days)`
+      : formatDate(booking.dateIso);
   const paddlers = kayaks.reduce((sum, kayak) => sum + kayak.capacity, 0);
   const jacketLabel = paddlers === 1 ? "1 jacket" : `${paddlers} jackets`;
   const total =

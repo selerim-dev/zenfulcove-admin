@@ -10,6 +10,7 @@ import {
   maybeSendSameDayAccessCodeForSubmission,
 } from "@/lib/access-code-messages";
 import { getBookingById, getProperties } from "@/lib/lodgify";
+import { inclusiveDays } from "@/lib/dates";
 import {
   bookingHasLocalFormSubmission,
   findLocalFormSubmissionForBooking,
@@ -242,10 +243,14 @@ async function loadConfirmedKayakRentals(reservationId) {
 
   return bookings.map((booking) => {
     const kayak = kayaksById.get(booking.kayak_id) || {};
+    const dateIso = toDateOnly(booking.starts_at);
+    const endDateIso = toDateOnly(booking.ends_at);
     return {
       bookingId: booking.id,
       referenceCode: booking.reference_code || "",
-      dateIso: toDateOnly(booking.starts_at),
+      dateIso,
+      endDateIso,
+      days: inclusiveDays(dateIso, endDateIso),
       startsAt: booking.starts_at,
       endsAt: booking.ends_at,
       amountCents: Number(booking.amount_cents || 0),

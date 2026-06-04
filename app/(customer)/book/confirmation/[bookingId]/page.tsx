@@ -2,6 +2,7 @@ import type Stripe from "stripe";
 import { createSupabaseAdminClient } from "@/lib/supabaseAdmin";
 import { hasSupabaseAdminEnv } from "@/lib/supabaseEnv";
 import { colorLabel, formatMoney, type Booking } from "@/lib/types";
+import { inclusiveDays, PROPERTY_TIMEZONE } from "@/lib/dates";
 import { createStripeClient, hasStripeSecretEnv } from "@/lib/stripe";
 import {
   bookingIdsFromStripeMetadata,
@@ -104,6 +105,21 @@ function describeKayak(kayak: KayakForConfirmation) {
   return `${kayak.name} · ${details.join(" · ")}`;
 }
 
+function rentalDatesLabel(startsAt: string, endsAt: string): string {
+  const fmt = (iso: string) =>
+    new Date(iso).toLocaleDateString("en-US", {
+      timeZone: PROPERTY_TIMEZONE,
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+  const days = inclusiveDays(startsAt.slice(0, 10), endsAt.slice(0, 10));
+  return days > 1
+    ? `${fmt(startsAt)} → ${fmt(endsAt)} · ${days} days`
+    : fmt(startsAt);
+}
+
 function statusCopy(bookings: Booking[]) {
   const allConfirmed = bookings.every((booking) => booking.status === "confirmed");
   const anyPending = bookings.some((booking) => booking.status === "pending");
@@ -178,10 +194,8 @@ export default async function ConfirmationPage({
       <dl className="grid gap-3 text-sm">
         <Row label="Booking ID" value={first.id} />
         <Row
-          label="Window"
-          value={`${new Date(first.starts_at).toLocaleString()} -> ${new Date(
-            first.ends_at
-          ).toLocaleString()}`}
+          label="Dates"
+          value={rentalDatesLabel(first.starts_at, first.ends_at)}
         />
         <Row label="Rate" value={first.rate_type} />
         <Row label="Total" value={formatMoney(total)} />

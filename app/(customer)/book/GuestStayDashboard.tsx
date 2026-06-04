@@ -52,6 +52,8 @@ type StayResponse = {
       bookingId: string;
       referenceCode: string;
       dateIso: string;
+      endDateIso?: string;
+      days?: number;
       startsAt: string;
       endsAt: string;
       amountCents: number;
@@ -425,6 +427,13 @@ function KayakStaySummary({
                 ]
                   .filter(Boolean)
                   .join(" · ");
+                const isMultiDay =
+                  (rental.days ?? 1) > 1 && Boolean(rental.endDateIso);
+                const dateLabel = isMultiDay
+                  ? `${formatDate(rental.dateIso)} – ${formatDate(
+                      rental.endDateIso as string
+                    )} · ${rental.days} days`
+                  : formatDate(rental.dateIso);
                 return (
                   <div key={rental.bookingId} className="py-3 first:pt-0">
                     <div className="flex items-start justify-between gap-4">
@@ -433,7 +442,7 @@ function KayakStaySummary({
                           {rental.name}
                         </p>
                         <p className="mt-1 text-xs text-[var(--color-ink-muted)]">
-                          {formatDate(rental.dateIso)}
+                          {dateLabel}
                           {details ? ` · ${details}` : ""}
                           {` · ${formatMoney(rental.amountCents)}`}
                         </p>

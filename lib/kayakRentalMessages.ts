@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { PROPERTY_TIMEZONE } from "@/lib/dates";
+import { inclusiveDays, PROPERTY_TIMEZONE } from "@/lib/dates";
 import { colorLabel, formatMoney, type Kayak } from "@/lib/types";
 import { sendBookingMessage } from "@/lib/lodgify";
 
@@ -75,7 +75,16 @@ function buildMessage(
 ) {
   const first = bookings[0];
   const greetingName = firstNameOf(first.customer_name);
-  const dateLabel = rentalDateLabel(first.starts_at);
+  const days = inclusiveDays(
+    first.starts_at.slice(0, 10),
+    first.ends_at.slice(0, 10)
+  );
+  const dateLabel =
+    days > 1
+      ? `${rentalDateLabel(first.starts_at)} → ${rentalDateLabel(
+          first.ends_at
+        )} (${days} days)`
+      : rentalDateLabel(first.starts_at);
   const total = bookings.reduce(
     (sum, booking) => sum + Number(booking.amount_cents || 0),
     0
@@ -97,7 +106,9 @@ function buildMessage(
     "",
     `Total paid: ${formatMoney(total)}.`,
     "",
-    "Please use only the rental kayaks listed above for this paid rental and return them by 5:00 PM.",
+    `Please use only the rental kayaks listed above for this paid rental and return them by 5:00 PM on ${rentalDateLabel(
+      first.ends_at
+    )}.`,
   ].join("\n");
 }
 
