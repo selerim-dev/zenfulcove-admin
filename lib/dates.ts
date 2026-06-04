@@ -114,3 +114,20 @@ export function dayBoundsUtc(iso: string): { start: Date; end: Date } {
   const end = propertyTimeToUtc(addDaysIso(iso, 1), 0, 0);
   return { start, end };
 }
+
+// Number of calendar days in an inclusive ISO date range (e.g. Jun 8 → Jun 10
+// is 3 days). Returns 0 if the range is invalid (end before start).
+export function inclusiveDays(startIso: string, endIso: string): number {
+  const [sy, sm, sd] = startIso.split("-").map(Number);
+  const [ey, em, ed] = endIso.split("-").map(Number);
+  const startMs = Date.UTC(sy, sm - 1, sd);
+  const endMs = Date.UTC(ey, em - 1, ed);
+  if (endMs < startMs) return 0;
+  return Math.round((endMs - startMs) / 86400000) + 1;
+}
+
+// Every ISO calendar day in an inclusive range, ascending.
+export function eachDayIso(startIso: string, endIso: string): string[] {
+  const days = inclusiveDays(startIso, endIso);
+  return Array.from({ length: days }, (_, i) => addDaysIso(startIso, i));
+}

@@ -57,6 +57,8 @@ export type BookingSuccess = {
   lockboxCodes?: BookingSuccessKayakCode[];
   customerName: string;
   dateIso: string;
+  endDateIso?: string;
+  days?: number;
   kayak: Kayak;
   kayaks?: Kayak[];
   stayLocation: string;

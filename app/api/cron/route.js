@@ -1246,10 +1246,33 @@ export async function runJervisAccessCodeRetries(automationConfig, dryRunOverrid
     ];
   }
 
+  const todayStr = todayCentral();
+  const releaseHour = Math.max(
+    0,
+    Math.min(23, Number(options.releaseHourCentral ?? config.releaseHourCentral ?? 15))
+  );
+  const releaseMinute = Math.max(
+    0,
+    Math.min(59, Number(options.releaseMinuteCentral ?? config.releaseMinuteCentral ?? 0))
+  );
+  const releaseDaysBeforeCheckin = Math.max(
+    0,
+    Number(options.releaseDaysBeforeCheckin ?? config.releaseDaysBeforeCheckin ?? 1) || 0
+  );
+  const { reached: releaseReached } = centralClockHasReached(
+    releaseHour,
+    releaseMinute
+  );
+  const checkinTo = releaseReached
+    ? addDays(todayStr, releaseDaysBeforeCheckin)
+    : todayStr;
+
   let rows = [];
   try {
     rows = await listJervisAccessCodeReleaseRetries({
       limit: options.limit || 50,
+      checkinFrom: todayStr,
+      checkinTo,
     });
   } catch (err) {
     return [
@@ -1269,7 +1292,7 @@ export async function runJervisAccessCodeRetries(automationConfig, dryRunOverrid
         timestamp: new Date().toISOString(),
         automation: automationName,
         property: "—",
-        action: "No pending Jervis access-code releases to retry",
+        action: `No pending Jervis access-code releases to retry for check-ins ${todayStr}${checkinTo !== todayStr ? ` through ${checkinTo}` : ""}`,
         status: "info",
       },
     ];

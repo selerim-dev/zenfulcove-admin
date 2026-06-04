@@ -5,11 +5,11 @@
       "schedule": "0 14 * * *"
     },
     {
-      "path": "/api/cron?automation=waiver,access-code-day-of&centralHour=11",
+      "path": "/api/cron?automation=waiver,access-code-day-of,access-code-retry&centralHour=11",
       "schedule": "0 16 * * *"
     },
     {
-      "path": "/api/cron?automation=waiver,access-code-day-of&centralHour=11",
+      "path": "/api/cron?automation=waiver,access-code-day-of,access-code-retry&centralHour=11",
       "schedule": "0 17 * * *"
     },
     {

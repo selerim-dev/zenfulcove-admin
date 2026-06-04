@@ -4,8 +4,17 @@ import { useRef, useState, type RefObject } from "react";
 import BookingModal from "@/components/customer/BookingModal";
 import KayakIllustration from "@/components/customer/KayakIllustration";
 import { colorLabel, formatMoney, type Kayak } from "@/lib/types";
+import { eachDayIso, inclusiveDays } from "@/lib/dates";
 
 type Day = { iso: string; dow: string; day: number };
+
+type Selection = {
+  startIso: string;
+  endIso: string;
+  kayakIds: string[];
+};
+
+type Anchor = { kayakId: string; dateIso: string };
 
 function describeKayak(k: Kayak): string {
   const parts: string[] = [colorLabel(k.color)];
@@ -20,6 +29,19 @@ function formatMonthLabel(dateIso: string): string {
   });
 }
 
+function formatShortDate(dateIso: string): string {
+  return new Date(`${dateIso}T12:00:00`).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function rangeLabel(startIso: string, endIso: string): string {
+  return startIso === endIso
+    ? formatShortDate(startIso)
+    : `${formatShortDate(startIso)} → ${formatShortDate(endIso)}`;
+}
+
 export default function FleetCalendar({
   kayaks,
   days,
@@ -31,57 +53,119 @@ export default function FleetCalendar({
 }) {
   const [active, setActive] = useState<{
     kayaks: Kayak[];
-    dateIso: string;
+    startIso: string;
+    endIso: string;
   } | null>(null);
-  const [checkoutSelection, setCheckoutSelection] = useState<{
-    dateIso: string;
-    kayakIds: string[];
-  } | null>(null);
+  const [selection, setSelection] = useState<Selection | null>(null);
+  const [anchor, setAnchor] = useState<Anchor | null>(null);
   const [selectedKayakId, setSelectedKayakId] = useState(kayaks[0]?.id ?? "");
   const dateRailRef = useRef<HTMLDivElement>(null);
   const gridScrollRef = useRef<HTMLDivElement>(null);
   const selectedKayak =
     kayaks.find((kayak) => kayak.id === selectedKayakId) ?? kayaks[0] ?? null;
-  const selectedCheckoutKayaks = checkoutSelection
-    ? kayaks.filter((kayak) => checkoutSelection.kayakIds.includes(kayak.id))
+  const selectedCheckoutKayaks = selection
+    ? kayaks.filter((kayak) => selection.kayakIds.includes(kayak.id))
     : [];
-  const checkoutTotal = selectedCheckoutKayaks.reduce(
-    (sum, kayak) => sum + Number(kayak.daily_rate_cents || 0),
-    0
-  );
+  const rentalDays = selection
+    ? inclusiveDays(selection.startIso, selection.endIso)
+    : 0;
+  const checkoutTotal =
+    selectedCheckoutKayaks.reduce(
+      (sum, kayak) => sum + Number(kayak.daily_rate_cents || 0),
+      0
+    ) * rentalDays;
 
   function isBooked(kayakId: string, dateIso: string) {
     return (bookedByKayak[kayakId] ?? []).includes(dateIso);
   }
 
-  function isSelectedForCheckout(kayakId: string, dateIso: string) {
+  // Every day in the inclusive range is open (unbooked) for this kayak.
+  function rangeOpenForKayak(kayakId: string, startIso: string, endIso: string) {
+    const out = new Set(bookedByKayak[kayakId] ?? []);
+    return eachDayIso(startIso, endIso).every((iso) => !out.has(iso));
+  }
+
+  function isInRange(kayakId: string, dateIso: string) {
     return (
-      checkoutSelection?.dateIso === dateIso &&
-      checkoutSelection.kayakIds.includes(kayakId)
+      selection !== null &&
+      selection.kayakIds.includes(kayakId) &&
+      dateIso >= selection.startIso &&
+      dateIso <= selection.endIso
     );
   }
 
-  function toggleCheckoutSelection(kayak: Kayak, dateIso: string) {
-    if (isBooked(kayak.id, dateIso)) return;
+  function clearSelection() {
+    setSelection(null);
+    setAnchor(null);
+  }
+
+  function startAt(kayak: Kayak, dateIso: string) {
+    setSelection({ startIso: dateIso, endIso: dateIso, kayakIds: [kayak.id] });
+    setAnchor({ kayakId: kayak.id, dateIso });
     setSelectedKayakId(kayak.id);
-    setCheckoutSelection((current) => {
-      if (!current || current.dateIso !== dateIso) {
-        return { dateIso, kayakIds: [kayak.id] };
-      }
+  }
 
-      if (current.kayakIds.includes(kayak.id)) {
-        const nextIds = current.kayakIds.filter((id) => id !== kayak.id);
-        return nextIds.length > 0 ? { dateIso, kayakIds: nextIds } : null;
-      }
+  // Click handling on an OPEN day-cell. Anchor on first click; a second click
+  // on the anchor kayak's row sets the contiguous range (if fully open);
+  // clicking another kayak toggles it into the same range.
+  function handleCellClick(kayak: Kayak, dateIso: string) {
+    if (isBooked(kayak.id, dateIso)) return;
 
-      return { dateIso, kayakIds: [...current.kayakIds, kayak.id] };
-    });
+    if (!selection || !anchor) {
+      startAt(kayak, dateIso);
+      return;
+    }
+
+    if (kayak.id === anchor.kayakId) {
+      // Extend or collapse the range on the anchor kayak's row.
+      if (selection.kayakIds.length > 1) {
+        startAt(kayak, dateIso);
+        return;
+      }
+      if (
+        dateIso === anchor.dateIso &&
+        selection.startIso === selection.endIso
+      ) {
+        clearSelection();
+        return;
+      }
+      const lo = dateIso < anchor.dateIso ? dateIso : anchor.dateIso;
+      const hi = dateIso < anchor.dateIso ? anchor.dateIso : dateIso;
+      if (rangeOpenForKayak(kayak.id, lo, hi)) {
+        setSelection({ startIso: lo, endIso: hi, kayakIds: [kayak.id] });
+      } else {
+        startAt(kayak, dateIso);
+      }
+      return;
+    }
+
+    // A different kayak.
+    if (selection.kayakIds.includes(kayak.id)) {
+      const nextIds = selection.kayakIds.filter((id) => id !== kayak.id);
+      if (nextIds.length === 0) {
+        clearSelection();
+      } else {
+        setSelection({ ...selection, kayakIds: nextIds });
+      }
+      return;
+    }
+
+    if (rangeOpenForKayak(kayak.id, selection.startIso, selection.endIso)) {
+      setSelection({
+        ...selection,
+        kayakIds: [...selection.kayakIds, kayak.id],
+      });
+      setSelectedKayakId(kayak.id);
+    } else {
+      startAt(kayak, dateIso);
+    }
   }
 
   function openSelectedCheckout() {
-    if (!checkoutSelection || selectedCheckoutKayaks.length === 0) return;
+    if (!selection || selectedCheckoutKayaks.length === 0) return;
     setActive({
-      dateIso: checkoutSelection.dateIso,
+      startIso: selection.startIso,
+      endIso: selection.endIso,
       kayaks: selectedCheckoutKayaks,
     });
   }
@@ -143,7 +227,7 @@ export default function FleetCalendar({
               <div>
                 <div className="flex items-center justify-between gap-3">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--color-ink-muted)]">
-                    Pick a Date
+                    Pick Start & End Days
                   </p>
                   <div className="flex items-center gap-2">
                     <button
@@ -162,6 +246,9 @@ export default function FleetCalendar({
                     </button>
                   </div>
                 </div>
+                <p className="mt-1 text-xs text-[var(--color-ink-muted)]">
+                  Tap a day to start, then tap another to rent the whole range.
+                </p>
                 <div
                   ref={dateRailRef}
                   className="mt-3 max-w-full overflow-x-auto pb-3"
@@ -170,17 +257,14 @@ export default function FleetCalendar({
                   <div className="flex min-w-max gap-2">
                     {days.map((day) => {
                       const isOut = isBooked(selectedKayak.id, day.iso);
-                      const isSelected = isSelectedForCheckout(
-                        selectedKayak.id,
-                        day.iso
-                      );
+                      const isSelected = isInRange(selectedKayak.id, day.iso);
                       return (
                         <button
                           key={day.iso}
                           type="button"
                           disabled={isOut}
                           onClick={() =>
-                            toggleCheckoutSelection(selectedKayak, day.iso)
+                            handleCellClick(selectedKayak, day.iso)
                           }
                           className={`min-h-20 w-24 shrink-0 rounded-xl border px-3 py-2 text-left text-sm transition ${
                             isOut
@@ -313,7 +397,7 @@ export default function FleetCalendar({
                   </td>
                   {days.map((d) => {
                     const out = bookedSet.has(d.iso);
-                    const selected = isSelectedForCheckout(k.id, d.iso);
+                    const selected = isInRange(k.id, d.iso);
                     if (out) {
                       return (
                         <td key={d.iso} className="min-w-20 px-3 py-3 text-center">
@@ -329,7 +413,7 @@ export default function FleetCalendar({
                           type="button"
                           onClick={(event) => {
                             event.stopPropagation();
-                            toggleCheckoutSelection(k, d.iso);
+                            handleCellClick(k, d.iso);
                           }}
                           className={`inline-flex cursor-pointer items-center justify-center rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider transition ${
                             selected
@@ -357,27 +441,41 @@ export default function FleetCalendar({
               Selected rentals
             </p>
             <p className="mt-1 text-sm font-medium text-[var(--color-ink)]">
-              {checkoutSelection && selectedCheckoutKayaks.length > 0
+              {selection && selectedCheckoutKayaks.length > 0
                 ? `${selectedCheckoutKayaks.length} ${
                     selectedCheckoutKayaks.length === 1 ? "kayak" : "kayaks"
-                  } on ${checkoutSelection.dateIso} · ${formatMoney(checkoutTotal)}`
-                : "Choose one or more open kayaks on the same day"}
+                  } · ${rangeLabel(selection.startIso, selection.endIso)} · ${rentalDays} ${
+                    rentalDays === 1 ? "day" : "days"
+                  } · ${formatMoney(checkoutTotal)}`
+                : "Tap an open day to start, then tap another to rent multiple days"}
             </p>
           </div>
-          <button
-            type="button"
-            disabled={!checkoutSelection || selectedCheckoutKayaks.length === 0}
-            onClick={openSelectedCheckout}
-            className="inline-flex cursor-pointer items-center justify-center rounded-full bg-[var(--color-accent)] px-5 py-3 text-sm font-medium text-white transition hover:bg-[var(--color-accent-strong)] disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            Reserve selected
-          </button>
+          <div className="flex items-center gap-2">
+            {selection && selectedCheckoutKayaks.length > 0 ? (
+              <button
+                type="button"
+                onClick={clearSelection}
+                className="inline-flex cursor-pointer items-center justify-center rounded-full border border-[var(--color-border)] bg-white px-4 py-3 text-sm font-medium text-[var(--color-ink)] transition hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]"
+              >
+                Clear
+              </button>
+            ) : null}
+            <button
+              type="button"
+              disabled={!selection || selectedCheckoutKayaks.length === 0}
+              onClick={openSelectedCheckout}
+              className="inline-flex cursor-pointer items-center justify-center rounded-full bg-[var(--color-accent)] px-5 py-3 text-sm font-medium text-white transition hover:bg-[var(--color-accent-strong)] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Reserve selected
+            </button>
+          </div>
         </div>
       </div>
 
       <BookingModal
         kayaks={active?.kayaks ?? []}
-        dateIso={active?.dateIso ?? null}
+        startIso={active?.startIso ?? null}
+        endIso={active?.endIso ?? null}
         open={active !== null}
         onClose={() => setActive(null)}
       />

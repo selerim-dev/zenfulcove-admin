@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { formatMoney, type BookingSuccess, type Kayak } from "@/lib/types";
+import { inclusiveDays } from "@/lib/dates";
 
 type FieldName = "reservation" | "lastName" | "waiver";
 
@@ -47,6 +48,7 @@ export default function BookingForm({
   kayak,
   kayaks,
   dateIso,
+  endDateIso,
   onSuccess,
   onValidationChange,
   initialReservation = "",
@@ -55,20 +57,25 @@ export default function BookingForm({
   kayak?: Kayak;
   kayaks?: Kayak[];
   dateIso: string;
+  endDateIso?: string;
   onSuccess?: (result: BookingSuccess) => void;
   onValidationChange?: (validation: Validation) => void;
   initialReservation?: string;
   initialLastName?: string;
 }) {
   const router = useRouter();
+  const startDateIso = dateIso;
+  const lastDateIso = endDateIso || dateIso;
+  const days = inclusiveDays(startDateIso, lastDateIso);
   const selectedKayaks = useMemo(
     () => (kayaks && kayaks.length > 0 ? kayaks : kayak ? [kayak] : []),
     [kayak, kayaks]
   );
-  const totalAmount = selectedKayaks.reduce(
-    (sum, item) => sum + Number(item.daily_rate_cents || 0),
-    0
-  );
+  const totalAmount =
+    selectedKayaks.reduce(
+      (sum, item) => sum + Number(item.daily_rate_cents || 0),
+      0
+    ) * days;
   const [reservation, setReservation] = useState(initialReservation);
   const [lastName, setLastName] = useState(initialLastName);
   const [waiver, setWaiver] = useState(false);
@@ -101,7 +108,13 @@ export default function BookingForm({
         const res = await fetch("/api/bookings/validate", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ reservationId: r, lastName: l, dateIso }),
+          body: JSON.stringify({
+            reservationId: r,
+            lastName: l,
+            dateIso: startDateIso,
+            startDateIso,
+            endDateIso: lastDateIso,
+          }),
           signal: controller.signal,
         });
         const json = await res.json();
@@ -127,7 +140,7 @@ export default function BookingForm({
       controller.abort();
       clearTimeout(timer);
     };
-  }, [reservation, lastName, dateIso]);
+  }, [reservation, lastName, startDateIso, lastDateIso]);
 
   const lookupReady =
     selectedKayaks.length > 0 &&
@@ -167,7 +180,9 @@ export default function BookingForm({
         body: JSON.stringify({
           kayakId: selectedKayaks[0]?.id,
           kayakIds: selectedKayaks.map((item) => item.id),
-          dateIso,
+          dateIso: startDateIso,
+          startDateIso,
+          endDateIso: lastDateIso,
           reservationId: reservation.trim(),
           lastName: lastName.trim(),
           waiverAccepted: waiver,
@@ -193,7 +208,9 @@ export default function BookingForm({
           ? json.lockboxCodes
           : undefined,
         customerName: typeof json.customerName === "string" ? json.customerName : "",
-        dateIso,
+        dateIso: startDateIso,
+        endDateIso: lastDateIso,
+        days,
         kayak: selectedKayaks[0],
         kayaks: selectedKayaks,
         stayLocation: json.cabin ?? "",

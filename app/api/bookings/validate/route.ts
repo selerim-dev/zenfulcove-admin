@@ -7,7 +7,11 @@ type ValidatePayload = {
   reservationId: string;
   lastName?: string;
   dateIso?: string;
+  startDateIso?: string;
+  endDateIso?: string;
 };
+
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 function lastNameMatches(
   guestName: string | null | undefined,
@@ -31,7 +35,12 @@ export async function POST(req: Request) {
 
   const reservationId = String(body.reservationId ?? "").trim();
   const lastName = String(body.lastName ?? "").trim();
-  const dateIso = typeof body.dateIso === "string" ? body.dateIso : undefined;
+  const startDateIso = String(
+    body.startDateIso || body.dateIso || ""
+  ).trim();
+  const endDateIso = String(
+    body.endDateIso || body.startDateIso || body.dateIso || ""
+  ).trim();
 
   if (!reservationId) {
     return NextResponse.json(
@@ -85,13 +94,15 @@ export async function POST(req: Request) {
   }
 
   if (
-    dateIso &&
-    /^\d{4}-\d{2}-\d{2}$/.test(dateIso) &&
-    (dateIso < reservation.arrivalIso || dateIso > reservation.departureIso)
+    ISO_DATE.test(startDateIso) &&
+    ISO_DATE.test(endDateIso) &&
+    (endDateIso < startDateIso ||
+      startDateIso < reservation.arrivalIso ||
+      endDateIso > reservation.departureIso)
   ) {
     return NextResponse.json(
       {
-        error: `Pick a date between ${reservation.arrivalIso} and ${reservation.departureIso}.`,
+        error: `Pick rental dates between ${reservation.arrivalIso} and ${reservation.departureIso}.`,
       },
       { status: 400 }
     );

@@ -3,7 +3,7 @@ import { randomBytes } from "node:crypto";
 import { createSupabaseAdminClient } from "@/lib/supabaseAdmin";
 import { hasSupabaseAdminEnv } from "@/lib/supabaseEnv";
 import { PROPERTY_TO_CABIN, type Kayak } from "@/lib/types";
-import { propertyTimeToUtc, todayIso } from "@/lib/dates";
+import { inclusiveDays, propertyTimeToUtc, todayIso } from "@/lib/dates";
 import { fetchReservationById, LodgifyError } from "@/lib/customer/lodgify";
 import {
   createStripeClient,
@@ -17,7 +17,9 @@ import { createBookingCancelToken } from "@/lib/bookingCancelToken";
 type BookingPayload = {
   kayakId?: string;
   kayakIds?: string[];
-  dateIso: string;
+  dateIso?: string;
+  startDateIso?: string;
+  endDateIso?: string;
   reservationId: string;
   lastName: string;
   waiverAccepted: boolean;
@@ -31,6 +33,19 @@ type InsertedBooking = {
 
 const MAX_KAYAKS_PER_CHECKOUT = 5;
 const REFERENCE_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+// Resolve the rental date range from the payload. Accepts an explicit
+// startDateIso/endDateIso range, or a legacy single `dateIso` (start=end).
+function resolveDateRange(
+  p: Partial<BookingPayload>
+): { startDateIso: string; endDateIso: string } | null {
+  const start = String(p.startDateIso || p.dateIso || "").trim();
+  const end = String(p.endDateIso || p.startDateIso || p.dateIso || "").trim();
+  if (!ISO_DATE.test(start) || !ISO_DATE.test(end)) return null;
+  if (end < start) return null;
+  return { startDateIso: start, endDateIso: end };
+}
 
 function generateReferenceCode(length = 6): string {
   const bytes = randomBytes(length);
@@ -70,7 +85,7 @@ function isValidPayload(p: Partial<BookingPayload>): p is BookingPayload {
   if (kayakIds.length === 0 || kayakIds.length > MAX_KAYAKS_PER_CHECKOUT) {
     return false;
   }
-  if (typeof p.dateIso !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(p.dateIso)) {
+  if (!resolveDateRange(p)) {
     return false;
   }
   if (
@@ -90,33 +105,43 @@ function isoLessOrEqual(a: string, b: string): boolean {
   return a <= b;
 }
 
+function rentalRangeLabel(startDateIso: string, endDateIso: string, days: number) {
+  return startDateIso === endDateIso
+    ? startDateIso
+    : `${startDateIso} → ${endDateIso} (${days} days)`;
+}
+
 function stripePriceData({
   kayak,
-  amountCents,
+  unitAmountCents,
   cabin,
-  dateIso,
+  startDateIso,
+  endDateIso,
+  days,
   stripeMode,
 }: {
   kayak: Kayak;
-  amountCents: number;
+  unitAmountCents: number;
   cabin: string;
-  dateIso: string;
+  startDateIso: string;
+  endDateIso: string;
+  days: number;
   stripeMode: "test" | "live";
 }) {
   if (stripeMode === "live" && kayak.stripe_product_id) {
     return {
       currency: "usd",
-      unit_amount: amountCents,
+      unit_amount: unitAmountCents,
       product: kayak.stripe_product_id,
     };
   }
 
   return {
     currency: "usd",
-    unit_amount: amountCents,
+    unit_amount: unitAmountCents,
     product_data: {
       name: `${kayak.name} rental`,
-      description: `${cabin} · ${dateIso}`,
+      description: `${cabin} · ${rentalRangeLabel(startDateIso, endDateIso, days)}`,
     },
   };
 }
@@ -150,6 +175,8 @@ export async function POST(req: Request) {
   }
 
   const kayakIds = requestedKayakIds(body);
+  const { startDateIso, endDateIso } = resolveDateRange(body)!;
+  const days = inclusiveDays(startDateIso, endDateIso);
 
   if (!hasSupabaseAdminEnv()) {
     return NextResponse.json(
@@ -223,12 +250,12 @@ export async function POST(req: Request) {
   }
 
   if (
-    !isoLessOrEqual(reservation.arrivalIso, body.dateIso) ||
-    !isoLessOrEqual(body.dateIso, reservation.departureIso)
+    !isoLessOrEqual(reservation.arrivalIso, startDateIso) ||
+    !isoLessOrEqual(endDateIso, reservation.departureIso)
   ) {
     return NextResponse.json(
       {
-        error: `Pick a date between ${reservation.arrivalIso} and ${reservation.departureIso}.`,
+        error: `Pick rental dates between ${reservation.arrivalIso} and ${reservation.departureIso}.`,
       },
       { status: 400 }
     );
@@ -257,8 +284,8 @@ export async function POST(req: Request) {
     );
   }
 
-  const start = propertyTimeToUtc(body.dateIso, 9, 0);
-  const end = propertyTimeToUtc(body.dateIso, 17, 0);
+  const start = propertyTimeToUtc(startDateIso, 9, 0);
+  const end = propertyTimeToUtc(endDateIso, 17, 0);
 
   const { data: conflicts, error: conflictError } = await supabase
     .from("bookings")
@@ -307,7 +334,7 @@ export async function POST(req: Request) {
       starts_at: start.toISOString(),
       ends_at: end.toISOString(),
       rate_type: "daily",
-      amount_cents: kayak.daily_rate_cents,
+      amount_cents: kayak.daily_rate_cents * days,
       status: "pending",
     }));
 
@@ -356,7 +383,7 @@ export async function POST(req: Request) {
   const bookingIds = orderedInserted.map((booking) => booking.id);
   const referenceCodes = orderedInserted.map((booking) => booking.reference_code);
   const amountCents = kayaks.reduce(
-    (sum, kayak) => sum + Number(kayak.daily_rate_cents || 0),
+    (sum, kayak) => sum + Number(kayak.daily_rate_cents || 0) * days,
     0
   );
 
@@ -370,7 +397,7 @@ export async function POST(req: Request) {
     kayakId: primary.kayak_id,
   });
   const cancelParams = new URLSearchParams({
-    date: body.dateIso,
+    date: startDateIso,
     reservation: body.reservationId.trim(),
     lastName: body.lastName.trim(),
     payment: "cancelled",
@@ -386,6 +413,9 @@ export async function POST(req: Request) {
     kayakIds: kayaks.map((kayak) => kayak.id).join(","),
     referenceCode: primary.reference_code,
     referenceCodes: referenceCodes.join(","),
+    startDateIso,
+    endDateIso,
+    days: String(days),
   };
 
   try {
@@ -399,12 +429,14 @@ export async function POST(req: Request) {
         metadata,
         payment_intent_data: { metadata },
         line_items: kayaks.map((kayak) => ({
-          quantity: 1,
+          quantity: days,
           price_data: stripePriceData({
             kayak,
-            amountCents: kayak.daily_rate_cents,
+            unitAmountCents: kayak.daily_rate_cents,
             cabin,
-            dateIso: body.dateIso,
+            startDateIso,
+            endDateIso,
+            days,
             stripeMode,
           }),
         })),
@@ -455,6 +487,9 @@ export async function POST(req: Request) {
       isComplimentary: false,
       amountCents,
       totalAmountCents: amountCents,
+      startDateIso,
+      endDateIso,
+      days,
       cabin,
       customerName,
       guestName: reservation.guestName,

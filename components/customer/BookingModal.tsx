@@ -8,7 +8,7 @@ import BookingForm, {
 } from "@/app/(customer)/book/[kayakId]/BookingForm";
 import BookingConfirmation from "./BookingConfirmation";
 import { formatMoney, type BookingSuccess, type Kayak } from "@/lib/types";
-import { formatLongDate } from "@/lib/dates";
+import { formatLongDate, inclusiveDays } from "@/lib/dates";
 
 function firstNameOf(value: string | null | undefined): string {
   const trimmed = (value ?? "").trim();
@@ -20,6 +20,8 @@ export default function BookingModal({
   kayak,
   kayaks,
   dateIso,
+  startIso,
+  endIso,
   open,
   onClose,
   initialReservation,
@@ -27,7 +29,9 @@ export default function BookingModal({
 }: {
   kayak?: Kayak | null;
   kayaks?: Kayak[] | null;
-  dateIso: string | null;
+  dateIso?: string | null;
+  startIso?: string | null;
+  endIso?: string | null;
   open: boolean;
   onClose: () => void;
   initialReservation?: string;
@@ -39,10 +43,21 @@ export default function BookingModal({
     () => (kayaks && kayaks.length > 0 ? kayaks : kayak ? [kayak] : []),
     [kayak, kayaks]
   );
-  const total = selectedKayaks.reduce(
-    (sum, item) => sum + Number(item.daily_rate_cents || 0),
-    0
-  );
+  const startDateIso = startIso || dateIso;
+  const endDateIso = endIso || startDateIso;
+  const rentalDays =
+    startDateIso && endDateIso ? inclusiveDays(startDateIso, endDateIso) : 0;
+  const total =
+    selectedKayaks.reduce(
+      (sum, item) => sum + Number(item.daily_rate_cents || 0),
+      0
+    ) * rentalDays;
+  const dateLabel =
+    startDateIso && endDateIso && startDateIso !== endDateIso
+      ? `${formatLongDate(startDateIso)} - ${formatLongDate(endDateIso)}`
+      : startDateIso
+        ? formatLongDate(startDateIso)
+        : "";
 
   const handleValidation = useCallback((value: Validation) => {
     setValidation(value);
@@ -63,14 +78,15 @@ export default function BookingModal({
   return (
     <Modal open={open} onClose={handleClose} title="">
       {selectedKayaks.length > 0 &&
-        dateIso &&
+        startDateIso &&
+        endDateIso &&
         (success ? (
           <BookingConfirmation booking={success} onDone={handleClose} />
         ) : (
           <div className="space-y-6">
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[var(--color-ink)]">
-                {formatLongDate(dateIso)}
+                {dateLabel}
               </p>
               <h2 className="mt-2 font-serif text-3xl font-medium leading-[1.05] tracking-tight md:text-4xl">
                 {heading}
@@ -131,7 +147,8 @@ export default function BookingModal({
             </header>
             <BookingForm
               kayaks={selectedKayaks}
-              dateIso={dateIso}
+              dateIso={startDateIso}
+              endDateIso={endDateIso}
               onSuccess={setSuccess}
               onValidationChange={handleValidation}
               initialReservation={initialReservation}
