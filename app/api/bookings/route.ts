@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import type Stripe from "stripe";
 import { randomBytes } from "node:crypto";
 import { createSupabaseAdminClient } from "@/lib/supabaseAdmin";
 import { hasSupabaseAdminEnv } from "@/lib/supabaseEnv";
@@ -119,6 +120,7 @@ function stripePriceData({
   endDateIso,
   days,
   stripeMode,
+  useSavedStripeProduct = true,
 }: {
   kayak: Kayak;
   unitAmountCents: number;
@@ -127,8 +129,13 @@ function stripePriceData({
   endDateIso: string;
   days: number;
   stripeMode: "test" | "live";
+  useSavedStripeProduct?: boolean;
 }) {
-  if (stripeMode === "live" && kayak.stripe_product_id) {
+  if (
+    useSavedStripeProduct &&
+    stripeMode === "live" &&
+    kayak.stripe_product_id
+  ) {
     return {
       currency: "usd",
       unit_amount: unitAmountCents,
@@ -144,6 +151,22 @@ function stripePriceData({
       description: `${cabin} · ${rentalRangeLabel(startDateIso, endDateIso, days)}`,
     },
   };
+}
+
+function isMissingStripeProductError(err: unknown): boolean {
+  const stripeError = err as {
+    code?: string;
+    message?: string;
+    param?: string;
+  };
+  const message =
+    err instanceof Error ? err.message : String(stripeError.message || err);
+
+  return (
+    (message.includes("No such product") && message.includes("prod_")) ||
+    (stripeError.code === "resource_missing" &&
+      Boolean(stripeError.param?.includes("[product]")))
+  );
 }
 
 async function cancelInsertedBookings(
@@ -417,32 +440,56 @@ export async function POST(req: Request) {
     endDateIso,
     days: String(days),
   };
+  const checkoutParams = (
+    useSavedStripeProducts: boolean
+  ): Stripe.Checkout.SessionCreateParams => ({
+    mode: "payment",
+    client_reference_id: primary.id,
+    success_url: successUrl,
+    cancel_url: cancelUrl,
+    expires_at: Math.floor(Date.now() / 1000) + 31 * 60,
+    metadata,
+    payment_intent_data: { metadata },
+    line_items: kayaks.map((kayak) => ({
+      quantity: days,
+      price_data: stripePriceData({
+        kayak,
+        unitAmountCents: kayak.daily_rate_cents,
+        cabin,
+        startDateIso,
+        endDateIso,
+        days,
+        stripeMode,
+        useSavedStripeProduct: useSavedStripeProducts,
+      }),
+    })),
+  });
 
   try {
-    const session = await stripe.checkout.sessions.create(
-      {
-        mode: "payment",
-        client_reference_id: primary.id,
-        success_url: successUrl,
-        cancel_url: cancelUrl,
-        expires_at: Math.floor(Date.now() / 1000) + 31 * 60,
-        metadata,
-        payment_intent_data: { metadata },
-        line_items: kayaks.map((kayak) => ({
-          quantity: days,
-          price_data: stripePriceData({
-            kayak,
-            unitAmountCents: kayak.daily_rate_cents,
-            cabin,
-            startDateIso,
-            endDateIso,
-            days,
-            stripeMode,
-          }),
-        })),
-      },
-      { idempotencyKey: `booking-checkout-${primary.id}` }
-    );
+    let session: Stripe.Checkout.Session;
+    try {
+      session = await stripe.checkout.sessions.create(checkoutParams(true), {
+        idempotencyKey: `booking-checkout-${primary.id}`,
+      });
+    } catch (err) {
+      if (!isMissingStripeProductError(err)) {
+        throw err;
+      }
+
+      console.error(
+        "Stripe checkout failed because a saved kayak product ID is missing. Retrying with generated product data.",
+        {
+          bookingId: primary.id,
+          kayakProductIds: kayaks
+            .map((kayak) => kayak.stripe_product_id)
+            .filter(Boolean),
+        }
+      );
+
+      session = await stripe.checkout.sessions.create(checkoutParams(false), {
+        idempotencyKey: `booking-checkout-${primary.id}-generated-products`,
+      });
+    }
 
     const paymentIntentId =
       typeof session.payment_intent === "string"
