@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import Modal from "@/components/customer/Modal";
 import { formatMoney, type CommerceProduct } from "@/lib/types";
 import ProductForm from "./ProductForm";
@@ -73,8 +74,14 @@ export default function ProductsManager({
             onClick={() => setState({ mode: "create" })}
             className="flex h-full min-h-[18rem] w-full cursor-pointer flex-col items-center justify-center gap-3 rounded-3xl border-2 border-dashed border-[var(--color-border)] bg-transparent p-6 text-[var(--color-ink-muted)] transition hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]"
           >
-            <span className="flex h-14 w-14 items-center justify-center rounded-full border-2 border-current text-3xl leading-none">
-              +
+            <span className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-full border-2 border-current bg-white p-1">
+              <Image
+                src="/logo-mark.png"
+                alt=""
+                width={48}
+                height={48}
+                className="h-full w-full rounded-full object-cover"
+              />
             </span>
             <span className="text-sm font-medium">Add Product</span>
           </button>
