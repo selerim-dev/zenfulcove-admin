@@ -102,6 +102,7 @@ export default function ProductsStorefront({
   const [purchaseError, setPurchaseError] = useState("");
   const [checkoutError, setCheckoutError] = useState("");
   const [checkingOut, setCheckingOut] = useState(false);
+  const displayProducts = useMemo(() => products, [products]);
 
   useEffect(() => {
     const saved = readGuestBookingSession();
@@ -158,8 +159,8 @@ export default function ProductsStorefront({
   }, [reservation, lastName]);
 
   const productById = useMemo(
-    () => new Map(products.map((product) => [product.id, product])),
-    [products]
+    () => new Map(displayProducts.map((product) => [product.id, product])),
+    [displayProducts]
   );
   const cartRows = Object.entries(cart)
     .map(([productId, quantity]) => {
@@ -241,13 +242,13 @@ export default function ProductsStorefront({
 
       <section className="grid gap-4 md:grid-cols-[1fr_360px]">
         <div className="space-y-5">
-          {products.length === 0 ? (
+          {displayProducts.length === 0 ? (
             <div className="rounded-3xl border border-dashed border-[var(--color-border)] bg-white p-8 text-center text-sm text-[var(--color-ink-muted)]">
               Packages are not available yet.
             </div>
           ) : (
             <div className="grid gap-5 sm:grid-cols-2">
-              {products.map((product) => {
+              {displayProducts.map((product) => {
                 const quantity = cart[product.id] || 0;
                 return (
                   <article

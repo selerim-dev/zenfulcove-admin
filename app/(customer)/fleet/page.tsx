@@ -1,7 +1,9 @@
+import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabaseServer";
 import { createSupabaseAdminClient } from "@/lib/supabaseAdmin";
 import { hasSupabaseRuntimeEnv } from "@/lib/supabaseEnv";
-import { type Kayak } from "@/lib/types";
+import { PROPERTY_TO_CABIN, type Kayak } from "@/lib/types";
+import { fetchReservationById, LodgifyError } from "@/lib/customer/lodgify";
 import {
   addDaysIso,
   dayBoundsUtc,
@@ -15,7 +17,60 @@ export const dynamic = "force-dynamic";
 
 const BOOKING_WINDOW_DAYS = 90;
 
-export default async function FleetPage() {
+function lastNameMatches(
+  guestName: string | null | undefined,
+  input: string
+) {
+  if (!input) return true;
+  if (!guestName) return false;
+  const normalizedGuest = guestName.toLowerCase().trim();
+  const normalizedInput = input.toLowerCase().trim();
+  const words = normalizedGuest.split(/\s+/);
+  return words.includes(normalizedInput) || normalizedGuest.endsWith(normalizedInput);
+}
+
+export default async function FleetPage({
+  searchParams,
+}: {
+  searchParams: Promise<{
+    reservation?: string;
+    lastName?: string;
+  }>;
+}) {
+  const { reservation = "", lastName = "" } = await searchParams;
+  const reservationId = reservation.trim();
+  const guestLastName = lastName.trim();
+  if (!reservationId) redirect("/book?target=fleet");
+
+  let verifiedReservation;
+  try {
+    verifiedReservation = await fetchReservationById(reservationId);
+  } catch (err) {
+    const detail = err instanceof LodgifyError ? err.detail : String(err);
+    return (
+      <div className="mx-auto max-w-3xl rounded-2xl border border-red-100 bg-white p-8 text-center shadow-sm">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-red-600">
+          Kayak Availability
+        </p>
+        <h1 className="mt-2 font-serif text-4xl font-medium tracking-tight">
+          We could not verify that booking.
+        </h1>
+        <p className="mt-3 text-sm leading-relaxed text-[var(--color-ink-muted)]">
+          Lodgify could not be reached: {detail.slice(0, 160)}
+        </p>
+      </div>
+    );
+  }
+
+  if (
+    !verifiedReservation ||
+    !PROPERTY_TO_CABIN[verifiedReservation.propertyId] ||
+    !lastNameMatches(verifiedReservation.guestName, guestLastName) ||
+    verifiedReservation.departureIso < todayIso()
+  ) {
+    redirect("/book?target=fleet");
+  }
+
   const isSupabaseConfigured = hasSupabaseRuntimeEnv();
   let kayaks: Kayak[] = [];
 
@@ -82,11 +137,11 @@ export default async function FleetPage() {
           Customer Portal
         </p>
         <h1 className="mt-2 font-serif text-4xl font-medium leading-[1.05] tracking-tight md:text-5xl">
-          Availability calendar.
+          Kayak availability.
         </h1>
         <p className="mt-3 max-w-xl text-sm leading-relaxed text-[var(--color-ink-muted)]">
-          Select a rental to review its details, then pick an available date in
-          the next 90 days to reserve it.
+          Verified guests can select a rental kayak, review its details, and
+          pick an available date in the next 90 days to reserve it.
         </p>
       </header>
 

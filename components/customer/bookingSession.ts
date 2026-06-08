@@ -44,6 +44,16 @@ export function specialPackagesHref(reservation: string, lastName = "") {
   return `/special-packages?${params.toString()}`;
 }
 
+export function fleetHref(reservation: string, lastName = "") {
+  const code = clean(reservation);
+  const name = clean(lastName);
+  if (!code) return "/book?target=fleet";
+
+  const params = new URLSearchParams({ reservation: code });
+  if (name) params.set("lastName", name);
+  return `/fleet?${params.toString()}`;
+}
+
 export function readGuestBookingSession(): GuestBookingSession | null {
   if (typeof window === "undefined") return null;
 
@@ -101,4 +111,11 @@ export function savedSpecialPackagesHref() {
   return session
     ? specialPackagesHref(session.reservation, session.lastName)
     : "/special-packages";
+}
+
+export function savedFleetHref() {
+  const session = readGuestBookingSession();
+  return session
+    ? fleetHref(session.reservation, session.lastName)
+    : "/book?target=fleet";
 }

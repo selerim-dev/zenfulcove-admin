@@ -2,14 +2,19 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { saveGuestBookingSession, stayHref, stayMessagesHref } from "./bookingSession";
+import {
+  fleetHref,
+  saveGuestBookingSession,
+  stayHref,
+  stayMessagesHref,
+} from "./bookingSession";
 
 export default function CustomerAccessForm({
   compact = false,
   target = "stay",
 }: {
   compact?: boolean;
-  target?: "stay" | "messages";
+  target?: "stay" | "messages" | "fleet";
 }) {
   const router = useRouter();
   const [reservation, setReservation] = useState("");
@@ -45,7 +50,13 @@ export default function CustomerAccessForm({
         cabin: json.cabin ?? "",
         guestName: json.guestName ?? "",
       });
-      router.push(target === "messages" ? stayMessagesHref(code, name) : stayHref(code, name));
+      router.push(
+        target === "messages"
+          ? stayMessagesHref(code, name)
+          : target === "fleet"
+            ? fleetHref(code, name)
+            : stayHref(code, name)
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Verification failed.");
     } finally {

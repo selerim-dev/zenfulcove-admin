@@ -86,10 +86,10 @@ export default async function Home({
             Open Portal →
           </Link>
           <Link
-            href="/fleet"
+            href="/book?target=fleet"
             className="inline-flex items-center rounded-full border border-white/40 bg-white/10 px-6 py-3 text-sm font-medium text-white backdrop-blur-sm transition hover:bg-white/20"
           >
-            View Availability
+            View Kayak Availability
           </Link>
         </div>
       </section>

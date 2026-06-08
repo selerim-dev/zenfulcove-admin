@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
+  savedFleetHref,
   savedSpecialPackagesHref,
   savedStayHref,
   savedStayMessagesHref,
@@ -137,7 +138,7 @@ const items: {
 }[] = [
   { key: "rentals", href: "/book", label: "My Stay", icon: "stay" },
   { key: "messages", href: "/book/messages", label: "Messages", icon: "message" },
-  { key: "availability", href: "/fleet", label: "Rent a Kayak", icon: "kayak" },
+  { key: "availability", href: "/fleet", label: "Kayak Availability", icon: "kayak" },
   {
     key: "packages",
     href: "/special-packages",
@@ -202,6 +203,7 @@ export default function Sidebar({
     if (item.key === "rentals") return savedStayHref();
     if (item.key === "messages") return savedStayMessagesHref();
     if (item.key === "packages") return savedSpecialPackagesHref();
+    if (item.key === "availability") return savedFleetHref();
     return item.href;
   }
 

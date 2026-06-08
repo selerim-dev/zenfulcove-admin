@@ -1,4 +1,5 @@
 import { listCommerceProducts } from "@/lib/kv";
+import { withDefaultPackageProducts } from "@/lib/commerce";
 import type { CommerceProduct } from "@/lib/types";
 import ProductsStorefront from "./ProductsStorefront";
 
@@ -17,7 +18,9 @@ export default async function SpecialPackagesPage({
   }>;
 }) {
   const { reservation = "", lastName = "" } = await searchParams;
-  const products = (await listCommerceProducts()) as CommerceProduct[];
+  const products = withDefaultPackageProducts(
+    (await listCommerceProducts()) as CommerceProduct[]
+  );
 
   return (
     <ProductsStorefront

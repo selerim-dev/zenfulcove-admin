@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
-import { normalizeCommerceQuantity } from "@/lib/commerce";
+import {
+  normalizeCommerceQuantity,
+  withDefaultPackageProducts,
+} from "@/lib/commerce";
 import {
   listCommerceProducts,
   saveCommercePurchase,
@@ -110,7 +113,9 @@ export async function POST(req: Request) {
   }
 
   const cabin = PROPERTY_TO_CABIN[reservation.propertyId] || null;
-  const products = (await listCommerceProducts()) as CommerceProduct[];
+  const products = withDefaultPackageProducts(
+    (await listCommerceProducts()) as CommerceProduct[]
+  );
   const productsById = new Map(products.map((product) => [product.id, product]));
   const purchaseItems = cartItems.map(({ productId, quantity }) => {
     const product = productsById.get(productId);

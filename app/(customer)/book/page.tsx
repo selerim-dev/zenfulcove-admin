@@ -10,10 +10,12 @@ export default async function BookPage({
   searchParams: Promise<{
     reservation?: string;
     lastName?: string;
+    target?: string;
   }>;
 }) {
-  const { reservation = "", lastName = "" } = await searchParams;
+  const { reservation = "", lastName = "", target = "" } = await searchParams;
   const hasCredentials = reservation.trim();
+  const formTarget = target === "fleet" ? "fleet" : "stay";
 
   if (hasCredentials) {
     return (
@@ -23,7 +25,7 @@ export default async function BookPage({
 
   return (
     <div className="mx-auto max-w-4xl space-y-8">
-      <BookSessionRestore />
+      <BookSessionRestore target={formTarget} />
       <section className="overflow-hidden rounded-[28px] border border-[var(--color-border)] bg-white shadow-sm">
         <div
           className="min-h-[340px] bg-cover bg-center"
@@ -34,18 +36,21 @@ export default async function BookPage({
               Guest Portal
             </p>
             <h1 className="mt-3 max-w-3xl font-serif text-5xl font-medium leading-[1.02] tracking-tight md:text-6xl">
-              Open your stay.
+              {formTarget === "fleet"
+                ? "Open kayak availability."
+                : "Open your stay."}
             </h1>
             <p className="mt-4 max-w-2xl text-sm leading-relaxed text-white/90 md:text-base">
-              Enter the booking ID from your confirmation to see arrival
-              details, Wi-Fi, forms, and access-code status.
+              {formTarget === "fleet"
+                ? "Enter the booking ID from your confirmation to view rental kayak availability for guests."
+                : "Enter the booking ID from your confirmation to see arrival details, Wi-Fi, forms, and access-code status."}
             </p>
           </div>
         </div>
       </section>
 
       <div className="rounded-3xl border border-[var(--color-border)] bg-white p-6 shadow-sm">
-        <CustomerAccessForm compact />
+        <CustomerAccessForm compact target={formTarget} />
       </div>
     </div>
   );

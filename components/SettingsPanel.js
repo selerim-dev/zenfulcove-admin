@@ -134,7 +134,7 @@ export default function SettingsPanel({
         {[
           ["rentals", "My Stay"],
           ["messages", "Messages"],
-          ["availability", "Rent a Kayak"],
+          ["availability", "Kayak Availability"],
           ["packages", "Special Packages and More"],
           ["timing", "Late Check Out/Early Check In"],
           ["forms", "Published Forms"],
