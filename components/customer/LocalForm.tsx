@@ -558,6 +558,7 @@ function ReadOnlyLocalForm({
   existingFiles,
   submittedAt,
   bookingCode,
+  returnHref,
 }: {
   fields: LocalFormField[];
   schema: LocalFormSchema;
@@ -565,9 +566,11 @@ function ReadOnlyLocalForm({
   existingFiles: LocalFormSubmissionFile[];
   submittedAt?: string;
   bookingCode?: string;
+  returnHref?: string;
 }) {
   const resolvedBookingCode =
     cleanDisplay(bookingCode) || bookingCodeFromPayload(initialValues);
+  const backHref = cleanDisplay(returnHref) || (resolvedBookingCode ? stayHref(resolvedBookingCode) : "");
   const visibleFields = fields
     .map((field) => cleanDisplay(field.name))
     .filter(Boolean);
@@ -630,12 +633,12 @@ function ReadOnlyLocalForm({
         </div>
       ) : null}
 
-      {resolvedBookingCode ? (
+      {backHref ? (
         <a
-          href={stayHref(resolvedBookingCode)}
+          href={backHref}
           className="inline-flex rounded-full bg-[var(--color-accent)] px-5 py-3 text-sm font-medium text-white transition hover:bg-[var(--color-accent-strong)]"
         >
-          Back to My Stay
+          {returnHref ? "Back to Event" : "Back to My Stay"}
         </a>
       ) : null}
     </div>
@@ -652,6 +655,7 @@ export default function LocalForm({
   existingSubmissionSubmittedAt = "",
   existingFiles = [],
   bookingCode = "",
+  returnHref = "",
 }: {
   formSlug: string;
   schema: LocalFormSchema;
@@ -662,6 +666,7 @@ export default function LocalForm({
   existingSubmissionSubmittedAt?: string;
   existingFiles?: LocalFormSubmissionFile[];
   bookingCode?: string;
+  returnHref?: string;
 }) {
   const router = useRouter();
   const fields = Array.isArray(schema.fields) ? schema.fields : [];
@@ -685,6 +690,7 @@ export default function LocalForm({
         existingFiles={existingFiles}
         submittedAt={existingSubmissionSubmittedAt}
         bookingCode={bookingCode}
+        returnHref={returnHref}
       />
     );
   }
@@ -880,8 +886,12 @@ export default function LocalForm({
       }
       const bookingCode = bookingCodeFromPayload(payload);
       const redirectHref =
-        !staffPreview && bookingCode ? stayHref(bookingCode) : "";
-      if (redirectHref) {
+        !staffPreview && returnHref
+          ? returnHref
+          : !staffPreview && bookingCode
+            ? stayHref(bookingCode)
+            : "";
+      if (redirectHref && !returnHref) {
         saveGuestBookingSession({
           reservation: bookingCode,
         });

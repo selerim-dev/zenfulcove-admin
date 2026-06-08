@@ -229,6 +229,18 @@ export async function POST(request) {
       }
     }
 
+    if (updates.eventPortal !== undefined) {
+      updated.eventPortal = {
+        ...updated.eventPortal,
+        ...updates.eventPortal,
+      };
+      if (updates.eventPortal.events !== undefined) {
+        updated.eventPortal.events = Array.isArray(updates.eventPortal.events)
+          ? updates.eventPortal.events
+          : [];
+      }
+    }
+
     await setConfig(updated);
 
     return NextResponse.json({ success: true, config: updated });

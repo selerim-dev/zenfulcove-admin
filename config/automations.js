@@ -219,4 +219,9 @@ export const automationConfig = {
       },
     },
   },
+  eventPortal: {
+    enabled: true,
+    waiverFormSlug: "welcome-to-zenfulcove",
+    events: [],
+  },
 };

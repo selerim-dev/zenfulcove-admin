@@ -39,6 +39,8 @@ export default async function LocalFormPage({
     bookingCode?: string;
     booking?: string;
     reservation?: string;
+    event?: string;
+    returnTo?: string;
   }>;
 }) {
   const { slug } = await params;
@@ -69,8 +71,10 @@ export default async function LocalFormPage({
   const bookingCode = String(
     query.bookingCode || query.booking || query.reservation || ""
   ).trim();
+  const isEventForm = query.event === "1";
+  const returnHref = isEventForm ? safeEventReturnPath(query.returnTo) || "/event" : "";
   const existingSubmission =
-    bookingCode && !isAdminPreview
+    bookingCode && !isAdminPreview && !isEventForm
       ? await findLocalFormSubmissionForBooking({
           formSlug: form.slug,
           bookingId: bookingCode,
@@ -90,7 +94,7 @@ export default async function LocalFormPage({
       )
     : [];
   const initialValues =
-    bookingCode && !existingPayload.bookingCode
+    bookingCode && !isEventForm && !existingPayload.bookingCode
       ? { ...existingPayload, bookingCode }
       : existingPayload;
   const rawSubtitle = schema.subtitle || form.description || "";
@@ -133,7 +137,16 @@ export default async function LocalFormPage({
         existingSubmissionSubmittedAt={String(existingSubmission?.submitted_at || "")}
         existingFiles={existingFiles}
         bookingCode={bookingCode}
+        returnHref={returnHref}
       />
     </div>
   );
+}
+
+function safeEventReturnPath(value?: string) {
+  const normalized = String(value || "").trim();
+  if (!normalized || !normalized.startsWith("/") || normalized.startsWith("//")) {
+    return "";
+  }
+  return normalized.startsWith("/event") ? normalized : "";
 }
