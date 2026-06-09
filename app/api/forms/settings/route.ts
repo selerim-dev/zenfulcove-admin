@@ -33,15 +33,27 @@ export async function GET(request: Request) {
   const unauthorized = await requireAdminRequest(request);
   if (unauthorized) return unauthorized;
 
+  const url = new URL(request.url);
+  const slug = normalizeSlug(url.searchParams.get("slug"));
+
   if (!hasSupabaseAdminEnv()) {
     return NextResponse.json(
-      { error: "Local form database is not configured." },
-      { status: 503 }
+      {
+        configured: false,
+        error: "Local form database is not configured.",
+        form: {
+          id: "",
+          slug,
+          name: slug,
+          description: "",
+          isActive: false,
+          termsText: "",
+        },
+      },
+      { status: 200 }
     );
   }
 
-  const url = new URL(request.url);
-  const slug = normalizeSlug(url.searchParams.get("slug"));
   const form = await getLocalFormBySlug(slug);
   if (!form) {
     return NextResponse.json({ error: "Form not found." }, { status: 404 });

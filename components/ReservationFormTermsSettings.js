@@ -39,6 +39,11 @@ export default function ReservationFormTermsSettings({ accessCodeRelease = {} })
         setFormName(form.name || formSlug);
         setTermsText(nextTerms);
         setSavedTermsText(nextTerms);
+        if (data.configured === false) {
+          setStatus("failed");
+          setMessage(data.error || "Local form database is not configured.");
+          return;
+        }
         setStatus("loaded");
       })
       .catch((err) => {
@@ -116,7 +121,7 @@ export default function ReservationFormTermsSettings({ accessCodeRelease = {} })
           <button
             type="button"
             onClick={saveTerms}
-            disabled={saving || status === "loading" || !dirty}
+            disabled={saving || status !== "loaded" || !dirty}
             className="rounded-full bg-grove px-4 py-2 text-sm font-medium text-white transition hover:bg-forest disabled:cursor-not-allowed disabled:opacity-50"
           >
             {saving ? "Saving..." : dirty ? "Save terms" : "Saved"}
