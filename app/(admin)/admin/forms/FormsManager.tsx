@@ -346,14 +346,17 @@ const FIELD_LIBRARY_GROUPS: {
   },
 ];
 
+const formDateFormatter = new Intl.DateTimeFormat("en-US", {
+  day: "numeric",
+  hour: "numeric",
+  minute: "2-digit",
+  month: "short",
+  timeZone: "America/Chicago",
+});
+
 function formatDate(value: string | null) {
   if (!value) return "No submissions";
-  return new Date(value).toLocaleString([], {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  return formDateFormatter.format(new Date(value));
 }
 
 function submissionDisplayName(submission: LocalFormSubmissionRow) {
