@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-const baseUrl = process.env.TEST_BASE_URL || "http://localhost:3000";
+const baseUrl = process.env.TEST_BASE_URL || "http://localhost:3004";
 const secret = process.env.CRON_SECRET;
 
 if (!secret) {

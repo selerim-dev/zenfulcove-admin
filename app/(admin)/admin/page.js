@@ -39,6 +39,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [activeCategory, setActiveCategory] = useState("settings");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [messagesInitial, setMessagesInitial] = useState(null);
 
   // Honor deep links from notification emails: ?tab=messages&number=...&contact=...
@@ -152,12 +153,22 @@ export default function Dashboard() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-[var(--color-bg)] text-[var(--color-ink)]">
+      {mobileSidebarOpen && (
+        <button
+          type="button"
+          aria-label="Close menu"
+          className="fixed inset-0 z-40 bg-black/40 md:hidden"
+          onClick={() => setMobileSidebarOpen(false)}
+        />
+      )}
       {/* Sidebar */}
       <Sidebar
         activeCategory={activeCategory}
         onSelect={setActiveCategory}
         collapsed={sidebarCollapsed}
         onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+        mobileOpen={mobileSidebarOpen}
+        onClose={() => setMobileSidebarOpen(false)}
       />
 
       {/* Main area */}
@@ -166,6 +177,7 @@ export default function Dashboard() {
           activeTitle={CATEGORY_TITLES[activeCategory] || "Admin Dashboard"}
           lastRun={lastRun}
           lastRunStatus={lastRunStatus}
+          onOpenMenu={() => setMobileSidebarOpen(true)}
         />
 
         {/* Content */}

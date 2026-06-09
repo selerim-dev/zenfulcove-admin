@@ -274,22 +274,47 @@ const CATEGORY_BY_ID = Object.fromEntries(
   CATEGORIES.map((category) => [category.id, category])
 );
 
+/**
+ * @param {{
+ *   activeCategory: string;
+ *   onSelect: (category: string) => void;
+ *   collapsed: boolean;
+ *   onToggleCollapse: () => void;
+ *   mobileOpen?: boolean;
+ *   onClose?: (() => void) | null;
+ * }} props
+ */
 export default function Sidebar({
   activeCategory,
   onSelect,
   collapsed,
   onToggleCollapse,
+  mobileOpen = false,
+  onClose = null,
 }) {
   return (
     <aside
-      className={`flex shrink-0 flex-col border-r border-[var(--color-border)] bg-[var(--color-surface)] transition-all duration-200 ${
-        collapsed ? "w-[64px]" : "w-[260px]"
-      }`}
+      className={`fixed inset-y-0 left-0 z-50 flex w-[260px] shrink-0 flex-col border-r border-[var(--color-border)] bg-[var(--color-surface)] transition-all duration-200 md:relative md:z-auto md:translate-x-0 ${
+        collapsed ? "md:w-[64px]" : "md:w-[260px]"
+      } ${mobileOpen ? "translate-x-0" : "-translate-x-full"}`}
     >
+      <div className="flex items-center justify-between border-b border-[var(--color-border)] px-5 py-4 md:hidden">
+        <span className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--color-ink-muted)]">
+          Menu
+        </span>
+        <button
+          type="button"
+          onClick={() => onClose?.()}
+          aria-label="Close menu"
+          className="flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--color-border)] bg-white text-xl leading-none text-[var(--color-ink-muted)]"
+        >
+          ×
+        </button>
+      </div>
       {/* Collapse toggle */}
       <button
         onClick={onToggleCollapse}
-        className={`mx-2 mt-3 flex items-center rounded-xl px-3 py-2 text-[var(--color-ink-muted)] transition-colors hover:bg-[var(--color-bg)] hover:text-[var(--color-ink)] ${
+        className={`mx-2 mt-3 hidden items-center rounded-xl px-3 py-2 text-[var(--color-ink-muted)] transition-colors hover:bg-[var(--color-bg)] hover:text-[var(--color-ink)] md:flex ${
           collapsed ? "justify-center" : "justify-between"
         }`}
         title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
@@ -332,6 +357,7 @@ export default function Sidebar({
                   <Link
                     key={cat.id}
                     href={cat.href}
+                    onClick={() => onClose?.()}
                     title={collapsed ? cat.label : undefined}
                     className={`flex items-center gap-3 rounded-xl px-3 py-3 text-sm transition-colors duration-150 ${
                       isActive
@@ -352,7 +378,10 @@ export default function Sidebar({
               return (
                 <button
                   key={cat.id}
-                  onClick={() => onSelect(cat.id)}
+                  onClick={() => {
+                    onSelect(cat.id);
+                    onClose?.();
+                  }}
                   title={collapsed ? cat.label : undefined}
                   className={`flex items-center gap-3 rounded-xl px-3 py-3 text-left text-sm transition-colors duration-150 ${
                     isActive

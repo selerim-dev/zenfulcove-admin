@@ -12,18 +12,50 @@ function formatRunTime(timestamp) {
   });
 }
 
+/**
+ * @param {{
+ *   activeTitle?: string;
+ *   lastRun?: string | null;
+ *   lastRunStatus?: string | null;
+ *   showCron?: boolean;
+ *   onOpenMenu?: (() => void) | null;
+ * }} props
+ */
 export default function Header({
   activeTitle,
   lastRun = null,
   lastRunStatus = null,
   showCron = true,
+  onOpenMenu = null,
 }) {
   const isSuccess = lastRunStatus === "SUCCESS";
 
   return (
     <header className="w-full px-4 pt-4 md:px-8 md:pt-6">
       <div className="flex flex-col gap-4 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3 shadow-sm md:flex-row md:items-center md:justify-between md:px-5">
-        <div className="min-w-0">
+        <div className="flex min-w-0 items-center gap-3">
+          {onOpenMenu && (
+            <button
+              type="button"
+              onClick={onOpenMenu}
+              aria-label="Open menu"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[var(--color-border)] bg-white text-[var(--color-ink)] md:hidden"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                className="h-5 w-5"
+              >
+                <line x1="4" y1="7" x2="20" y2="7" />
+                <line x1="4" y1="12" x2="20" y2="12" />
+                <line x1="4" y1="17" x2="20" y2="17" />
+              </svg>
+            </button>
+          )}
+          <div className="min-w-0">
           <Link href="/admin" className="inline-flex flex-col leading-none">
             <span className="font-serif text-xl font-medium tracking-tight text-[var(--color-ink)]">
               Zenfulcove Glamping
@@ -37,6 +69,7 @@ export default function Header({
               {activeTitle}
             </p>
           )}
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">

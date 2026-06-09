@@ -16,7 +16,7 @@
  * Requires CRON_SECRET in .env.local.
  */
 
-const baseUrl = process.env.TEST_BASE_URL || "http://localhost:3000";
+const baseUrl = process.env.TEST_BASE_URL || "http://localhost:3004";
 const secret = process.env.CRON_SECRET;
 const automation = String(process.env.TEST_AUTOMATION || "").trim();
 

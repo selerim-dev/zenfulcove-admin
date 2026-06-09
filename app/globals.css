@@ -20,6 +20,11 @@
   --color-grove: var(--color-accent);
   --color-sage: #7a9e7e;
   --color-sand: var(--color-border);
+  --breakpoint-sm: 40rem;
+  --breakpoint-md: 48rem;
+  --breakpoint-lg: 64rem;
+  --breakpoint-xl: 80rem;
+  --breakpoint-2xl: 96rem;
   --font-serif: var(--font-display), ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
   --font-sans: var(--font-body), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
