@@ -62,6 +62,36 @@ import {
 } from "@/lib/sendgrid";
 
 const DRY_RUN_ENV = process.env.CRON_DRY_RUN === "true";
+const DELIVERY_LOG_KEYS = [
+  "deliveryFallback",
+  "lodgifyDeliveryChecked",
+  "lodgifyRouteRequired",
+  "lodgifyExpectedRoute",
+  "lodgifyThreadGuidPresent",
+  "lodgifyMessageId",
+  "lodgifyProviderMessageId",
+  "lodgifyMessageStatus",
+  "lodgifyMessageRoute",
+  "lodgifyMessageImported",
+  "lodgifyMessageCreatedAt",
+  "lodgifyThreadErrorTitle",
+  "lodgifyThreadErrorMessage",
+  "channelRouted",
+  "lodgifyDeliveryIssue",
+  "lodgifyPosted",
+  "lodgifyFallbackReason",
+];
+
+function deliveryResultLogFields(result = {}) {
+  return Object.fromEntries(
+    DELIVERY_LOG_KEYS
+      .filter((key) => {
+        const value = result[key];
+        return value !== undefined && value !== null && value !== "";
+      })
+      .map((key) => [key, result[key]])
+  );
+}
 
 function today() {
   return new Date().toISOString().split("T")[0];
@@ -827,6 +857,7 @@ export async function runWaiverReminders(automationConfig, dryRunOverride) {
               status: reminderResult.status || "info",
               ...(reminderResult.decision ? { decision: reminderResult.decision } : {}),
               ...(reminderResult.deliveryChannel ? { deliveryChannel: reminderResult.deliveryChannel } : {}),
+              ...deliveryResultLogFields(reminderResult),
               ...(reminderResult.templateId ? { templateId: reminderResult.templateId } : {}),
               ...(reminderResult.bookingId ? { bookingId: reminderResult.bookingId } : {}),
               ...(reminderResult.bookingChannel ? { bookingChannel: reminderResult.bookingChannel } : {}),
@@ -1153,6 +1184,7 @@ export async function runAccessCodeRelease(automationConfig, dryRunOverride, opt
       status: sendResult.status || "info",
       ...(sendResult.decision ? { decision: sendResult.decision } : {}),
       ...(sendResult.deliveryChannel ? { deliveryChannel: sendResult.deliveryChannel } : {}),
+      ...deliveryResultLogFields(sendResult),
       ...(sendResult.bookingId ? { bookingId: sendResult.bookingId } : {}),
       ...(sendResult.bookingChannel ? { bookingChannel: sendResult.bookingChannel } : {}),
       ...(sendResult.bookingSource ? { bookingSource: sendResult.bookingSource } : {}),
@@ -1408,6 +1440,7 @@ export async function runJervisAccessCodeRetries(automationConfig, dryRunOverrid
       status: sendResult.status || "info",
       ...(sendResult.decision ? { decision: sendResult.decision } : {}),
       ...(sendResult.deliveryChannel ? { deliveryChannel: sendResult.deliveryChannel } : {}),
+      ...deliveryResultLogFields(sendResult),
       ...(sendResult.bookingId ? { bookingId: sendResult.bookingId } : { bookingId }),
       ...(sendResult.bookingChannel ? { bookingChannel: sendResult.bookingChannel } : {}),
       ...(sendResult.bookingSource ? { bookingSource: sendResult.bookingSource } : {}),

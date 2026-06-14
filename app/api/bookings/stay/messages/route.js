@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
+import { appendLogs } from "@/lib/activity-log";
 import { appendStayMessage, getConfig, listStayMessages } from "@/lib/kv";
 import {
   getBookingById,
@@ -414,10 +415,23 @@ export async function POST(request) {
       message: lodgifyBody,
     });
   } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    await appendLogs([
+      {
+        timestamp: new Date().toISOString(),
+        automation: "Guest Portal Messages",
+        property: normalized.propertyName || "—",
+        action: `Failed to post guest portal message to Lodgify for booking ${normalized.id}: ${detail}`,
+        status: "failed",
+        bookingId: normalized.id,
+        attachmentsCount: files.length,
+        guestEmail: normalized.guest.email,
+      },
+    ]).catch(() => {});
     return NextResponse.json(
       {
         error: "Could not post that message to Lodgify.",
-        details: err instanceof Error ? err.message : String(err),
+        details: detail,
       },
       { status: 502 }
     );
@@ -442,8 +456,21 @@ export async function POST(request) {
     booking: normalized,
     body: messageBody,
     attachments: signedAttachments,
-  }).catch((err) => {
+  }).catch(async (err) => {
+    const detail = err instanceof Error ? err.message : String(err);
     console.warn("[stay-messages] Guest portal notification failed:", err);
+    await appendLogs([
+      {
+        timestamp: new Date().toISOString(),
+        automation: "Guest Portal Messages",
+        property: normalized.propertyName || "—",
+        action: `Guest portal staff notification failed for booking ${normalized.id}: ${detail}`,
+        status: "failed",
+        bookingId: normalized.id,
+        attachmentsCount: files.length,
+        guestEmail: normalized.guest.email,
+      },
+    ]).catch(() => {});
   });
 
   return responseForThread({ booking, normalized });
