@@ -12,6 +12,7 @@ import { PROPERTY_TO_CABIN, type CommerceProduct } from "@/lib/types";
 import { todayIso } from "@/lib/dates";
 import { fetchReservationById, LodgifyError } from "@/lib/customer/lodgify";
 import {
+  APP_STRIPE_METADATA_MARKER,
   createStripeClient,
   getAppBaseUrl,
   getKayakStripeMode,
@@ -173,6 +174,7 @@ export async function POST(req: Request) {
   });
   const cancelUrl = `${baseUrl}/special-packages?${cancelParams.toString()}`;
   const metadata = {
+    app: APP_STRIPE_METADATA_MARKER,
     kind: "commerce_purchase",
     purchaseId,
     reservationId: reservation.id,

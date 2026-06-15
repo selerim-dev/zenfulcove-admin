@@ -5,6 +5,42 @@ type KayakStripeMode = "test" | "live";
 const cachedStripeClients: Partial<Record<KayakStripeMode, Stripe>> = {};
 const CANONICAL_APP_BASE_URL = "https://stay.zenfulcove.com";
 
+/**
+ * Marker stamped onto every Checkout Session this app (the guest portal)
+ * creates, written to `metadata.app`. The Zenfulcove marketing site shares
+ * this same Stripe account, so Stripe fans out `checkout.session.*` events to
+ * every webhook endpoint on the account — including ours. We tag our own
+ * sessions with this marker and filter on it so we only ever act on our own.
+ */
+export const APP_STRIPE_METADATA_MARKER = "zenfulcove-portal";
+
+/**
+ * `metadata.product` values that belong to OTHER apps on the shared Stripe
+ * account and must never be processed here (e.g. the marketing site's gift
+ * cards are tagged `product: "zenfulcove-gift-card"`).
+ */
+const FOREIGN_STRIPE_PRODUCTS = new Set(["zenfulcove-gift-card"]);
+
+/**
+ * Returns true only when the given session metadata identifies a Checkout
+ * Session created by THIS app. Used by the webhook to ignore foreign sessions
+ * (returning 200 without acting). Robust both ways: it rejects known foreign
+ * products and requires either our app marker or a `kind` this app sets.
+ */
+export function isOwnStripeSessionMetadata(
+  metadata: Record<string, string> | null | undefined
+): boolean {
+  const product = metadata?.product?.trim();
+  if (product && FOREIGN_STRIPE_PRODUCTS.has(product)) return false;
+
+  if (metadata?.app === APP_STRIPE_METADATA_MARKER) return true;
+
+  // Backward compatible: sessions created before the `app` marker was added
+  // (including any in flight during deploy) still carry a kind we set.
+  const kind = metadata?.kind;
+  return kind === "kayak_booking" || kind === "commerce_purchase";
+}
+
 function truthyEnv(value: string | undefined) {
   return ["1", "true", "yes", "on"].includes(
     String(value || "").trim().toLowerCase()

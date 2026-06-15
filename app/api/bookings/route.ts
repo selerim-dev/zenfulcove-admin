@@ -7,6 +7,7 @@ import { PROPERTY_TO_CABIN, type Kayak } from "@/lib/types";
 import { inclusiveDays, propertyTimeToUtc, todayIso } from "@/lib/dates";
 import { fetchReservationById, LodgifyError } from "@/lib/customer/lodgify";
 import {
+  APP_STRIPE_METADATA_MARKER,
   createStripeClient,
   getKayakStripeMode,
   getAppBaseUrl,
@@ -428,6 +429,7 @@ export async function POST(req: Request) {
   });
   const cancelUrl = `${baseUrl}/book/cancel/${primary.id}?${cancelParams.toString()}`;
   const metadata = {
+    app: APP_STRIPE_METADATA_MARKER,
     kind: "kayak_booking",
     bookingId: primary.id,
     bookingIds: bookingIds.join(","),

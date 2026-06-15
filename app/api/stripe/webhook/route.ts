@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { createSupabaseAdminClient } from "@/lib/supabaseAdmin";
-import { createStripeClient, getStripeWebhookSecret } from "@/lib/stripe";
+import {
+  createStripeClient,
+  getStripeWebhookSecret,
+  isOwnStripeSessionMetadata,
+} from "@/lib/stripe";
 import {
   getCommercePurchase,
   saveCommercePurchase,
@@ -145,27 +149,38 @@ export async function POST(request: Request) {
     );
   }
 
-  if (
+  const isCheckoutSessionEvent =
     event.type === "checkout.session.completed" ||
-    event.type === "checkout.session.async_payment_succeeded"
-  ) {
-    const session = event.data.object as Stripe.Checkout.Session;
-    if (session.metadata?.kind === "commerce_purchase") {
-      await confirmCommercePurchase(session);
-    } else {
-      await confirmPaidSession(session);
-    }
-  }
-
-  if (
+    event.type === "checkout.session.async_payment_succeeded" ||
     event.type === "checkout.session.expired" ||
-    event.type === "checkout.session.async_payment_failed"
-  ) {
+    event.type === "checkout.session.async_payment_failed";
+
+  if (isCheckoutSessionEvent) {
     const session = event.data.object as Stripe.Checkout.Session;
+
+    // The Zenfulcove marketing site shares this Stripe account (it sells gift
+    // cards tagged metadata.product === "zenfulcove-gift-card"), so Stripe
+    // delivers its checkout events here too. Ignore anything that isn't ours
+    // — acknowledge with 200 so Stripe doesn't retry, but take no action.
+    if (!isOwnStripeSessionMetadata(session.metadata)) {
+      console.info(
+        `Ignoring foreign Stripe session ${session.id} (event=${event.type}, product=${session.metadata?.product ?? "n/a"}, kind=${session.metadata?.kind ?? "n/a"}).`
+      );
+      return NextResponse.json({ received: true, ignored: true });
+    }
+
+    const isPaid =
+      event.type === "checkout.session.completed" ||
+      event.type === "checkout.session.async_payment_succeeded";
+
     if (session.metadata?.kind === "commerce_purchase") {
-      await cancelCommercePurchase(session);
+      await (isPaid
+        ? confirmCommercePurchase(session)
+        : cancelCommercePurchase(session));
     } else {
-      await cancelExpiredSession(session);
+      await (isPaid
+        ? confirmPaidSession(session)
+        : cancelExpiredSession(session));
     }
   }
 
