@@ -7,7 +7,10 @@ import {
   upsertAccessCodeRelease,
 } from "@/lib/access-code-releases";
 import { sendAccessCodeForBooking } from "@/lib/access-code-messages";
-import { findLocalFormSubmissionForBooking } from "@/lib/local-forms";
+import {
+  extractLocalFormContact,
+  findLocalFormSubmissionForBooking,
+} from "@/lib/local-forms";
 import { hasSupabaseAdminEnv } from "@/lib/supabaseEnv";
 
 function clean(value) {
@@ -118,6 +121,18 @@ async function maybePostConfiguredLodgifyMessage(row) {
   return sendAccessCodeForBooking({
     booking: releaseBookingFromRow(row),
     automationConfig: config,
+    fallback: {
+      bookingId: row.booking_id,
+      contact: {
+        ...extractLocalFormContact(submission),
+        bookingCode: row.booking_id,
+      },
+      stayDetails: {
+        bookingId: row.booking_id,
+        propertyName: row.property_name,
+        checkinDate: row.checkin_date,
+      },
+    },
     persistState: true,
   });
 }

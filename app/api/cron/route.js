@@ -331,6 +331,52 @@ function extractLodgifyContact(booking) {
   };
 }
 
+function findMatchingLocalFormSubmission(bookingId, submissions = []) {
+  return (
+    (submissions || []).find((submission) =>
+      bookingHasLocalFormSubmission(bookingId, [submission])
+    ) || null
+  );
+}
+
+function accessCodeReleaseFallback({
+  booking,
+  bookingId,
+  contact = {},
+  propertyName = "",
+  submission = null,
+}) {
+  const formContact = submission ? extractLocalFormContact(submission) : {};
+  return {
+    bookingId,
+    contact: {
+      email: formContact.email || contact.email || "",
+      firstName: formContact.firstName || contact.firstName || "",
+      lastName: formContact.lastName || contact.lastName || "",
+      phone: formContact.phone || contact.phone || "",
+      bookingCode: bookingId,
+    },
+    stayDetails: {
+      bookingId,
+      propertyName: propertyName || contact.propertyName || "",
+      checkinDate: toDateOnly(
+        booking?.arrival ||
+          booking?.start_date ||
+          booking?.checkIn ||
+          booking?.check_in ||
+          booking?.checkin_date
+      ),
+      checkoutDate: toDateOnly(
+        booking?.departure ||
+          booking?.end_date ||
+          booking?.checkOut ||
+          booking?.check_out ||
+          booking?.checkout_date
+      ),
+    },
+  };
+}
+
 function isCancelledBooking(status) {
   const normalized = String(status || "").trim().toLowerCase();
   return (
@@ -1137,8 +1183,11 @@ export async function runAccessCodeRelease(automationConfig, dryRunOverride, opt
       continue;
     }
 
+    const matchingLocalSubmission = usesLocalForm
+      ? findMatchingLocalFormSubmission(bookingId, waiverSubmissions)
+      : null;
     const hasWaiver = usesLocalForm
-      ? bookingHasLocalFormSubmission(bookingId, waiverSubmissions)
+      ? Boolean(matchingLocalSubmission)
       : bookingHasWaiver(bookingId, waiverSubmissions);
     if (!hasWaiver) {
       logs.push({
@@ -1151,12 +1200,22 @@ export async function runAccessCodeRelease(automationConfig, dryRunOverride, opt
       continue;
     }
 
+    const releaseFallback = usesLocalForm
+      ? accessCodeReleaseFallback({
+          booking,
+          bookingId,
+          contact,
+          propertyName,
+          submission: matchingLocalSubmission,
+        })
+      : {};
     const sendResult =
       options.messageKind === "code-only"
         ? await sendAccessCodeForBooking({
             booking,
             automationConfig,
             dryRun: isDryRun,
+            fallback: releaseFallback,
             persistState: options.persistState !== false,
             messagePrefix: options.messagePrefix || "",
             messageKind: "code-only",
@@ -1166,6 +1225,7 @@ export async function runAccessCodeRelease(automationConfig, dryRunOverride, opt
               booking,
               automationConfig,
               dryRun: isDryRun,
+              fallback: releaseFallback,
               persistState: options.persistState !== false,
               messagePrefix: options.messagePrefix || "",
             })
@@ -1173,6 +1233,7 @@ export async function runAccessCodeRelease(automationConfig, dryRunOverride, opt
               booking,
               automationConfig,
               dryRun: isDryRun,
+              fallback: releaseFallback,
               persistState: options.persistState !== false,
               messagePrefix: options.messagePrefix || "",
             });
@@ -1359,7 +1420,11 @@ export async function runJervisAccessCodeRetries(automationConfig, dryRunOverrid
   for (const row of rows) {
     const bookingId = String(row.booking_id || "").trim();
     const propertyName = row.property_name || "Property";
-    if (!bookingHasLocalFormSubmission(bookingId, submissions)) {
+    const matchingLocalSubmission = findMatchingLocalFormSubmission(
+      bookingId,
+      submissions
+    );
+    if (!matchingLocalSubmission) {
       logs.push({
         timestamp: new Date().toISOString(),
         automation: automationName,
@@ -1372,6 +1437,7 @@ export async function runJervisAccessCodeRetries(automationConfig, dryRunOverrid
     }
 
     const fallbackBooking = retryBookingFromAccessCodeRelease(row);
+    const fallbackContact = extractLodgifyContact(fallbackBooking);
     let liveBooking = null;
     try {
       liveBooking = await getBookingById(bookingId);
@@ -1429,6 +1495,17 @@ export async function runJervisAccessCodeRetries(automationConfig, dryRunOverrid
       },
       automationConfig,
       dryRun: isDryRun,
+      fallback: accessCodeReleaseFallback({
+        booking: {
+          ...fallbackBooking,
+          ...liveBooking,
+          id: liveBooking.id || fallbackBooking.id,
+        },
+        bookingId,
+        contact: fallbackContact,
+        propertyName,
+        submission: matchingLocalSubmission,
+      }),
       persistState: options.persistState !== false,
       messagePrefix: options.messagePrefix || "",
     });

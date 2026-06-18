@@ -13,6 +13,7 @@ import { getBookingById, getProperties } from "@/lib/lodgify";
 import { inclusiveDays } from "@/lib/dates";
 import {
   bookingHasLocalFormSubmission,
+  extractLocalFormContact,
   findLocalFormSubmissionForBooking,
   listLocalFormSubmissions,
 } from "@/lib/local-forms";
@@ -213,6 +214,17 @@ async function hasSubmittedInternalForm(bookingId, formSlug) {
   }
 }
 
+function releaseContactFromFormSubmission(formSubmission, guest = {}, bookingId = "") {
+  const formContact = formSubmission ? extractLocalFormContact(formSubmission) : {};
+  return {
+    email: formContact.email || guest.email || "",
+    firstName: formContact.firstName || guest.firstName || "",
+    lastName: formContact.lastName || guest.lastName || "",
+    phone: formContact.phone || guest.phone || "",
+    bookingCode: bookingId,
+  };
+}
+
 async function loadConfirmedKayakRentals(reservationId) {
   if (!hasSupabaseAdminEnv() || !reservationId) return [];
 
@@ -338,6 +350,11 @@ export async function POST(request) {
   const formSubmitted =
     Boolean(formSubmission) ||
     (formSlug ? await hasSubmittedInternalForm(normalized.id, formSlug) : false);
+  const releaseContact = releaseContactFromFormSubmission(
+    formSubmission,
+    normalized.guest,
+    normalized.id
+  );
   const bookingEligibleForAccess = isBookedLodgifyStatus(normalized.status);
   let release = await getAccessCodeRelease(normalized.id).catch(() => null);
   let releaseAttempt = null;
@@ -366,10 +383,10 @@ export async function POST(request) {
         },
         contact: {
           bookingCode: normalized.id,
-          email: normalized.guest.email,
-          firstName: normalized.guest.firstName,
-          lastName: normalized.guest.lastName,
-          phone: normalized.guest.phone,
+          email: releaseContact.email,
+          firstName: releaseContact.firstName,
+          lastName: releaseContact.lastName,
+          phone: releaseContact.phone,
         },
       });
       release = await getAccessCodeRelease(normalized.id).catch(() => release);
@@ -442,10 +459,10 @@ export async function POST(request) {
       checkinDate: normalized.arrivalIso,
       checkoutDate: normalized.departureIso,
       contact: {
-        email: normalized.guest.email,
-        firstName: normalized.guest.firstName,
-        lastName: normalized.guest.lastName,
-        phone: normalized.guest.phone,
+        email: releaseContact.email,
+        firstName: releaseContact.firstName,
+        lastName: releaseContact.lastName,
+        phone: releaseContact.phone,
       },
     },
     includeAccessCode: accessCodeReleased,
