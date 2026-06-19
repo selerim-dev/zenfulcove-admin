@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { notifyAutomationFailure } from "@/lib/automation-alerts";
 import { appendLogs } from "@/lib/activity-log";
 import { getConfig } from "@/lib/kv";
 import { getAccessCodeRelease } from "@/lib/access-code-releases";
@@ -406,6 +407,37 @@ export async function POST(request) {
           bookingId: normalized.id,
         },
       ]).catch(() => {});
+      if (releaseAttempt.status === "failed") {
+        await notifyAutomationFailure({
+          config,
+          title: "My Stay access-code retry failed",
+          logs: [
+            {
+              timestamp: new Date().toISOString(),
+              automation: "My Stay Access Code Retry",
+              property: propertyName,
+              action: `My Stay retry result for booking ${normalized.id}: ${releaseAttempt.action}`,
+              status: "failed",
+              bookingId: normalized.id,
+            },
+          ],
+          context: {
+            booking: normalized.id,
+            property: propertyName,
+          },
+        }).catch((err) =>
+          appendLogs([
+            {
+              timestamp: new Date().toISOString(),
+              automation: "Automation Failure Alert",
+              property: propertyName,
+              action: `Failed to send My Stay retry failure alert for booking ${normalized.id}: ${err.message}`,
+              status: "failed",
+              bookingId: normalized.id,
+            },
+          ]).catch(() => {})
+        );
+      }
     } catch (err) {
       releaseAttempt = {
         status: "failed",
@@ -424,6 +456,35 @@ export async function POST(request) {
           bookingId: normalized.id,
         },
       ]).catch(() => {});
+      await notifyAutomationFailure({
+        config,
+        title: "My Stay access-code retry failed",
+        logs: [
+          {
+            timestamp: new Date().toISOString(),
+            automation: "My Stay Access Code Retry",
+            property: propertyName,
+            action: `My Stay retry failed for booking ${normalized.id}: ${releaseAttempt.action}`,
+            status: "failed",
+            bookingId: normalized.id,
+          },
+        ],
+        context: {
+          booking: normalized.id,
+          property: propertyName,
+        },
+      }).catch((alertErr) =>
+        appendLogs([
+          {
+            timestamp: new Date().toISOString(),
+            automation: "Automation Failure Alert",
+            property: propertyName,
+            action: `Failed to send My Stay retry failure alert for booking ${normalized.id}: ${alertErr.message}`,
+            status: "failed",
+            bookingId: normalized.id,
+          },
+        ]).catch(() => {})
+      );
     }
   } else if (formSubmitted && !releasedStatus && !bookingEligibleForAccess) {
     releaseAttempt = {

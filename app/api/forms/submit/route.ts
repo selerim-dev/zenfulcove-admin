@@ -1,6 +1,7 @@
 import { after, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { appendLogs } from "@/lib/activity-log";
+import { notifyAutomationFailure } from "@/lib/automation-alerts";
 import { hasSupabaseAdminEnv } from "@/lib/supabaseEnv";
 import {
   createLocalFormSubmission,
@@ -578,6 +579,53 @@ export async function POST(request: Request) {
 
         if (!shouldRetryAccessCodeRelease(accessCodeRelease)) {
           break;
+        }
+      }
+
+      if (accessCodeRelease?.status === "failed") {
+        const bookingCode =
+          contact?.bookingCode || bookingCodeFromPayload(finalSubmissionPayload);
+        try {
+          const alertResult = await notifyAutomationFailure({
+            title: "Access-code release failed after form submit",
+            logs: [
+              {
+                timestamp: new Date().toISOString(),
+                automation: "Internal Form Submit",
+                property: resolvedFormSlug,
+                action: accessCodeRelease.action,
+                status: "failed",
+                bookingId: bookingCode,
+              },
+            ],
+            context: {
+              form: resolvedFormSlug,
+              booking: bookingCode,
+              submissionId: submission.id,
+            },
+          });
+          await recordSubmitLog({
+            status: "info",
+            action: alertResult.sent
+              ? `Access-code failure alert sent to ${alertResult.recipients} recipient(s).`
+              : `Access-code failure alert skipped: ${alertResult.reason || "not configured"}.`,
+            formSlug: resolvedFormSlug,
+            parsed,
+            contact,
+            submissionId: submission.id,
+          });
+        } catch (err) {
+          await recordSubmitLog({
+            status: "failed",
+            action: `Access-code failure alert email failed: ${
+              err instanceof Error ? err.message : String(err)
+            }`,
+            formSlug: resolvedFormSlug,
+            parsed,
+            contact,
+            submissionId: submission.id,
+            error: err,
+          });
         }
       }
     });

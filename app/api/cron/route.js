@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { CRON_SECRET } from "@/config/keys";
+import { notifyAutomationFailure } from "@/lib/automation-alerts";
 import { sendSms, validateTwilioConfig } from "@/lib/twilio";
 import {
   getConfig,
@@ -7,6 +8,8 @@ import {
   setEventPopupContactState,
   getEventPopupSmsSent,
   setEventPopupSmsSent,
+  getPopupFollowupSent,
+  setPopupFollowupSent,
   getSalesmateFormSyncState,
   setSalesmateFormSyncState,
 } from "@/lib/kv";
@@ -59,6 +62,7 @@ import {
   updateContactCustomFields,
   upsertContactsToList,
   listAllContactLists,
+  validateContactCustomFieldKeys,
 } from "@/lib/sendgrid";
 
 const DRY_RUN_ENV = process.env.CRON_DRY_RUN === "true";
@@ -1585,6 +1589,23 @@ export async function runPopupFollowups(automationConfig, dryRunOverride, popupC
     return logs;
   }
 
+  try {
+    await validateContactCustomFieldKeys([
+      config.popupTriggeredFieldId,
+      config.popupSentTemplatesFieldId,
+      config.popupSentSmsFieldId,
+    ]);
+  } catch (err) {
+    logs.push({
+      timestamp: new Date().toISOString(),
+      automation: "Popup Follow Ups",
+      property: "—",
+      action: `Skipped: ${err.message}`,
+      status: "failed",
+    });
+    return logs;
+  }
+
   const configuredEmails = shouldRunEmail ? (config.emails || []).filter(Boolean) : [];
   const configuredSms = shouldRunSms
     ? (config.sms || []).filter((item) => item && item.enabled !== false)
@@ -1855,6 +1876,7 @@ export async function runPopupFollowups(automationConfig, dryRunOverride, popupC
       const templateId = String(followup.templateId || "").trim();
       const sentTemplatesLabel = formatSentKeysLabel(Array.from(sentTemplateIds));
       const emailDestination = isOneOffTest ? testDestination : email;
+      const emailLedgerKey = templateId ? `email:${templateId}` : "";
 
       if (!templateId) {
         logs.push({
@@ -1867,12 +1889,16 @@ export async function runPopupFollowups(automationConfig, dryRunOverride, popupC
         continue;
       }
 
-      if (sentTemplateIds.has(templateId)) {
+      const emailLedgerSent =
+        !isDryRun && !isOneOffTest && emailLedgerKey
+          ? await getPopupFollowupSent(email, emailLedgerKey)
+          : null;
+      if (sentTemplateIds.has(templateId) || emailLedgerSent) {
         logs.push({
           timestamp: new Date().toISOString(),
           automation: "Popup Follow Ups",
           property: "—",
-          action: `SKIP ${email} | triggered ${triggerDate} | ${daysSinceTriggered} days since popup | template already sent: ${templateId} | sent: ${sentTemplatesLabel}`,
+          action: `SKIP ${email} | triggered ${triggerDate} | ${daysSinceTriggered} days since popup | template already sent: ${templateId}${emailLedgerSent && !sentTemplateIds.has(templateId) ? " (KV ledger)" : ""} | sent: ${sentTemplatesLabel}`,
           status: "skipped",
         });
         continue;
@@ -1896,6 +1922,20 @@ export async function runPopupFollowups(automationConfig, dryRunOverride, popupC
 
           if (shouldPersistState) {
             sentTemplateIds.add(templateId);
+            await setPopupFollowupSent(email, emailLedgerKey, {
+              channel: "email",
+              templateId,
+              label,
+              sentAt: new Date().toISOString(),
+            }).catch((err) => {
+              logs.push({
+                timestamp: new Date().toISOString(),
+                automation: "Popup Follow Ups",
+                property: "—",
+                action: `Email "${label}" sent to ${email}, but KV sent-ledger update failed: ${err.message}`,
+                status: "failed",
+              });
+            });
             await updateContactCustomFields({
               email,
               customFields: {
@@ -1949,6 +1989,7 @@ export async function runPopupFollowups(automationConfig, dryRunOverride, popupC
       const sentSmsLabel = formatSentKeysLabel(Array.from(sentSmsKeys));
       const sendTo = isOneOffTest ? normalizePhoneNumber(testDestination) : phone;
       const isTestSend = !isDryRun && isOneOffTest;
+      const smsLedgerKey = messageKey ? `sms:${messageKey}` : "";
 
       if (!messageKey) {
         logs.push({
@@ -1983,12 +2024,16 @@ export async function runPopupFollowups(automationConfig, dryRunOverride, popupC
         continue;
       }
 
-      if (sentSmsKeys.has(messageKey)) {
+      const smsLedgerSent =
+        !isDryRun && !isOneOffTest && smsLedgerKey
+          ? await getPopupFollowupSent(email, smsLedgerKey)
+          : null;
+      if (sentSmsKeys.has(messageKey) || smsLedgerSent) {
         logs.push({
           timestamp: new Date().toISOString(),
           automation: "Popup Follow Ups",
           property: "—",
-          action: `SKIP ${phone} | triggered ${triggerDate} | ${daysSinceTriggered} days since popup | SMS already sent: ${messageKey} | sent: ${sentSmsLabel}`,
+          action: `SKIP ${phone} | triggered ${triggerDate} | ${daysSinceTriggered} days since popup | SMS already sent: ${messageKey}${smsLedgerSent && !sentSmsKeys.has(messageKey) ? " (KV ledger)" : ""} | sent: ${sentSmsLabel}`,
           status: "skipped",
         });
         continue;
@@ -2004,6 +2049,21 @@ export async function runPopupFollowups(automationConfig, dryRunOverride, popupC
 
           if (shouldPersistState) {
             sentSmsKeys.add(messageKey);
+            await setPopupFollowupSent(email, smsLedgerKey, {
+              channel: "sms",
+              messageKey,
+              label,
+              twilioSid: smsResult?.sid || "",
+              sentAt: new Date().toISOString(),
+            }).catch((err) => {
+              logs.push({
+                timestamp: new Date().toISOString(),
+                automation: "Popup Follow Ups",
+                property: "—",
+                action: `SMS "${label}" sent to ${phone}, but KV sent-ledger update failed: ${err.message}`,
+                status: "failed",
+              });
+            });
             await updateContactCustomFields({
               email,
               customFields: {
@@ -3513,6 +3573,40 @@ export async function POST(request) {
   await appendLogs(allLogs);
 
   const hasFailed = allLogs.some((log) => log.status === "failed");
+  if (hasFailed && !isDryRun) {
+    const failedLogs = allLogs.filter((log) => log.status === "failed");
+    try {
+      const alertResult = await notifyAutomationFailure({
+        config: automationConfig,
+        title: "Scheduled automation failure",
+        logs: failedLogs,
+        context: {
+          path: `${request.nextUrl?.pathname || "/api/cron"}${request.nextUrl?.search || ""}`,
+          automations: runAllAutomations
+            ? "all"
+            : Array.from(selectedAutomations).join(", "),
+        },
+      });
+      allLogs.push({
+        timestamp: new Date().toISOString(),
+        automation: "Automation Failure Alert",
+        property: "—",
+        action: alertResult.sent
+          ? `Sent failure alert email to ${alertResult.recipients} recipient(s)`
+          : `Failure alert email skipped: ${alertResult.reason || "not configured"}`,
+        status: alertResult.sent || alertResult.skipped ? "info" : "failed",
+      });
+    } catch (err) {
+      allLogs.push({
+        timestamp: new Date().toISOString(),
+        automation: "Automation Failure Alert",
+        property: "—",
+        action: `Failed to send failure alert email: ${err.message}`,
+        status: "failed",
+      });
+    }
+    await appendLogs(allLogs.slice(-1)).catch(() => {});
+  }
   await writeLastRunStatus(hasFailed ? "FAILED" : "SUCCESS");
 
   // Log to terminal for quick debugging (dev server stdout)
