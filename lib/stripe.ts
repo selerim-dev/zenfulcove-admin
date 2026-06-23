@@ -60,6 +60,20 @@ export function isKayakPaidCheckoutEnabled() {
   return truthyEnv(process.env.KAYAK_PAID_CHECKOUT_ENABLED);
 }
 
+/**
+ * Stripe mode for the In-Cabin Massage feature, independent of
+ * KAYAK_STRIPE_MODE so massage can stay in test mode while kayaks/commerce run
+ * live. Defaults to "test" when unset (safe for testing).
+ */
+export function getMassageStripeMode(): KayakStripeMode {
+  const mode = String(process.env.MASSAGE_STRIPE_MODE || "test")
+    .trim()
+    .toLowerCase();
+  if (mode === "live") return "live";
+  if (mode === "test") return "test";
+  throw new Error("MASSAGE_STRIPE_MODE must be either test or live.");
+}
+
 function stripeSecretKey(mode = getKayakStripeMode()) {
   if (mode === "live") {
     return process.env.STRIPE_LIVE_SECRET_KEY || process.env.STRIPE_SECRET_KEY;
@@ -79,8 +93,24 @@ function stripeWebhookSecret(mode = getKayakStripeMode()) {
   );
 }
 
-export function hasStripeSecretEnv() {
-  return Boolean(stripeSecretKey());
+export function hasStripeSecretEnv(mode = getKayakStripeMode()) {
+  return Boolean(stripeSecretKey(mode));
+}
+
+/**
+ * All distinct webhook signing secrets configured (live + test + generic). The
+ * single webhook endpoint can receive events from BOTH modes at once — e.g.
+ * live kayak/commerce and test massage — so the handler verifies against each.
+ */
+export function stripeWebhookSecrets(): string[] {
+  const secrets = [
+    process.env.STRIPE_LIVE_WEBHOOK_SECRET,
+    process.env.STRIPE_TEST_WEBHOOK_SECRET,
+    process.env.STRIPE_WEBHOOK_SECRET,
+  ]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean);
+  return Array.from(new Set(secrets));
 }
 
 export function hasStripeWebhookEnv() {

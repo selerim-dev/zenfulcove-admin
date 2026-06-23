@@ -3,8 +3,8 @@ import type Stripe from "stripe";
 import { createSupabaseAdminClient } from "@/lib/supabaseAdmin";
 import {
   createStripeClient,
-  getStripeWebhookSecret,
   isOwnStripeSessionMetadata,
+  stripeWebhookSecrets,
 } from "@/lib/stripe";
 import {
   getCommercePurchase,
@@ -224,21 +224,22 @@ export async function POST(request: Request) {
     );
   }
 
-  let event: Stripe.Event;
-  try {
-    event = stripe.webhooks.constructEvent(
-      await request.text(),
-      signature,
-      getStripeWebhookSecret()
-    );
-  } catch (err) {
-    return NextResponse.json(
-      {
-        error:
-          err instanceof Error ? err.message : "Invalid Stripe webhook payload.",
-      },
-      { status: 400 }
-    );
+  // Verify against every configured signing secret (live + test). The endpoint
+  // can receive both live (kayak/commerce) and test (massage) events; whichever
+  // secret validates the signature is the mode that sent it.
+  const payload = await request.text();
+  let event: Stripe.Event | null = null;
+  let verifyError = "Invalid Stripe webhook payload.";
+  for (const secret of stripeWebhookSecrets()) {
+    try {
+      event = stripe.webhooks.constructEvent(payload, signature, secret);
+      break;
+    } catch (err) {
+      verifyError = err instanceof Error ? err.message : verifyError;
+    }
+  }
+  if (!event) {
+    return NextResponse.json({ error: verifyError }, { status: 400 });
   }
 
   const isCheckoutSessionEvent =

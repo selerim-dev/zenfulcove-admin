@@ -1,6 +1,6 @@
 import {
   createStripeClient,
-  getKayakStripeMode,
+  getMassageStripeMode,
   hasStripeSecretEnv,
 } from "@/lib/stripe";
 
@@ -14,8 +14,8 @@ export async function refundMassagePayment(
   paymentIntentId: string | null | undefined
 ): Promise<string | null> {
   const intent = String(paymentIntentId || "").trim();
-  if (!intent || !hasStripeSecretEnv()) return null;
-  const stripe = createStripeClient(getKayakStripeMode());
+  if (!intent || !hasStripeSecretEnv(getMassageStripeMode())) return null;
+  const stripe = createStripeClient(getMassageStripeMode());
   const refund = await stripe.refunds.create({ payment_intent: intent });
   return refund.id;
 }

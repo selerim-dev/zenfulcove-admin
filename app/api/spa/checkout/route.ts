@@ -17,7 +17,7 @@ import {
   APP_STRIPE_METADATA_MARKER,
   createStripeClient,
   getAppBaseUrl,
-  getKayakStripeMode,
+  getMassageStripeMode,
   hasStripeSecretEnv,
 } from "@/lib/stripe";
 import { hasSupabaseAdminEnv } from "@/lib/supabaseEnv";
@@ -44,10 +44,10 @@ export async function POST(req: Request) {
       { status: 503 }
     );
   }
-  if (!hasStripeSecretEnv()) {
+  if (!hasStripeSecretEnv(getMassageStripeMode())) {
     return NextResponse.json(
       {
-        error: `Payment checkout is not configured for ${getKayakStripeMode()} mode yet.`,
+        error: `Payment checkout is not configured for ${getMassageStripeMode()} mode yet.`,
       },
       { status: 503 }
     );
@@ -178,7 +178,7 @@ export async function POST(req: Request) {
     payout_cents: service.payout_cents,
   });
 
-  const stripe = createStripeClient(getKayakStripeMode());
+  const stripe = createStripeClient(getMassageStripeMode());
   const baseUrl = getAppBaseUrl(req);
   const successUrl = `${baseUrl}/spa/confirmation/${booking.id}?session_id={CHECKOUT_SESSION_ID}`;
   const cancelParams = new URLSearchParams({
