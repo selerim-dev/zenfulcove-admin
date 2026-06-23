@@ -6,6 +6,7 @@ import { generateSlots } from "@/lib/spa";
 import {
   getActiveTherapist,
   getService,
+  getSpaMasterHours,
   listTherapistBusyIntervals,
 } from "@/lib/spaBookings";
 import { sweepExpiredMassageBookings } from "@/lib/spaExpiry";
@@ -99,6 +100,7 @@ export async function POST(req: Request) {
 
   const slots = generateSlots({
     therapist,
+    masterHours: await getSpaMasterHours(),
     durationMin: service.duration_min,
     dateIso,
     busy,

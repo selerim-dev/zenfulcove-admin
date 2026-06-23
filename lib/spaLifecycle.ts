@@ -72,7 +72,7 @@ export async function expireBooking(
   return releaseAndNotify(
     booking,
     "expired",
-    "Expired — no therapist response within 30 minutes."
+    "Expired — no therapist response within 20 minutes."
   );
 }
 

@@ -6,10 +6,12 @@ import {
   createServiceAction,
   deleteServiceAction,
   markBookingCompleted,
-  saveTherapist,
+  saveMasterHours,
   setBookingPayoutPaid,
   updateServiceAction,
 } from "./actions";
+import TherapistForm from "./TherapistForm";
+import Modal from "@/components/customer/Modal";
 import { PROPERTY_TIMEZONE } from "@/lib/dates";
 import {
   formatMoney,
@@ -18,6 +20,7 @@ import {
   type MassageBookingStatus,
   type MassageService,
   type MassageTherapist,
+  type WeeklyHours,
 } from "@/lib/types";
 
 const DAY_LABELS = [
@@ -57,16 +60,27 @@ const labelClass = "text-xs font-medium text-[var(--color-ink-muted)]";
 const cardClass =
   "rounded-2xl border border-[var(--color-border)] bg-white p-5 shadow-sm md:p-6";
 
+type TherapistModalState =
+  | { mode: "closed" }
+  | { mode: "create" }
+  | { mode: "edit"; therapist: MassageTherapist };
+
 export default function SpaManager({
-  therapist,
+  therapists,
   services,
   bookings,
+  masterHours,
 }: {
-  therapist: MassageTherapist | null;
+  therapists: MassageTherapist[];
   services: MassageService[];
   bookings: MassageBooking[];
+  masterHours: WeeklyHours;
 }) {
   const [addingService, setAddingService] = useState(false);
+  const [therapistModal, setTherapistModal] = useState<TherapistModalState>({
+    mode: "closed",
+  });
+  const closeTherapist = () => setTherapistModal({ mode: "closed" });
 
   const payoutOwed = bookings
     .filter((b) => b.status === "completed" && !b.payout_paid_at)
@@ -74,17 +88,93 @@ export default function SpaManager({
 
   return (
     <div className="space-y-6">
-      {therapist ? (
-        <TherapistCard therapist={therapist} />
-      ) : (
-        <div className={cardClass}>
-          <p className="text-sm text-[var(--color-ink-muted)]">
-            No therapist record found. Run the{" "}
-            <span className="font-mono">0019_spa_massage.sql</span> migration to
-            seed Bodywork by Beth, then refresh.
-          </p>
-        </div>
-      )}
+      <section className={cardClass}>
+        <h2 className="font-serif text-2xl font-medium tracking-tight">
+          Master accepted hours
+        </h2>
+        <p className="mb-4 mt-1 text-sm text-[var(--color-ink-muted)]">
+          The Zenfulcove-wide window guests can book within. A time is offered
+          only when it falls inside this range <em>and</em> the therapist&apos;s
+          own hours, and doesn&apos;t conflict with their calendar.
+        </p>
+        <form action={saveMasterHours} className="space-y-5">
+          <WeeklyHoursRows hours={masterHours} />
+          <button
+            type="submit"
+            className="rounded-full bg-[var(--color-accent)] px-6 py-2.5 text-sm font-medium text-white transition hover:bg-[var(--color-accent-strong)]"
+          >
+            Save master hours
+          </button>
+        </form>
+      </section>
+
+      <section className={cardClass}>
+        <h2 className="mb-1 font-serif text-2xl font-medium tracking-tight">
+          Therapists ({therapists.length})
+        </h2>
+        <p className="mb-4 text-sm text-[var(--color-ink-muted)]">
+          Add a therapist&apos;s basic info and the calendar they share with us.
+          Their hours come from the master accepted hours above; their calendar
+          only removes the times they&apos;re busy.
+        </p>
+        <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {therapists.map((t) => (
+            <li key={t.id}>
+              <button
+                type="button"
+                onClick={() => setTherapistModal({ mode: "edit", therapist: t })}
+                className="flex h-full w-full flex-col gap-1 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5 text-left transition hover:-translate-y-0.5 hover:shadow-lg"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <h3 className="font-serif text-lg font-medium tracking-tight">
+                    {t.name}
+                  </h3>
+                  {!t.is_active && (
+                    <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-amber-800">
+                      Paused
+                    </span>
+                  )}
+                </div>
+                <p className="text-sm text-[var(--color-ink-muted)]">
+                  {t.phone || "No number set"}
+                </p>
+                <p className="truncate text-xs text-[var(--color-ink-muted)]">
+                  {t.google_calendar_id || "No calendar linked"}
+                </p>
+              </button>
+            </li>
+          ))}
+          <li>
+            <button
+              type="button"
+              onClick={() => setTherapistModal({ mode: "create" })}
+              className="flex h-full min-h-[7rem] w-full cursor-pointer flex-col items-center justify-center gap-1 rounded-2xl border-2 border-dashed border-[var(--color-border)] bg-transparent p-5 text-sm font-medium text-[var(--color-ink-muted)] transition hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]"
+            >
+              <span className="text-2xl leading-none">+</span>
+              Add therapist
+            </button>
+          </li>
+        </ul>
+      </section>
+
+      <Modal
+        open={therapistModal.mode !== "closed"}
+        onClose={closeTherapist}
+        title={
+          therapistModal.mode === "edit"
+            ? `Edit ${therapistModal.therapist.name}`
+            : "Add therapist"
+        }
+      >
+        {therapistModal.mode === "edit" ? (
+          <TherapistForm
+            therapist={therapistModal.therapist}
+            onSuccess={closeTherapist}
+          />
+        ) : therapistModal.mode === "create" ? (
+          <TherapistForm onSuccess={closeTherapist} />
+        ) : null}
+      </Modal>
 
       <section className={cardClass}>
         <div className="mb-4 flex items-center justify-between">
@@ -140,7 +230,13 @@ export default function SpaManager({
             </Field>
             <div className="flex items-end">
               <label className="mb-2 flex items-center gap-2 text-sm">
-                <input type="checkbox" name="is_active" defaultChecked /> Active
+                <input
+                  type="checkbox"
+                  name="is_active"
+                  defaultChecked
+                  className="h-4 w-4 rounded border-[var(--color-border)] accent-[var(--color-accent)]"
+                />{" "}
+                Active
               </label>
             </div>
             <div className="md:col-span-full">
@@ -182,136 +278,6 @@ export default function SpaManager({
         <BookingsTable bookings={bookings} />
       </section>
     </div>
-  );
-}
-
-function TherapistCard({ therapist }: { therapist: MassageTherapist }) {
-  return (
-    <section className={cardClass}>
-      <h2 className="mb-4 font-serif text-2xl font-medium tracking-tight">
-        Therapist & availability
-      </h2>
-      <form action={saveTherapist} className="space-y-5">
-        <input type="hidden" name="id" value={therapist.id} />
-        <div className="grid gap-4 md:grid-cols-2">
-          <Field label="Name">
-            <input
-              name="name"
-              defaultValue={therapist.name}
-              required
-              className={inputClass}
-            />
-          </Field>
-          <Field label="Mobile number (for booking texts)">
-            <input
-              name="phone"
-              defaultValue={therapist.phone ?? ""}
-              placeholder="+15125551234"
-              className={inputClass}
-            />
-          </Field>
-          <Field label="Google Calendar ID">
-            <input
-              name="google_calendar_id"
-              defaultValue={therapist.google_calendar_id ?? ""}
-              placeholder="beth@example.com"
-              className={inputClass}
-            />
-          </Field>
-          <Field label="Timezone">
-            <input
-              name="timezone"
-              defaultValue={therapist.timezone}
-              className={inputClass}
-            />
-          </Field>
-          <Field label="Slot interval (min)">
-            <input
-              name="slot_interval_min"
-              type="number"
-              min={5}
-              max={240}
-              defaultValue={therapist.slot_interval_min}
-              className={inputClass}
-            />
-          </Field>
-          <Field label="Buffer between appts (min)">
-            <input
-              name="buffer_min"
-              type="number"
-              min={0}
-              defaultValue={therapist.buffer_min}
-              className={inputClass}
-            />
-          </Field>
-          <Field label="Lead time (hours)">
-            <input
-              name="lead_time_hours"
-              type="number"
-              min={0}
-              defaultValue={therapist.lead_time_hours}
-              className={inputClass}
-            />
-          </Field>
-          <div className="flex items-end">
-            <label className="mb-2 flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                name="is_active"
-                defaultChecked={therapist.is_active}
-              />{" "}
-              Accepting bookings
-            </label>
-          </div>
-        </div>
-
-        <div>
-          <p className={`${labelClass} mb-2`}>Weekly working hours</p>
-          <div className="space-y-2">
-            {DAY_LABELS.map((label, day) => {
-              const windows = therapist.weekly_hours?.[String(day)];
-              const first = Array.isArray(windows) ? windows[0] : null;
-              const closed = !first;
-              return (
-                <div
-                  key={day}
-                  className="grid grid-cols-[7rem_auto_auto_auto] items-center gap-3 text-sm"
-                >
-                  <span className="font-medium">{label}</span>
-                  <label className="flex items-center gap-2 text-[var(--color-ink-muted)]">
-                    <input
-                      type="checkbox"
-                      name={`day_${day}_closed`}
-                      defaultChecked={closed}
-                    />
-                    Closed
-                  </label>
-                  <input
-                    type="time"
-                    name={`day_${day}_open`}
-                    defaultValue={first ? first[0] : "10:00"}
-                    className={inputClass}
-                  />
-                  <input
-                    type="time"
-                    name={`day_${day}_close`}
-                    defaultValue={first ? first[1] : "19:00"}
-                    className={inputClass}
-                  />
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        <button
-          type="submit"
-          className="rounded-full bg-[var(--color-accent)] px-6 py-2.5 text-sm font-medium text-white transition hover:bg-[var(--color-accent-strong)]"
-        >
-          Save therapist
-        </button>
-      </form>
-    </section>
   );
 }
 
@@ -367,6 +333,7 @@ function ServiceRow({ service }: { service: MassageService }) {
           type="checkbox"
           name="is_active"
           defaultChecked={service.is_active}
+          className="h-4 w-4 rounded border-[var(--color-border)] accent-[var(--color-accent)]"
         />{" "}
         Active
       </label>
@@ -515,6 +482,47 @@ function RowButton({
         {children}
       </button>
     </form>
+  );
+}
+
+function WeeklyHoursRows({ hours }: { hours: WeeklyHours }) {
+  return (
+    <div className="space-y-2">
+      {DAY_LABELS.map((label, day) => {
+        const windows = hours?.[String(day)];
+        const first = Array.isArray(windows) ? windows[0] : null;
+        const closed = !first;
+        return (
+          <div
+            key={day}
+            className="grid grid-cols-[7rem_auto_auto_auto] items-center gap-3 text-sm"
+          >
+            <span className="font-medium">{label}</span>
+            <label className="flex items-center gap-2 text-[var(--color-ink-muted)]">
+              <input
+                type="checkbox"
+                name={`day_${day}_closed`}
+                defaultChecked={closed}
+                className="h-4 w-4 rounded border-[var(--color-border)] accent-[var(--color-accent)]"
+              />
+              Closed
+            </label>
+            <input
+              type="time"
+              name={`day_${day}_open`}
+              defaultValue={first ? first[0] : "10:00"}
+              className={inputClass}
+            />
+            <input
+              type="time"
+              name={`day_${day}_close`}
+              defaultValue={first ? first[1] : "19:00"}
+              className={inputClass}
+            />
+          </div>
+        );
+      })}
+    </div>
   );
 }
 

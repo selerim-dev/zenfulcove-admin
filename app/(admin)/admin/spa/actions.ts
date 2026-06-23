@@ -2,9 +2,12 @@
 
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
+import { getConfig, setConfig } from "@/lib/kv";
 import {
   createService,
+  createTherapist,
   deleteService,
+  deleteTherapist,
   getMassageBooking,
   updateMassageBooking,
   updateService,
@@ -48,36 +51,58 @@ function parseWeeklyHours(formData: FormData): WeeklyHours {
   return weekly;
 }
 
-export async function saveTherapist(formData: FormData) {
+export async function saveMasterHours(formData: FormData) {
   await requireAdminCookie();
-  const id = String(formData.get("id") ?? "").trim();
-  if (!id) throw new Error("Missing therapist id.");
+  const masterHours = parseWeeklyHours(formData);
+  const config = await getConfig();
+  await setConfig({
+    ...config,
+    spaSettings: { ...(config.spaSettings || {}), masterHours },
+  });
+  revalidateSpa();
+}
 
+function parseTherapistFields(formData: FormData) {
   const name = String(formData.get("name") ?? "").trim();
   if (!name) throw new Error("Name is required.");
-
-  await updateTherapist(id, {
+  return {
     name,
     phone: String(formData.get("phone") ?? "").trim() || null,
     google_calendar_id:
       String(formData.get("google_calendar_id") ?? "").trim() || null,
     timezone: String(formData.get("timezone") ?? "").trim() || "America/Chicago",
-    weekly_hours: parseWeeklyHours(formData),
     slot_interval_min: Math.max(
       5,
       Math.min(240, Math.round(Number(formData.get("slot_interval_min") || 30)))
     ),
-    buffer_min: Math.max(
-      0,
-      Math.round(Number(formData.get("buffer_min") || 0))
-    ),
+    buffer_min: Math.max(0, Math.round(Number(formData.get("buffer_min") || 0))),
     lead_time_hours: Math.max(
       0,
       Math.round(Number(formData.get("lead_time_hours") || 0))
     ),
     is_active: formData.get("is_active") === "on",
-  });
+  };
+}
 
+export async function createTherapistAction(formData: FormData) {
+  await requireAdminCookie();
+  await createTherapist({ ...parseTherapistFields(formData), display_order: 0 });
+  revalidateSpa();
+}
+
+export async function updateTherapistAction(formData: FormData) {
+  await requireAdminCookie();
+  const id = String(formData.get("id") ?? "").trim();
+  if (!id) throw new Error("Missing therapist id.");
+  await updateTherapist(id, parseTherapistFields(formData));
+  revalidateSpa();
+}
+
+export async function deleteTherapistAction(id: string) {
+  await requireAdminCookie();
+  const therapistId = String(id || "").trim();
+  if (!therapistId) throw new Error("Missing therapist id.");
+  await deleteTherapist(therapistId);
   revalidateSpa();
 }
 

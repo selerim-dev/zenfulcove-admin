@@ -5,6 +5,7 @@ import type {
   MassageBookingStatus,
   MassageService,
   MassageTherapist,
+  WeeklyHours,
 } from "@/lib/types";
 
 /**
@@ -18,6 +19,32 @@ export async function isSpaEnabled(): Promise<boolean> {
     return config?.customerPortal?.navigation?.spa === true;
   } catch {
     return false;
+  }
+}
+
+/**
+ * Preview bypass: lets staff test the live booking flow before launch while it
+ * stays hidden from regular guests. A request carrying ?preview=<secret> (which
+ * must equal SPA_PREVIEW_SECRET) is treated as if the feature flag were on.
+ * Returns false when the env secret is unset, so it can never accidentally open
+ * the feature.
+ */
+export function spaPreviewMatches(value: string | null | undefined): boolean {
+  const secret = String(process.env.SPA_PREVIEW_SECRET || "").trim();
+  return Boolean(secret) && String(value || "").trim() === secret;
+}
+
+/**
+ * The Zenfulcove-wide weekly window that bookings must fall inside. Set in admin
+ * (/admin/spa). Bookable times = this window, minus the therapist's calendar
+ * busy blocks (and existing bookings).
+ */
+export async function getSpaMasterHours(): Promise<WeeklyHours> {
+  try {
+    const config = await getConfig();
+    return (config?.spaSettings?.masterHours || {}) as WeeklyHours;
+  } catch {
+    return {};
   }
 }
 
@@ -79,6 +106,32 @@ export async function getActiveTherapist(): Promise<MassageTherapist | null> {
   return therapists[0] ?? null;
 }
 
+export async function createTherapist(
+  input: Pick<
+    MassageTherapist,
+    | "name"
+    | "phone"
+    | "google_calendar_id"
+    | "timezone"
+    | "slot_interval_min"
+    | "buffer_min"
+    | "lead_time_hours"
+    | "is_active"
+    | "display_order"
+  >
+): Promise<MassageTherapist> {
+  const supabase = createSupabaseAdminClient();
+  // weekly_hours is left to its column default ('{}'): hours come from the
+  // master accepted range, not per therapist.
+  const { data, error } = await supabase
+    .from("massage_therapists")
+    .insert(input)
+    .select("*")
+    .single();
+  if (error) throw new Error(error.message);
+  return data as MassageTherapist;
+}
+
 export async function updateTherapist(
   id: string,
   patch: Partial<MassageTherapist>
@@ -92,6 +145,15 @@ export async function updateTherapist(
     .single();
   if (error) throw new Error(error.message);
   return data as MassageTherapist;
+}
+
+export async function deleteTherapist(id: string): Promise<void> {
+  const supabase = createSupabaseAdminClient();
+  const { error } = await supabase
+    .from("massage_therapists")
+    .delete()
+    .eq("id", id);
+  if (error) throw new Error(error.message);
 }
 
 // ─── Services ────────────────────────────────────────────────────────────────

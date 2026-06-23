@@ -26,7 +26,7 @@ import {
   notifyTherapistOfRequest,
 } from "@/lib/spaMessages";
 
-const MASSAGE_RESPONSE_WINDOW_MS = 30 * 60 * 1000;
+const MASSAGE_RESPONSE_WINDOW_MS = 20 * 60 * 1000;
 
 export const runtime = "nodejs";
 

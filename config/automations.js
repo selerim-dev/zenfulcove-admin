@@ -191,6 +191,20 @@ export const automationConfig = {
     // NEXT_PUBLIC_DASHBOARD_URL env var if blank.
     dashboardUrl: "",
   },
+  spaSettings: {
+    // Master weekly window Zenfulcove accepts in-cabin massage bookings.
+    // Bookable times = this range ∩ each therapist's own hours, minus their
+    // calendar's busy blocks. Anything outside this is never offered.
+    masterHours: {
+      "0": [["09:00", "20:00"]],
+      "1": [["09:00", "20:00"]],
+      "2": [["09:00", "20:00"]],
+      "3": [["09:00", "20:00"]],
+      "4": [["09:00", "20:00"]],
+      "5": [["09:00", "20:00"]],
+      "6": [["09:00", "20:00"]],
+    },
+  },
   customerPortal: {
     navigation: {
       rentals: true,

@@ -7,8 +7,10 @@ import {
   createMassageBooking,
   getActiveTherapist,
   getService,
+  getSpaMasterHours,
   isSpaEnabled,
   listTherapistBusyIntervals,
+  spaPreviewMatches,
   updateMassageBooking,
 } from "@/lib/spaBookings";
 import {
@@ -28,6 +30,7 @@ type Payload = {
   lastName?: string;
   serviceId?: string;
   slotIso?: string;
+  preview?: string;
 };
 
 const isoDateFormatter = new Intl.DateTimeFormat("en-CA", {
@@ -49,18 +52,20 @@ export async function POST(req: Request) {
       { status: 503 }
     );
   }
-  if (!(await isSpaEnabled())) {
-    return NextResponse.json(
-      { error: "In-cabin massage isn't available right now." },
-      { status: 403 }
-    );
-  }
-
   let body: Payload;
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON." }, { status: 400 });
+  }
+
+  // Gate on the feature flag, unless this is a preview-secret request (staff
+  // testing the live flow before launch).
+  if (!spaPreviewMatches(body.preview) && !(await isSpaEnabled())) {
+    return NextResponse.json(
+      { error: "In-cabin massage isn't available right now." },
+      { status: 403 }
+    );
   }
 
   const reservationId = String(body.reservationId || "").trim();
@@ -125,6 +130,7 @@ export async function POST(req: Request) {
     ]);
     const slots = generateSlots({
       therapist,
+      masterHours: await getSpaMasterHours(),
       durationMin: service.duration_min,
       dateIso,
       busy: [...googleBusy, ...dbBusy],

@@ -1,4 +1,9 @@
-import { getActiveTherapist, isSpaEnabled, listServices } from "@/lib/spaBookings";
+import {
+  getActiveTherapist,
+  isSpaEnabled,
+  listServices,
+  spaPreviewMatches,
+} from "@/lib/spaBookings";
 import { hasSupabaseAdminEnv } from "@/lib/supabaseEnv";
 import type { MassageService } from "@/lib/types";
 import SpaBooking from "./SpaBooking";
@@ -12,13 +17,18 @@ export const metadata = {
 export default async function SpaPage({
   searchParams,
 }: {
-  searchParams: Promise<{ reservation?: string; lastName?: string }>;
+  searchParams: Promise<{
+    reservation?: string;
+    lastName?: string;
+    preview?: string;
+  }>;
 }) {
-  const { reservation = "", lastName = "" } = await searchParams;
+  const { reservation = "", lastName = "", preview = "" } = await searchParams;
+  const previewing = spaPreviewMatches(preview);
 
   let services: MassageService[] = [];
   let available = false;
-  if (hasSupabaseAdminEnv() && (await isSpaEnabled())) {
+  if (hasSupabaseAdminEnv() && ((await isSpaEnabled()) || previewing)) {
     try {
       const [svc, therapist] = await Promise.all([
         listServices(),
@@ -36,6 +46,7 @@ export default async function SpaPage({
     <SpaBooking
       services={services}
       available={available}
+      preview={previewing ? preview.trim() : ""}
       initialReservation={reservation.trim()}
       initialLastName={lastName.trim()}
     />

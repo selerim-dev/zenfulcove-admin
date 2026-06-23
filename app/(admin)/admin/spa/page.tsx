@@ -2,6 +2,7 @@ import Link from "next/link";
 import AdminRouteShell from "@/components/AdminRouteShell";
 import { hasSupabaseAdminEnv } from "@/lib/supabaseEnv";
 import {
+  getSpaMasterHours,
   listRecentBookings,
   listServices,
   listTherapists,
@@ -10,6 +11,7 @@ import type {
   MassageBooking,
   MassageService,
   MassageTherapist,
+  WeeklyHours,
 } from "@/lib/types";
 import SpaManager from "./SpaManager";
 
@@ -20,13 +22,15 @@ export default async function AdminSpaPage() {
   let therapists: MassageTherapist[] = [];
   let services: MassageService[] = [];
   let bookings: MassageBooking[] = [];
+  let masterHours: WeeklyHours = {};
 
   if (configured) {
     try {
-      [therapists, services, bookings] = await Promise.all([
+      [therapists, services, bookings, masterHours] = await Promise.all([
         listTherapists({ includeInactive: true }),
         listServices({ includeInactive: true }),
         listRecentBookings(100),
+        getSpaMasterHours(),
       ]);
     } catch (err) {
       // Tables may not exist yet (migration not run) — show the setup notice.
@@ -67,9 +71,10 @@ export default async function AdminSpaPage() {
 
       {configured ? (
         <SpaManager
-          therapist={therapists[0] ?? null}
+          therapists={therapists}
           services={services}
           bookings={bookings}
+          masterHours={masterHours}
         />
       ) : (
         <div className="rounded-2xl border border-dashed border-[var(--color-border)] bg-white p-6 text-sm leading-relaxed text-[var(--color-ink-muted)] md:p-8">

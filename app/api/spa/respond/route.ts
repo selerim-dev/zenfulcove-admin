@@ -86,7 +86,7 @@ export async function GET(req: Request) {
     await expireBooking(booking).catch((err) => console.error(err));
     return page(
       "Request expired",
-      "This request passed its 30-minute window. The guest has been refunded and asked to choose another time.",
+      "This request passed its 20-minute window. The guest has been refunded and asked to choose another time.",
       "error"
     );
   }

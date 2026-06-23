@@ -60,7 +60,7 @@ export async function notifyTherapistOfRequest(
       booking.payout_cents
     )}.`,
     "",
-    "Respond within 30 minutes:",
+    "Respond within 20 minutes:",
     `Accept: ${acceptUrl}`,
     `Decline: ${declineUrl}`,
   ].join("\n");
@@ -94,7 +94,7 @@ export async function notifyGuestRequestReceived(booking: MassageBooking) {
       booking.starts_at
     )}.`,
     "",
-    "Your therapist will confirm shortly (usually within 30 minutes). We'll message you as soon as it's confirmed. If the time isn't available, your payment is refunded automatically and you can pick another time.",
+    "Your therapist will confirm shortly (usually within 20 minutes). We'll message you as soon as it's confirmed. If the time isn't available, your payment is refunded automatically and you can pick another time.",
   ].join("\n");
   return postGuestMessage(booking, "Massage request received", message);
 }

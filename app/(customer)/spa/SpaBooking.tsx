@@ -31,11 +31,13 @@ function dateLabel(iso: string) {
 export default function SpaBooking({
   services,
   available,
+  preview = "",
   initialReservation = "",
   initialLastName = "",
 }: {
   services: MassageService[];
   available: boolean;
+  preview?: string;
   initialReservation?: string;
   initialLastName?: string;
 }) {
@@ -93,6 +95,7 @@ export default function SpaBooking({
           lastName: clean(lastName),
           serviceId,
           dateIso,
+          preview,
         }),
       });
       const json = await res.json();
@@ -119,6 +122,7 @@ export default function SpaBooking({
           lastName: clean(lastName),
           serviceId,
           slotIso: selectedSlot,
+          preview,
         }),
       });
       const json = await res.json();
@@ -160,6 +164,13 @@ export default function SpaBooking({
           </div>
         </div>
       </section>
+
+      {preview ? (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <strong>Preview mode.</strong> You&apos;re seeing this because of a
+          preview link — the massage feature is still hidden from regular guests.
+        </div>
+      ) : null}
 
       {!available || services.length === 0 ? (
         <div className="rounded-3xl border border-dashed border-[var(--color-border)] bg-white p-8 text-center text-sm text-[var(--color-ink-muted)]">

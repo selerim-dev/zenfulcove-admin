@@ -1,5 +1,5 @@
 import { PROPERTY_TIMEZONE, propertyTimeToUtc } from "@/lib/dates";
-import type { MassageTherapist } from "@/lib/types";
+import type { MassageTherapist, WeeklyHours } from "@/lib/types";
 
 export type SpaInterval = { start: Date; end: Date };
 export type SpaSlot = { iso: string; label: string };
@@ -40,29 +40,35 @@ export function bookingInterval(
 }
 
 /**
- * Generate bookable start times for a therapist on a given calendar date.
+ * Generate bookable start times on a given calendar date.
  * A slot is offered only when:
- *  - the full appointment fits inside a working-hours window for that weekday,
+ *  - the full appointment fits inside the master accepted-hours window for that
+ *    weekday (set in admin — this is the only source of "open" hours),
  *  - it starts at/after now + lead time,
  *  - and its padded interval (buffer on both sides) doesn't hit any busy block
- *    (Google calendar events + existing portal bookings).
- * Working hours are interpreted in the property timezone (America/Chicago),
- * which is the therapist default in v1.
+ *    (the therapist's Google calendar + existing portal bookings).
+ * Hours are interpreted in the property timezone (America/Chicago). The
+ * `therapist` only supplies booking mechanics (slot interval, buffer, lead).
  */
 export function generateSlots({
   therapist,
+  masterHours,
   durationMin,
   dateIso,
   busy,
   now = new Date(),
 }: {
   therapist: MassageTherapist;
+  masterHours: WeeklyHours;
   durationMin: number;
   dateIso: string;
   busy: SpaInterval[];
   now?: Date;
 }): SpaSlot[] {
-  const windows = therapist.weekly_hours?.[String(isoDayOfWeek(dateIso))];
+  const dow = String(isoDayOfWeek(dateIso));
+  // Bookable window = the Zenfulcove master accepted hours for that weekday.
+  // The therapist's calendar only removes conflicts; it can't supply "open".
+  const windows = masterHours?.[dow];
   if (!Array.isArray(windows) || windows.length === 0) return [];
 
   const interval = Math.max(5, therapist.slot_interval_min || 30);

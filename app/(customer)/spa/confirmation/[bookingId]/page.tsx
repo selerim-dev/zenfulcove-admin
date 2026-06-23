@@ -42,7 +42,7 @@ function statusView(booking: MassageBooking): {
       return {
         tone: "pending",
         title: "Payment received — confirming your therapist",
-        body: "Your therapist has been notified and will confirm shortly (usually within 30 minutes). We'll message you as soon as it's confirmed. If the time isn't available, you'll be refunded automatically.",
+        body: "Your therapist has been notified and will confirm shortly (usually within 20 minutes). We'll message you as soon as it's confirmed. If the time isn't available, you'll be refunded automatically.",
         showRebook: false,
       };
     case "pending_payment":
