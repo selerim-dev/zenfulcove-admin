@@ -15,6 +15,7 @@ type CustomerPortalNavigation = {
   messages?: boolean;
   availability: boolean;
   packages?: boolean;
+  spa?: boolean;
   timing?: boolean;
   forms: boolean;
   terms: boolean;

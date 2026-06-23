@@ -13,6 +13,7 @@ type CustomerPortalNavigation = {
   messages?: boolean;
   availability: boolean;
   packages?: boolean;
+  spa?: boolean;
   timing?: boolean;
   forms: boolean;
   terms: boolean;
@@ -23,6 +24,7 @@ const DEFAULT_CUSTOMER_PORTAL_NAVIGATION: CustomerPortalNavigation = {
   messages: false,
   availability: true,
   packages: true,
+  spa: false,
   timing: true,
   forms: true,
   terms: true,

@@ -14,6 +14,19 @@ import {
   bookingIdsFromStripeMetadata,
   sendKayakRentalConfirmationMessage,
 } from "@/lib/kayakRentalMessages";
+import {
+  getMassageBooking,
+  getTherapist,
+  updateMassageBooking,
+} from "@/lib/spaBookings";
+import { refundMassagePayment } from "@/lib/spaPayments";
+import {
+  notifyGuestRequestReceived,
+  notifyGuestUnavailable,
+  notifyTherapistOfRequest,
+} from "@/lib/spaMessages";
+
+const MASSAGE_RESPONSE_WINDOW_MS = 30 * 60 * 1000;
 
 export const runtime = "nodejs";
 
@@ -122,6 +135,85 @@ async function cancelCommercePurchase(session: Stripe.Checkout.Session) {
   });
 }
 
+async function confirmMassageBooking(session: Stripe.Checkout.Session) {
+  const bookingId =
+    session.metadata?.bookingId || session.client_reference_id || "";
+  if (!bookingId || session.payment_status !== "paid") return;
+
+  const booking = await getMassageBooking(bookingId);
+  if (!booking || booking.status !== "pending_payment") return;
+
+  const intent = paymentIntentId(session);
+  const update = {
+    status: "pending_therapist" as const,
+    therapist_deadline: new Date(Date.now() + MASSAGE_RESPONSE_WINDOW_MS).toISOString(),
+    stripe_checkout_session_id: session.id,
+    stripe_payment_intent_id: intent,
+    customer_email: session.customer_details?.email || booking.customer_email,
+    customer_phone: session.customer_details?.phone || booking.customer_phone,
+  };
+
+  let updated;
+  try {
+    updated = await updateMassageBooking(bookingId, update, "pending_payment");
+  } catch (err) {
+    // Slot was taken by another booking during the checkout window — the
+    // exclusion constraint blocks the flip. Refund and tell the guest.
+    if (err instanceof Error && err.name === "MassageSlotOverlap") {
+      let refundId: string | null = null;
+      try {
+        refundId = await refundMassagePayment(intent);
+      } catch (refundErr) {
+        console.error(`Could not refund massage ${bookingId}:`, refundErr);
+      }
+      await updateMassageBooking(
+        bookingId,
+        {
+          status: "declined",
+          stripe_payment_intent_id: intent,
+          refund_id: refundId,
+          notes: "Slot was no longer available at payment; auto-refunded.",
+        },
+        "pending_payment"
+      );
+      const fresh = await getMassageBooking(bookingId);
+      if (fresh) {
+        await notifyGuestUnavailable(fresh, {
+          refunded: Boolean(refundId),
+        }).catch((e) => console.error(e));
+      }
+      return;
+    }
+    throw err;
+  }
+
+  if (!updated) return;
+
+  const therapist = await getTherapist(updated.therapist_id);
+  if (therapist) {
+    await notifyTherapistOfRequest(updated, therapist).catch((err) =>
+      console.error(`Could not SMS therapist for ${session.id}:`, err)
+    );
+  }
+  await notifyGuestRequestReceived(updated).catch((err) =>
+    console.error(`Could not message guest for ${session.id}:`, err)
+  );
+}
+
+async function cancelMassageBooking(session: Stripe.Checkout.Session) {
+  const bookingId =
+    session.metadata?.bookingId || session.client_reference_id || "";
+  if (!bookingId) return;
+  await updateMassageBooking(
+    bookingId,
+    {
+      status: "cancelled",
+      notes: "Stripe checkout expired before payment was completed.",
+    },
+    "pending_payment"
+  );
+}
+
 export async function POST(request: Request) {
   const stripe = createStripeClient();
   const signature = request.headers.get("stripe-signature");
@@ -177,6 +269,10 @@ export async function POST(request: Request) {
       await (isPaid
         ? confirmCommercePurchase(session)
         : cancelCommercePurchase(session));
+    } else if (session.metadata?.kind === "massage_booking") {
+      await (isPaid
+        ? confirmMassageBooking(session)
+        : cancelMassageBooking(session));
     } else {
       await (isPaid
         ? confirmPaidSession(session)

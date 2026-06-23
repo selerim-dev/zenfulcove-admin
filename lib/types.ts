@@ -151,6 +151,88 @@ export type CommercePurchase = {
   updated_at: string;
 };
 
+// ─── In-Cabin Massage ("Elevate Your Stay") ────────────────────────────────
+
+// Weekly availability template. Keys "0".."6" map to JS getDay() in the
+// therapist timezone (0 = Sunday … 6 = Saturday). Each day is a list of
+// [open, close] "HH:MM" pairs, or null/[] when the therapist is unavailable.
+export type DayHours = [string, string][];
+export type WeeklyHours = Record<string, DayHours | null>;
+
+export type MassageTherapist = {
+  id: string;
+  name: string;
+  phone: string | null;
+  google_calendar_id: string | null;
+  timezone: string;
+  weekly_hours: WeeklyHours;
+  slot_interval_min: number;
+  buffer_min: number;
+  lead_time_hours: number;
+  is_active: boolean;
+  display_order: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type MassageService = {
+  id: string;
+  name: string;
+  duration_min: number;
+  price_cents: number;
+  payout_cents: number;
+  is_active: boolean;
+  display_order: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type MassageBookingStatus =
+  | "pending_payment"
+  | "pending_therapist"
+  | "confirmed"
+  | "declined"
+  | "expired"
+  | "cancelled"
+  | "completed";
+
+export type MassageBooking = {
+  id: string;
+  therapist_id: string;
+  service_id: string | null;
+  lodgify_reservation_id: string;
+  customer_name: string;
+  customer_email: string | null;
+  customer_phone: string | null;
+  stay_location: string | null;
+  service_label: string;
+  duration_min: number;
+  starts_at: string;
+  ends_at: string;
+  amount_cents: number;
+  payout_cents: number;
+  status: MassageBookingStatus;
+  therapist_deadline: string | null;
+  stripe_checkout_session_id: string | null;
+  stripe_payment_intent_id: string | null;
+  refund_id: string | null;
+  google_event_id: string | null;
+  payout_paid_at: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export const MASSAGE_STATUS_LABELS: Record<MassageBookingStatus, string> = {
+  pending_payment: "Awaiting payment",
+  pending_therapist: "Awaiting therapist",
+  confirmed: "Confirmed",
+  declined: "Declined",
+  expired: "Expired",
+  cancelled: "Cancelled",
+  completed: "Completed",
+};
+
 export const COLOR_OPTIONS: { value: string; label: string }[] = [
   { value: "#dc2626", label: "Red" },
   { value: "#ea580c", label: "Orange" },

@@ -136,6 +136,7 @@ export default function SettingsPanel({
           ["messages", "Messages"],
           ["availability", "Kayak Availability"],
           ["packages", "Special Packages and More"],
+          ["spa", "In-Cabin Massage"],
           ["timing", "Late Check Out/Early Check In"],
           ["forms", "Published Forms"],
           ["terms", "Terms"],
@@ -144,7 +145,7 @@ export default function SettingsPanel({
             <span className="text-sm font-medium text-forest">{label}</span>
             <input
               type="checkbox"
-              checked={key === "messages" ? portalNav[key] === true : portalNav[key] !== false}
+              checked={key === "messages" || key === "spa" ? portalNav[key] === true : portalNav[key] !== false}
               onChange={(e) => updatePortalNav(key, e.target.checked)}
               className="h-4 w-4 accent-grove"
             />

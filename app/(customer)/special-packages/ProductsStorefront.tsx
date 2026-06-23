@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import {
   readGuestBookingSession,
   saveGuestBookingSession,
+  spaHref,
 } from "@/components/customer/bookingSession";
 import {
   formatMoney,
@@ -87,10 +89,12 @@ function ProductImages({ product }: { product: CommerceProduct }) {
 
 export default function ProductsStorefront({
   products,
+  spaEnabled = false,
   initialReservation = "",
   initialLastName = "",
 }: {
   products: CommerceProduct[];
+  spaEnabled?: boolean;
   initialReservation?: string;
   initialLastName?: string;
 }) {
@@ -227,7 +231,7 @@ export default function ProductsStorefront({
         >
           <div className="flex min-h-[240px] flex-col justify-end bg-black/35 p-6 text-white md:p-8">
             <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-white/85">
-              Special Packages
+              Elevate Your Stay
             </p>
             <h1 className="mt-2 max-w-3xl font-serif text-4xl font-medium leading-[1.02] tracking-tight md:text-5xl">
               Add something extra.
@@ -242,6 +246,29 @@ export default function ProductsStorefront({
 
       <section className="grid gap-4 md:grid-cols-[1fr_360px]">
         <div className="space-y-5">
+          {spaEnabled ? (
+            <Link
+              href={spaHref(reservation, lastName)}
+              className="group flex items-center justify-between gap-4 rounded-3xl border border-[var(--color-border)] bg-white p-5 shadow-sm transition hover:border-[var(--color-accent)]"
+            >
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-accent)]">
+                  New
+                </p>
+                <h2 className="mt-1 font-serif text-2xl font-medium tracking-tight">
+                  In-Cabin Massage
+                </h2>
+                <p className="mt-1 text-sm text-[var(--color-ink-muted)]">
+                  A licensed therapist comes to your cabin. Choose a time and
+                  book instantly.
+                </p>
+              </div>
+              <span className="shrink-0 rounded-full bg-[var(--color-accent)] px-4 py-2 text-sm font-medium text-white transition group-hover:bg-[var(--color-accent-strong)]">
+                Book →
+              </span>
+            </Link>
+          ) : null}
+
           {displayProducts.length === 0 ? (
             <div className="rounded-3xl border border-dashed border-[var(--color-border)] bg-white p-8 text-center text-sm text-[var(--color-ink-muted)]">
               Packages are not available yet.

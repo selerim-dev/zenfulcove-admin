@@ -133,6 +133,27 @@ const CATEGORIES = [
     ),
   },
   {
+    id: "spa",
+    label: "In-Cabin Massage",
+    href: "/admin/spa",
+    icon: (
+      <svg
+        width="20"
+        height="20"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M12 22c4.97-3 8-7 8-11a8 8 0 0 0-16 0c0 4 3.03 8 8 11z" />
+        <path d="M12 11c0-2.5 1.5-4.5 4-5.5-.5 3-2 5-4 5.5z" />
+        <path d="M12 11c0-2.5-1.5-4.5-4-5.5.5 3 2 5 4 5.5z" />
+      </svg>
+    ),
+  },
+  {
     id: "promotions",
     label: "One-Off Promotions",
     icon: (
@@ -267,7 +288,10 @@ const GROUPS = [
       "event-popup",
     ],
   },
-  { label: "Customer Portal", ids: ["forms", "events", "kayaks", "products"] },
+  {
+    label: "Customer Portal",
+    ids: ["forms", "events", "kayaks", "products", "spa"],
+  },
 ];
 
 const CATEGORY_BY_ID = Object.fromEntries(

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   savedFleetHref,
+  savedSpaHref,
   savedSpecialPackagesHref,
   savedStayHref,
   savedStayMessagesHref,
@@ -14,6 +15,7 @@ type CustomerPortalNavigation = {
   messages?: boolean;
   availability: boolean;
   packages?: boolean;
+  spa?: boolean;
   timing?: boolean;
   forms: boolean;
   terms: boolean;
@@ -29,6 +31,7 @@ type IconType =
   | "chevron"
   | "kayak"
   | "gift"
+  | "spa"
   | "clock";
 
 function Icon({
@@ -97,6 +100,15 @@ function Icon({
       </svg>
     );
   }
+  if (type === "spa") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className={className}>
+        <path d="M12 21c4.5-2.5 7-6 7-10a7 7 0 0 0-14 0c0 4 2.5 7.5 7 10z" />
+        <path d="M12 11c0-2.2 1.4-4 3.5-4.8C15 9 13.7 10.7 12 11z" />
+        <path d="M12 11c0-2.2-1.4-4-3.5-4.8C9 9 10.3 10.7 12 11z" />
+      </svg>
+    );
+  }
   if (type === "clock") {
     return (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className={className}>
@@ -144,6 +156,12 @@ const items: {
     href: "/special-packages",
     label: "Special Packages and More",
     icon: "gift",
+  },
+  {
+    key: "spa",
+    href: "/spa",
+    label: "In-Cabin Massage",
+    icon: "spa",
   },
   {
     key: "timing",
@@ -203,6 +221,7 @@ export default function Sidebar({
     if (item.key === "rentals") return savedStayHref();
     if (item.key === "messages") return savedStayMessagesHref();
     if (item.key === "packages") return savedSpecialPackagesHref();
+    if (item.key === "spa") return savedSpaHref();
     if (item.key === "availability") return savedFleetHref();
     return item.href;
   }

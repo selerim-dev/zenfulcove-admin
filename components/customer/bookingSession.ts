@@ -44,6 +44,16 @@ export function specialPackagesHref(reservation: string, lastName = "") {
   return `/special-packages?${params.toString()}`;
 }
 
+export function spaHref(reservation: string, lastName = "") {
+  const code = clean(reservation);
+  const name = clean(lastName);
+  if (!code) return "/spa";
+
+  const params = new URLSearchParams({ reservation: code });
+  if (name) params.set("lastName", name);
+  return `/spa?${params.toString()}`;
+}
+
 export function fleetHref(reservation: string, lastName = "") {
   const code = clean(reservation);
   const name = clean(lastName);
@@ -118,4 +128,9 @@ export function savedFleetHref() {
   return session
     ? fleetHref(session.reservation, session.lastName)
     : "/book?target=fleet";
+}
+
+export function savedSpaHref() {
+  const session = readGuestBookingSession();
+  return session ? spaHref(session.reservation, session.lastName) : "/spa";
 }

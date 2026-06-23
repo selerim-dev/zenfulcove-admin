@@ -197,6 +197,7 @@ export const automationConfig = {
       messages: false,
       availability: true,
       packages: true,
+      spa: false,
       timing: true,
       forms: true,
       terms: true,
