@@ -21,6 +21,10 @@
       "schedule": "0 21 * * *"
     },
     {
+      "path": "/api/cron?automation=access-code-retry",
+      "schedule": "5,15,25,35,45,55 20-23 * * *"
+    },
+    {
       "path": "/api/cron/spa-expiry",
       "schedule": "*/5 * * * *"
     }
