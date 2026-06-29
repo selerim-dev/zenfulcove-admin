@@ -77,7 +77,7 @@ export default function Header({
             <>
               <div className="rounded-full border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-1.5 text-xs text-[var(--color-ink-muted)]">
                 <span className="font-medium text-[var(--color-ink)]">
-                  Last cron:
+                  Last run:
                 </span>{" "}
                 {formatRunTime(lastRun)}
               </div>
