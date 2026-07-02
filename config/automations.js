@@ -65,7 +65,7 @@ export const automationConfig = {
     lodgifySendNotification: true,
     lodgifyPlainTextSources: ["BookingCom"], // Source keys that should avoid Lodgify HTML formatting.
     lodgifyMaskedLinkSources: [], // Source keys that should receive readable, non-clickable URLs.
-    lodgifyEmailFallbackSources: ["GlampingHub", "Glamping Hub"], // Source keys whose channel inbox does not receive Lodgify messages.
+    lodgifyEmailFallbackSources: ["GlampingHub", "Glamping Hub"], // Source keys that need a SendGrid backup; Lodgify is still used when a thread exists.
     lodgifyRouteRequiredSources: ["AirbnbIntegration", "Airbnb", "BookingCom"], // Verify Lodgify API posts route to the channel thread; otherwise use email fallback.
     localFormSlug: "welcome-to-zenfulcove",
     jotformFormId: "251834442091050", // fallback while historical Jotform forms are still active
