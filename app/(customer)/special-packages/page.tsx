@@ -1,5 +1,7 @@
-import { listCommerceProducts } from "@/lib/kv";
-import { withDefaultPackageProducts } from "@/lib/commerce";
+import {
+  ensureDefaultCommerceProducts,
+  listCommerceProducts,
+} from "@/lib/kv";
 import { isSpaEnabled } from "@/lib/spaBookings";
 import type { CommerceProduct } from "@/lib/types";
 import ProductsStorefront from "./ProductsStorefront";
@@ -19,10 +21,9 @@ export default async function SpecialPackagesPage({
   }>;
 }) {
   const { reservation = "", lastName = "" } = await searchParams;
+  await ensureDefaultCommerceProducts();
   const [products, spaEnabled] = await Promise.all([
-    listCommerceProducts().then((items) =>
-      withDefaultPackageProducts(items as CommerceProduct[])
-    ),
+    listCommerceProducts().then((items) => items as CommerceProduct[]),
     isSpaEnabled(),
   ]);
 

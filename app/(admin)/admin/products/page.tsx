@@ -1,12 +1,16 @@
 import Link from "next/link";
 import AdminRouteShell from "@/components/AdminRouteShell";
-import { listCommerceProducts } from "@/lib/kv";
+import {
+  ensureDefaultCommerceProducts,
+  listCommerceProducts,
+} from "@/lib/kv";
 import type { CommerceProduct } from "@/lib/types";
 import ProductsManager from "./ProductsManager";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminProductsPage() {
+  await ensureDefaultCommerceProducts();
   const products = (await listCommerceProducts({
     includeInactive: true,
   })) as CommerceProduct[];

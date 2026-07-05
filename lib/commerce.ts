@@ -14,7 +14,7 @@ const PACKAGE_FALLBACK_IMAGES = {
 const ANNIVERSARY_DETAILS =
   "Includes: small cake, roses, balloons, happy anniversary sign, and petals in a heart shape on the bed.";
 
-const DEFAULT_PACKAGE_PRODUCTS: CommerceProduct[] = [
+export const DEFAULT_PACKAGE_PRODUCTS: CommerceProduct[] = [
   {
     id: "default-birthday-package",
     title: "Birthday Package",
@@ -103,57 +103,7 @@ export function normalizeCommerceQuantity(value: unknown) {
   return Math.max(0, Math.min(99, Math.floor(quantity)));
 }
 
-export function withPackageDisplayDefaults(
-  product: CommerceProduct
-): CommerceProduct {
-  const title = String(product.title || "").toLowerCase();
-  let description = product.description || "";
-  let imageUrls = product.image_urls || [];
-
-  if (title.includes("anniversary")) {
-    if (!/balloons/i.test(description) || !/roses/i.test(description)) {
-      description = [description.trim(), ANNIVERSARY_DETAILS]
-        .filter(Boolean)
-        .join("\n\n");
-    }
-    if (imageUrls.length === 0) {
-      imageUrls = [PACKAGE_FALLBACK_IMAGES.anniversary];
-    }
-  } else if (title.includes("birthday") && imageUrls.length === 0) {
-    imageUrls = [PACKAGE_FALLBACK_IMAGES.birthday];
-  } else if (title.includes("romance") && imageUrls.length === 0) {
-    imageUrls = [PACKAGE_FALLBACK_IMAGES.romance];
-  } else if (
-    (title.includes("firewood") || title.includes("wood")) &&
-    imageUrls.length === 0
-  ) {
-    imageUrls = [PACKAGE_FALLBACK_IMAGES.firewood];
-  }
-
-  return {
-    ...product,
-    description,
-    image_urls: imageUrls,
-  };
-}
-
-export function withDefaultPackageProducts(
-  products: CommerceProduct[]
-): CommerceProduct[] {
-  const activeProducts = products.filter((product) => product.is_active !== false);
-  const seenRequired = new Set(activeProducts.map(packageProductIdentity));
-  const source = [
-    ...activeProducts,
-    ...DEFAULT_PACKAGE_PRODUCTS.filter(
-      (product) => !seenRequired.has(packageProductIdentity(product))
-    ),
-  ];
-  return source
-    .map(withPackageDisplayDefaults)
-    .sort((a, b) => a.display_order - b.display_order);
-}
-
-function packageProductIdentity(product: CommerceProduct) {
+export function packageProductIdentity(product: CommerceProduct) {
   const value = `${product.title || ""} ${product.sku || ""}`.toLowerCase();
   if (value.includes("anniversary")) return "anniversary";
   if (value.includes("birthday")) return "birthday";
