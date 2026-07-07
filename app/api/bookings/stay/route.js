@@ -60,6 +60,72 @@ function toDateOnly(value) {
   return isNaN(parsed.getTime()) ? "" : parsed.toISOString().slice(0, 10);
 }
 
+function centralClock() {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Chicago",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(new Date());
+  const byType = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return {
+    date: `${byType.year}-${byType.month}-${byType.day}`,
+    hour: Number(byType.hour || 0) % 24,
+    minute: Number(byType.minute || 0),
+  };
+}
+
+function dateOnlyTime(value) {
+  const normalized = toDateOnly(value);
+  if (!normalized) return null;
+  const date = new Date(`${normalized}T12:00:00Z`);
+  return isNaN(date.getTime()) ? null : date.getTime();
+}
+
+function daysUntilCentral(dateOnly) {
+  const target = dateOnlyTime(dateOnly);
+  const today = dateOnlyTime(centralClock().date);
+  if (target == null || today == null) return null;
+  return Math.round((target - today) / (24 * 60 * 60 * 1000));
+}
+
+function accessReleaseWindowOpen({
+  arrivalIso,
+  departureIso,
+  releaseConfig = {},
+}) {
+  const daysUntilArrival = daysUntilCentral(arrivalIso);
+  if (daysUntilArrival === null) return false;
+
+  const todayTime = dateOnlyTime(centralClock().date);
+  const departureTime = dateOnlyTime(departureIso);
+  if (todayTime !== null && departureTime !== null && todayTime > departureTime) {
+    return false;
+  }
+
+  if (daysUntilArrival <= 0) return true;
+
+  const releaseDaysBeforeCheckin = Math.max(
+    0,
+    Number(releaseConfig.releaseDaysBeforeCheckin ?? 1) || 0
+  );
+  if (daysUntilArrival !== releaseDaysBeforeCheckin) return false;
+
+  const releaseHour = Math.max(
+    0,
+    Math.min(23, Number(releaseConfig.releaseHourCentral ?? 15))
+  );
+  const releaseMinute = Math.max(
+    0,
+    Math.min(59, Number(releaseConfig.releaseMinuteCentral ?? 0))
+  );
+  const clock = centralClock();
+  return clock.hour * 60 + clock.minute >= releaseHour * 60 + releaseMinute;
+}
+
 function guestFromBooking(booking = {}) {
   const guest = booking.guest || {};
   const customer = booking.customer || {};
@@ -495,8 +561,21 @@ export async function POST(request) {
     };
   }
 
-  const accessCode = releasedStatus ? clean(release?.access_code) : "";
-  const accessCodeReleased = Boolean(releasedStatus && accessCode);
+  const storedAccessCode = clean(release?.access_code);
+  const accessCodeCanShow =
+    releasedStatus ||
+    Boolean(
+      storedAccessCode &&
+        formSubmitted &&
+        bookingEligibleForAccess &&
+        release?.status !== "blocked" &&
+        accessReleaseWindowOpen({
+          arrivalIso: normalized.arrivalIso,
+          departureIso: normalized.departureIso,
+          releaseConfig: config.accessCodeRelease || {},
+        })
+    );
+  const accessCode = accessCodeCanShow ? storedAccessCode : "";
   const includedKayak = PROPERTY_INCLUDED_KAYAKS[Number(normalized.propertyId)] || null;
   const rentalKayaks = await loadConfirmedKayakRentals(normalized.id);
   const templateData = buildAccessCodeTemplateData({
@@ -526,7 +605,7 @@ export async function POST(request) {
         phone: releaseContact.phone,
       },
     },
-    includeAccessCode: accessCodeReleased,
+    includeAccessCode: Boolean(accessCode),
   });
 
   return NextResponse.json({
@@ -572,12 +651,12 @@ export async function POST(request) {
     },
     access: {
       code: accessCode,
-      released: accessCodeReleased,
+      released: Boolean(accessCode),
       formSubmitted,
       eligible: bookingEligibleForAccess,
       status: release?.status || "pending",
       releaseAttempt,
-      message: accessCodeReleased
+      message: accessCode
         ? "Your access code is ready."
         : !bookingEligibleForAccess
           ? `This booking is not active in Lodgify (${normalized.status || "unknown"}), so access-code release is blocked.`
