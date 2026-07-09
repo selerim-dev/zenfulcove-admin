@@ -71,6 +71,8 @@ export type NormalizedReservation = {
   departureIso: string; // YYYY-MM-DD
   status: string;
   guestName: string | null;
+  guestEmail: string | null;
+  guestPhone: string | null;
 };
 
 function normalizeIso(value: string | undefined): string | null {
@@ -99,6 +101,8 @@ export function normalizeReservation(
     departureIso,
     status: raw.status ?? "",
     guestName: raw.guest?.name ?? raw.guest_name ?? null,
+    guestEmail: raw.guest?.email ?? null,
+    guestPhone: raw.guest?.phone ?? null,
   };
 }
 

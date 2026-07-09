@@ -144,6 +144,8 @@ export async function POST(req: Request) {
   const purchaseId = randomUUID();
   const customerName =
     (reservation.guestName ?? "").trim() || String(body.lastName || "").trim();
+  const customerEmail = (reservation.guestEmail ?? "").trim() || null;
+  const customerPhone = (reservation.guestPhone ?? "").trim() || null;
 
   await saveCommercePurchase({
     id: purchaseId,
@@ -155,8 +157,8 @@ export async function POST(req: Request) {
     items,
     stripe_checkout_session_id: null,
     stripe_payment_intent_id: null,
-    customer_email: null,
-    customer_phone: null,
+    customer_email: customerEmail,
+    customer_phone: customerPhone,
     created_at: now,
     updated_at: now,
   });
@@ -186,6 +188,7 @@ export async function POST(req: Request) {
         cancel_url: cancelUrl,
         metadata,
         payment_intent_data: { metadata },
+        customer_email: customerEmail || undefined,
         line_items: items.map((item) => ({
           quantity: item.quantity,
           price_data: {
@@ -217,8 +220,8 @@ export async function POST(req: Request) {
         items,
         stripe_checkout_session_id: session.id,
         stripe_payment_intent_id: null,
-        customer_email: null,
-        customer_phone: null,
+        customer_email: customerEmail,
+        customer_phone: customerPhone,
         created_at: now,
         updated_at: new Date().toISOString(),
       });
@@ -241,8 +244,8 @@ export async function POST(req: Request) {
         typeof session.payment_intent === "string"
           ? session.payment_intent
           : session.payment_intent?.id ?? null,
-      customer_email: null,
-      customer_phone: null,
+      customer_email: customerEmail,
+      customer_phone: customerPhone,
       created_at: now,
       updated_at: new Date().toISOString(),
     });
@@ -264,8 +267,8 @@ export async function POST(req: Request) {
       items,
       stripe_checkout_session_id: null,
       stripe_payment_intent_id: null,
-      customer_email: null,
-      customer_phone: null,
+      customer_email: customerEmail,
+      customer_phone: customerPhone,
       created_at: now,
       updated_at: new Date().toISOString(),
     });

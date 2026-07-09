@@ -1,21 +1,11 @@
 import Link from "next/link";
-import type Stripe from "stripe";
 import { notFound } from "next/navigation";
-import {
-  getCommercePurchase,
-  saveCommercePurchase,
-} from "@/lib/kv";
+import { getCommercePurchase } from "@/lib/kv";
+import { confirmAndFulfillCommercePurchase } from "@/lib/commerceFulfillment";
 import { formatMoney, type CommercePurchase } from "@/lib/types";
 import { createStripeClient, hasStripeSecretEnv } from "@/lib/stripe";
 
 export const dynamic = "force-dynamic";
-
-function paymentIntentId(session: Stripe.Checkout.Session) {
-  const paymentIntent = session.payment_intent;
-  return typeof paymentIntent === "string"
-    ? paymentIntent
-    : paymentIntent?.id ?? null;
-}
 
 async function confirmPurchaseFromSuccessUrl(
   purchase: CommercePurchase,
@@ -24,7 +14,6 @@ async function confirmPurchaseFromSuccessUrl(
   if (
     !sessionId ||
     !hasStripeSecretEnv() ||
-    purchase.status !== "pending" ||
     purchase.stripe_checkout_session_id !== sessionId
   ) {
     return purchase;
@@ -34,14 +23,7 @@ async function confirmPurchaseFromSuccessUrl(
   const session = await stripe.checkout.sessions.retrieve(sessionId);
   if (session.payment_status !== "paid") return purchase;
 
-  return (await saveCommercePurchase({
-    ...purchase,
-    status: "paid",
-    stripe_payment_intent_id: paymentIntentId(session),
-    customer_email: session.customer_details?.email || purchase.customer_email,
-    customer_phone: session.customer_details?.phone || purchase.customer_phone,
-    updated_at: new Date().toISOString(),
-  })) as CommercePurchase;
+  return (await confirmAndFulfillCommercePurchase(session)) || purchase;
 }
 
 export default async function CommerceConfirmationPage({

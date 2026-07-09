@@ -6,10 +6,8 @@ import {
   isOwnStripeSessionMetadata,
   stripeWebhookSecrets,
 } from "@/lib/stripe";
-import {
-  getCommercePurchase,
-  saveCommercePurchase,
-} from "@/lib/kv";
+import { getCommercePurchase, saveCommercePurchase } from "@/lib/kv";
+import { confirmAndFulfillCommercePurchase } from "@/lib/commerceFulfillment";
 import {
   bookingIdsFromStripeMetadata,
   sendKayakRentalConfirmationMessage,
@@ -100,22 +98,7 @@ async function cancelExpiredSession(session: Stripe.Checkout.Session) {
 }
 
 async function confirmCommercePurchase(session: Stripe.Checkout.Session) {
-  const purchaseId =
-    session.metadata?.purchaseId || session.client_reference_id || "";
-  if (!purchaseId || session.payment_status !== "paid") return;
-
-  const purchase = await getCommercePurchase(purchaseId);
-  if (!purchase || purchase.status === "paid") return;
-
-  await saveCommercePurchase({
-    ...purchase,
-    status: "paid",
-    stripe_checkout_session_id: session.id,
-    stripe_payment_intent_id: paymentIntentId(session),
-    customer_email: session.customer_details?.email || purchase.customer_email,
-    customer_phone: session.customer_details?.phone || purchase.customer_phone,
-    updated_at: new Date().toISOString(),
-  });
+  await confirmAndFulfillCommercePurchase(session);
 }
 
 async function cancelCommercePurchase(session: Stripe.Checkout.Session) {

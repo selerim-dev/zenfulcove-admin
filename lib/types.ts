@@ -147,6 +147,10 @@ export type CommercePurchase = {
   stripe_payment_intent_id: string | null;
   customer_email: string | null;
   customer_phone: string | null;
+  customer_confirmation_sent_at: string | null;
+  team_notification_sent_at: string | null;
+  lodgify_note_sent_at: string | null;
+  fulfillment_error: string | null;
   created_at: string;
   updated_at: string;
 };
