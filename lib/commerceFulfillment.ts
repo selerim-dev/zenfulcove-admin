@@ -1,5 +1,10 @@
 import type Stripe from "stripe";
-import { getCommercePurchase, getConfig, saveCommercePurchase } from "@/lib/kv";
+import {
+  claimCommerceFulfillment,
+  getCommercePurchase,
+  getConfig,
+  saveCommercePurchase,
+} from "@/lib/kv";
 import { sendBookingMessage } from "@/lib/lodgify";
 import { sendPlainEmail } from "@/lib/sendgrid";
 import { formatMoney, type CommercePurchase } from "@/lib/types";
@@ -289,7 +294,15 @@ export async function confirmAndFulfillCommercePurchase(
     updated_at: new Date().toISOString(),
   })) as CommercePurchase;
 
-  await fulfillCommercePurchase(paidPurchase);
+  // Persisting the paid status above is idempotent and safe to run from every
+  // caller, but the notifications are not: this function runs from both the
+  // Stripe webhook and the confirmation page, which can fire concurrently right
+  // after payment. Single-flight the sends so only one caller fulfills; a later
+  // retry re-claims after the lock TTL and completes anything left unsent.
+  const claimed = await claimCommerceFulfillment(purchaseId);
+  if (claimed) {
+    await fulfillCommercePurchase(paidPurchase);
+  }
 
   return ((await getCommercePurchase(purchaseId)) as CommercePurchase | null) || paidPurchase;
 }
