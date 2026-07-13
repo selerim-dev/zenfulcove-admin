@@ -6,7 +6,7 @@ Automation dashboard for Zenfulcove Glamping. Manages vacancy promo emails and w
 
 - **Next.js** (App Router)
 - **Tailwind CSS** (v4)
-- **Vercel** deployment (free tier)
+- **Vercel** deployment
 - **No database** — config stored in `config/automations.js`, logs in `logs/activity.json`
 
 ## Setup

@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "supabase-zenfulcove": {
+      "type": "http",
+      "url": "https://mcp.supabase.com/mcp?project_ref=YOUR_SUPABASE_PROJECT_REF&read_only=true&features=database,debugging,docs",
+      "headers": {
+        "Authorization": "Bearer YOUR_SUPABASE_PERSONAL_ACCESS_TOKEN_sbp_..."
+      }
+    },
+    "vercel-zenfulcove": {
+      "type": "http",
+      "url": "https://mcp.vercel.com"
+    }
+  }
+}
