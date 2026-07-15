@@ -45,9 +45,12 @@ export default async function CommerceConfirmationPage({
       : purchase.status === "pending"
         ? "Payment is still pending. If you already paid, refresh this page in a moment."
         : "This checkout was cancelled.";
-  const returnParams = new URLSearchParams({
-    reservation: purchase.reservation_id,
-  });
+  const isPublicPurchase = purchase.channel === "public";
+  const returnHref = isPublicPurchase
+    ? "/shop"
+    : `/special-packages?${new URLSearchParams({
+        reservation: purchase.reservation_id,
+      }).toString()}`;
 
   return (
     <div className="mx-auto max-w-2xl space-y-6 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-8">
@@ -92,10 +95,10 @@ export default async function CommerceConfirmationPage({
       </div>
 
       <Link
-        href={`/special-packages?${returnParams.toString()}`}
+        href={returnHref}
         className="inline-flex rounded-full bg-[var(--color-accent)] px-5 py-3 text-sm font-medium text-white transition hover:bg-[var(--color-accent-strong)]"
       >
-        Back to packages
+        {isPublicPurchase ? "Back to shop" : "Back to packages"}
       </Link>
     </div>
   );

@@ -20,6 +20,7 @@ function productSnapshot(product?: CommerceProduct) {
     description: product?.description ?? "",
     display_order: String(product?.display_order ?? 0),
     is_active: product?.is_active ?? true,
+    is_public: product?.is_public ?? false,
     images,
   });
 }
@@ -41,6 +42,7 @@ function formSnapshot(form: HTMLFormElement) {
     description: String(formData.get("description") ?? ""),
     display_order: String(formData.get("display_order") ?? ""),
     is_active: formData.get("is_active") === "on",
+    is_public: formData.get("is_public") === "on",
     images,
   });
 }
@@ -211,15 +213,26 @@ export default function ProductForm({
         />
       </Field>
 
-      <label className="flex items-center gap-2 pt-6 text-sm">
-        <input
-          name="is_active"
-          type="checkbox"
-          defaultChecked={product?.is_active ?? true}
-          className="h-4 w-4 rounded border-[var(--color-border)] accent-[var(--color-accent)]"
-        />
-        Active in guest portal
-      </label>
+      <div className="space-y-2 pt-6">
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            name="is_active"
+            type="checkbox"
+            defaultChecked={product?.is_active ?? true}
+            className="h-4 w-4 rounded border-[var(--color-border)] accent-[var(--color-accent)]"
+          />
+          Active in guest portal
+        </label>
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            name="is_public"
+            type="checkbox"
+            defaultChecked={product?.is_public ?? false}
+            className="h-4 w-4 rounded border-[var(--color-border)] accent-[var(--color-accent)]"
+          />
+          Public shop (no booking needed)
+        </label>
+      </div>
 
       <Field label="Description" full>
         <textarea

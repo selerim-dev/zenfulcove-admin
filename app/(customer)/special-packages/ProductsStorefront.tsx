@@ -92,12 +92,17 @@ export default function ProductsStorefront({
   spaEnabled = false,
   initialReservation = "",
   initialLastName = "",
+  mode = "guest",
 }: {
   products: CommerceProduct[];
   spaEnabled?: boolean;
   initialReservation?: string;
   initialLastName?: string;
+  // "public" renders the open /shop storefront: no reservation inputs, no
+  // purchase history, and checkout goes through the public channel.
+  mode?: "guest" | "public";
 }) {
+  const isPublic = mode === "public";
   const [reservation, setReservation] = useState(initialReservation);
   const [lastName, setLastName] = useState(initialLastName);
   const [cart, setCart] = useState<Cart>({});
@@ -109,6 +114,7 @@ export default function ProductsStorefront({
   const displayProducts = useMemo(() => products, [products]);
 
   useEffect(() => {
+    if (isPublic) return;
     const saved = readGuestBookingSession();
     if (!saved) return;
     if (!initialReservation) {
@@ -121,9 +127,10 @@ export default function ProductsStorefront({
     ) {
       setLastName(saved.lastName);
     }
-  }, [initialReservation, initialLastName]);
+  }, [isPublic, initialReservation, initialLastName]);
 
   useEffect(() => {
+    if (isPublic) return;
     const r = clean(reservation);
     const l = clean(lastName);
     if (!r || !l) {
@@ -160,7 +167,7 @@ export default function ProductsStorefront({
     return () => {
       active = false;
     };
-  }, [reservation, lastName]);
+  }, [isPublic, reservation, lastName]);
 
   const productById = useMemo(
     () => new Map(displayProducts.map((product) => [product.id, product])),
@@ -192,22 +199,25 @@ export default function ProductsStorefront({
   async function handleCheckout() {
     const r = clean(reservation);
     const l = clean(lastName);
-    if (!r || !l || cartRows.length === 0 || checkingOut) return;
+    if ((!isPublic && (!r || !l)) || cartRows.length === 0 || checkingOut) {
+      return;
+    }
 
     setCheckingOut(true);
     setCheckoutError("");
     try {
+      const items = cartRows.map((row) => ({
+        productId: row.product.id,
+        quantity: row.quantity,
+      }));
       const res = await fetch("/api/commerce/checkout", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          reservationId: r,
-          lastName: l,
-          items: cartRows.map((row) => ({
-            productId: row.product.id,
-            quantity: row.quantity,
-          })),
-        }),
+        body: JSON.stringify(
+          isPublic
+            ? { channel: "public", items }
+            : { reservationId: r, lastName: l, items }
+        ),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Checkout failed.");
@@ -237,8 +247,9 @@ export default function ProductsStorefront({
               Add something extra.
             </h1>
             <p className="mt-3 max-w-2xl text-sm leading-relaxed text-white/90">
-              Choose packages and add-ons for your stay, then check out securely
-              through Stripe.
+              {isPublic
+                ? "Choose packages and add-ons, then check out securely through Stripe. No reservation needed."
+                : "Choose packages and add-ons for your stay, then check out securely through Stripe."}
             </p>
           </div>
         </div>
@@ -246,7 +257,7 @@ export default function ProductsStorefront({
 
       <section className="grid gap-4 md:grid-cols-[1fr_360px]">
         <div className="space-y-5">
-          {spaEnabled ? (
+          {spaEnabled && !isPublic ? (
             <Link
               href={spaHref(reservation, lastName)}
               className="group flex items-center justify-between gap-4 rounded-3xl border border-[var(--color-border)] bg-white p-5 shadow-sm transition hover:border-[var(--color-accent)]"
@@ -271,7 +282,9 @@ export default function ProductsStorefront({
 
           {displayProducts.length === 0 ? (
             <div className="rounded-3xl border border-dashed border-[var(--color-border)] bg-white p-8 text-center text-sm text-[var(--color-ink-muted)]">
-              Packages are not available yet.
+              {isPublic
+                ? "The shop is empty right now. Check back soon."
+                : "Packages are not available yet."}
             </div>
           ) : (
             <div className="grid gap-5 sm:grid-cols-2">
@@ -353,6 +366,12 @@ export default function ProductsStorefront({
             <h2 className="font-serif text-2xl font-medium tracking-tight">
               Checkout
             </h2>
+            {isPublic ? (
+              <p className="mt-3 text-sm leading-relaxed text-[var(--color-ink-muted)]">
+                No reservation needed. You&apos;ll enter your contact and
+                payment details on the secure Stripe checkout page.
+              </p>
+            ) : (
             <div className="mt-4 grid gap-3">
               <label className="space-y-1">
                 <span className="text-xs font-medium text-[var(--color-ink-muted)]">
@@ -377,6 +396,7 @@ export default function ProductsStorefront({
                 />
               </label>
             </div>
+            )}
 
             <div className="mt-5 divide-y divide-[var(--color-border)]">
               {cartRows.length > 0 ? (
@@ -423,8 +443,7 @@ export default function ProductsStorefront({
               disabled={
                 checkingOut ||
                 cartRows.length === 0 ||
-                !clean(reservation) ||
-                !clean(lastName)
+                (!isPublic && (!clean(reservation) || !clean(lastName)))
               }
               onClick={handleCheckout}
               className="mt-5 w-full rounded-full bg-[var(--color-accent)] px-4 py-3 text-sm font-medium text-white transition hover:bg-[var(--color-accent-strong)] disabled:cursor-not-allowed disabled:opacity-60"
@@ -433,6 +452,7 @@ export default function ProductsStorefront({
             </button>
           </section>
 
+          {isPublic ? null : (
           <section className="rounded-3xl border border-[var(--color-border)] bg-white p-5 shadow-sm">
             <h2 className="font-serif text-2xl font-medium tracking-tight">
               Purchases
@@ -481,6 +501,7 @@ export default function ProductsStorefront({
               </p>
             )}
           </section>
+          )}
         </aside>
       </section>
     </div>

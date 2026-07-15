@@ -118,12 +118,20 @@ export type CommerceProduct = {
   price_cents: number;
   image_urls: string[];
   is_active: boolean;
+  // Purchasable from the public /shop page without a reservation.
+  is_public: boolean;
   display_order: number;
   created_at: string;
   updated_at: string;
 };
 
 export type CommercePurchaseStatus = "pending" | "paid" | "cancelled";
+
+// "guest" purchases are tied to a Lodgify reservation; "public" purchases come
+// from the open /shop page and use the sentinel reservation_id "public".
+export type CommercePurchaseChannel = "guest" | "public";
+
+export const PUBLIC_COMMERCE_RESERVATION_ID = "public";
 
 export type CommercePurchaseItem = {
   product_id: string;
@@ -138,6 +146,7 @@ export type CommercePurchaseItem = {
 export type CommercePurchase = {
   id: string;
   reservation_id: string;
+  channel: CommercePurchaseChannel;
   customer_name: string;
   stay_location: string | null;
   status: CommercePurchaseStatus;

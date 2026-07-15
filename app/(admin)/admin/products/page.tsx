@@ -4,8 +4,10 @@ import {
   ensureDefaultCommerceProducts,
   listCommerceProducts,
 } from "@/lib/kv";
+import { getAppBaseUrl } from "@/lib/stripe";
 import type { CommerceProduct } from "@/lib/types";
 import ProductsManager from "./ProductsManager";
+import PublicShopLink from "./PublicShopLink";
 
 export const dynamic = "force-dynamic";
 
@@ -37,6 +39,14 @@ export default async function AdminProductsPage() {
           View Guest Page
         </Link>
       </header>
+
+      <PublicShopLink
+        shopUrl={`${getAppBaseUrl()}/shop`}
+        publicProductCount={
+          products.filter((product) => product.is_public && product.is_active)
+            .length
+        }
+      />
 
       <section>
         <div className="mb-4 flex items-baseline justify-between">

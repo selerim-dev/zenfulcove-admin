@@ -89,18 +89,27 @@ function buildLodgifyNote(purchase: CommercePurchase) {
     .join("\n");
 }
 
+function isPublicPurchase(purchase: CommercePurchase) {
+  return purchase.channel === "public";
+}
+
 function buildCustomerEmail(purchase: CommercePurchase) {
+  const isPublic = isPublicPurchase(purchase);
   return [
     `Hi ${firstNameOf(purchase.customer_name)},`,
     "",
-    `We received your Zenfulcove special package purchase for reservation ${purchase.reservation_id}.`,
+    isPublic
+      ? "We received your Zenfulcove special package purchase."
+      : `We received your Zenfulcove special package purchase for reservation ${purchase.reservation_id}.`,
     "",
     "Order:",
     ...orderLines(purchase),
     "",
     `Total paid: ${formatMoney(purchase.amount_cents)}.`,
     "",
-    "We added the request to your reservation details so our team can prepare it for your stay.",
+    isPublic
+      ? "Our team has been notified and will reach out if we need any details to prepare your order."
+      : "We added the request to your reservation details so our team can prepare it for your stay.",
     "",
     "Questions? Reply to this email or contact contact@zenfulcove.com.",
   ].join("\n");
@@ -110,10 +119,15 @@ function buildTeamEmail(
   purchase: CommercePurchase,
   lodgifyResult: { sent: boolean; reason?: string }
 ) {
+  const isPublic = isPublicPurchase(purchase);
   return [
-    "A customer paid for a Zenfulcove special package/add-on.",
+    isPublic
+      ? "A customer paid for a Zenfulcove package/add-on through the public shop (no reservation)."
+      : "A customer paid for a Zenfulcove special package/add-on.",
     "",
-    `Reservation: ${purchase.reservation_id}`,
+    isPublic
+      ? "Reservation: none (public shop purchase)"
+      : `Reservation: ${purchase.reservation_id}`,
     `Guest: ${purchase.customer_name || "Guest"}`,
     purchase.stay_location ? `Cabin: ${purchase.stay_location}` : "",
     purchase.customer_email ? `Customer email: ${purchase.customer_email}` : "",
@@ -123,9 +137,11 @@ function buildTeamEmail(
     ...orderLines(purchase),
     "",
     `Total paid: ${formatMoney(purchase.amount_cents)}`,
-    `Lodgify note: ${
-      lodgifyResult.sent ? "added" : `not added (${lodgifyResult.reason || "unknown"})`
-    }`,
+    isPublic
+      ? ""
+      : `Lodgify note: ${
+          lodgifyResult.sent ? "added" : `not added (${lodgifyResult.reason || "unknown"})`
+        }`,
     purchase.stripe_checkout_session_id
       ? `Stripe checkout session: ${purchase.stripe_checkout_session_id}`
       : "",
@@ -133,7 +149,9 @@ function buildTeamEmail(
       ? `Stripe payment intent: ${purchase.stripe_payment_intent_id}`
       : "",
     "",
-    "Set up the listed purchased items for the guest reservation.",
+    isPublic
+      ? "This purchase is not tied to a reservation. Reach out to the customer to arrange the purchased items."
+      : "Set up the listed purchased items for the guest reservation.",
   ]
     .filter((line) => line !== "")
     .join("\n");
@@ -166,6 +184,9 @@ function errorSummary(err: unknown) {
 async function addLodgifySetupNote(purchase: CommercePurchase) {
   const latest = (await getCommercePurchase(purchase.id)) as CommercePurchase | null;
   if (!latest) return { sent: false, reason: "purchase missing" };
+  if (isPublicPurchase(latest)) {
+    return { sent: false, reason: "public purchase (no reservation)" };
+  }
   if (latest.lodgify_note_sent_at) return { sent: true, reason: "already sent" };
   if (!latest.reservation_id) return { sent: false, reason: "missing reservation id" };
 
@@ -245,7 +266,9 @@ async function sendTeamNotification(
         sendPlainEmail({
           to,
           from,
-          subject: `[Zenfulcove Glamping] Paid package purchase for reservation ${latest.reservation_id}`,
+          subject: isPublicPurchase(latest)
+            ? "[Zenfulcove Glamping] Paid package purchase (public shop)"
+            : `[Zenfulcove Glamping] Paid package purchase for reservation ${latest.reservation_id}`,
           text: buildTeamEmail(latest, lodgifyResult),
         })
       )
@@ -289,6 +312,7 @@ export async function confirmAndFulfillCommercePurchase(
     status: "paid",
     stripe_checkout_session_id: session.id,
     stripe_payment_intent_id: paymentIntentId(session),
+    customer_name: purchase.customer_name || session.customer_details?.name || "",
     customer_email: session.customer_details?.email || purchase.customer_email,
     customer_phone: session.customer_details?.phone || purchase.customer_phone,
     updated_at: new Date().toISOString(),

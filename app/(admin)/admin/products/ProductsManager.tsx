@@ -42,11 +42,18 @@ export default function ProductsManager({
                     No image
                   </div>
                 )}
-                {!product.is_active ? (
-                  <span className="absolute right-3 top-3 rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider text-amber-800">
-                    Hidden
-                  </span>
-                ) : null}
+                <span className="absolute right-3 top-3 flex gap-1.5">
+                  {product.is_public ? (
+                    <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider text-emerald-800">
+                      Public
+                    </span>
+                  ) : null}
+                  {!product.is_active ? (
+                    <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider text-amber-800">
+                      Hidden
+                    </span>
+                  ) : null}
+                </span>
               </div>
               <div className="p-6">
                 <div className="flex items-start justify-between gap-3">

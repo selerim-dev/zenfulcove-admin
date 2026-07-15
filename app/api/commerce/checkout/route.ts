@@ -6,7 +6,11 @@ import {
   listCommerceProducts,
   saveCommercePurchase,
 } from "@/lib/kv";
-import { PROPERTY_TO_CABIN, type CommerceProduct } from "@/lib/types";
+import {
+  PROPERTY_TO_CABIN,
+  PUBLIC_COMMERCE_RESERVATION_ID,
+  type CommerceProduct,
+} from "@/lib/types";
 import { todayIso } from "@/lib/dates";
 import { fetchReservationById, LodgifyError } from "@/lib/customer/lodgify";
 import {
@@ -20,6 +24,9 @@ import {
 type CheckoutPayload = {
   reservationId?: string;
   lastName?: string;
+  // "public" checkouts come from the open /shop page: no reservation is
+  // required, but every product in the cart must be flagged is_public.
+  channel?: string;
   items?: { productId?: string; quantity?: number }[];
 };
 
@@ -57,11 +64,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid JSON." }, { status: 400 });
   }
 
+  const isPublic = body.channel === "public";
   const reservationId = String(body.reservationId || "").trim();
   const lastName = String(body.lastName || "").trim();
   const cartItems = normalizeCartItems(body.items);
 
-  if (!reservationId || !lastName) {
+  if (!isPublic && (!reservationId || !lastName)) {
     return NextResponse.json(
       { error: "Reservation number and last name are required." },
       { status: 400 }
@@ -81,37 +89,41 @@ export async function POST(req: Request) {
     );
   }
 
-  let reservation;
-  try {
-    reservation = await fetchReservationById(reservationId);
-  } catch (err) {
-    const detail = err instanceof LodgifyError ? err.detail : String(err);
-    return NextResponse.json(
-      { error: `Couldn't reach Lodgify (${detail.slice(0, 120)})` },
-      { status: 502 }
-    );
+  let reservation: Awaited<ReturnType<typeof fetchReservationById>> = null;
+  if (!isPublic) {
+    try {
+      reservation = await fetchReservationById(reservationId);
+    } catch (err) {
+      const detail = err instanceof LodgifyError ? err.detail : String(err);
+      return NextResponse.json(
+        { error: `Couldn't reach Lodgify (${detail.slice(0, 120)})` },
+        { status: 502 }
+      );
+    }
+
+    if (!reservation) {
+      return NextResponse.json(
+        { error: "We couldn't find that reservation." },
+        { status: 404 }
+      );
+    }
+    if (!lastNameMatches(reservation.guestName, lastName)) {
+      return NextResponse.json(
+        { error: "That last name doesn't match the reservation." },
+        { status: 401 }
+      );
+    }
+    if (reservation.departureIso < todayIso()) {
+      return NextResponse.json(
+        { error: "That reservation has already ended." },
+        { status: 400 }
+      );
+    }
   }
 
-  if (!reservation) {
-    return NextResponse.json(
-      { error: "We couldn't find that reservation." },
-      { status: 404 }
-    );
-  }
-  if (!lastNameMatches(reservation.guestName, lastName)) {
-    return NextResponse.json(
-      { error: "That last name doesn't match the reservation." },
-      { status: 401 }
-    );
-  }
-  if (reservation.departureIso < todayIso()) {
-    return NextResponse.json(
-      { error: "That reservation has already ended." },
-      { status: 400 }
-    );
-  }
-
-  const cabin = PROPERTY_TO_CABIN[reservation.propertyId] || null;
+  const cabin = reservation
+    ? PROPERTY_TO_CABIN[reservation.propertyId] || null
+    : null;
   await ensureDefaultCommerceProducts();
   const products = (await listCommerceProducts()) as CommerceProduct[];
   const productsById = new Map(products.map((product) => [product.id, product]));
@@ -135,6 +147,18 @@ export async function POST(req: Request) {
       { status: 404 }
     );
   }
+  if (
+    isPublic &&
+    cartItems.some(({ productId }) => !productsById.get(productId)?.is_public)
+  ) {
+    return NextResponse.json(
+      {
+        error:
+          "One or more products require a reservation and can't be purchased from the public shop.",
+      },
+      { status: 403 }
+    );
+  }
 
   const items = purchaseItems.filter(Boolean) as NonNullable<
     (typeof purchaseItems)[number]
@@ -142,24 +166,34 @@ export async function POST(req: Request) {
   const amountCents = items.reduce((sum, item) => sum + item.amount_cents, 0);
   const now = new Date().toISOString();
   const purchaseId = randomUUID();
+  const purchaseReservationId =
+    reservation?.id ?? PUBLIC_COMMERCE_RESERVATION_ID;
+  const purchaseChannel = isPublic ? "public" : "guest";
+  // Public purchases start with no contact details; Stripe collects them at
+  // checkout and fulfillment copies them from the session afterwards.
   const customerName =
-    (reservation.guestName ?? "").trim() || String(body.lastName || "").trim();
-  const customerEmail = (reservation.guestEmail ?? "").trim() || null;
-  const customerPhone = (reservation.guestPhone ?? "").trim() || null;
+    (reservation?.guestName ?? "").trim() || String(body.lastName || "").trim();
+  const customerEmail = (reservation?.guestEmail ?? "").trim() || null;
+  const customerPhone = (reservation?.guestPhone ?? "").trim() || null;
 
-  await saveCommercePurchase({
+  const basePurchase = {
     id: purchaseId,
-    reservation_id: reservation.id,
+    reservation_id: purchaseReservationId,
+    channel: purchaseChannel,
     customer_name: customerName,
     stay_location: cabin,
-    status: "pending",
     amount_cents: amountCents,
     items,
-    stripe_checkout_session_id: null,
-    stripe_payment_intent_id: null,
     customer_email: customerEmail,
     customer_phone: customerPhone,
     created_at: now,
+  };
+
+  await saveCommercePurchase({
+    ...basePurchase,
+    status: "pending",
+    stripe_checkout_session_id: null,
+    stripe_payment_intent_id: null,
     updated_at: now,
   });
 
@@ -171,12 +205,15 @@ export async function POST(req: Request) {
     lastName,
     payment: "cancelled",
   });
-  const cancelUrl = `${baseUrl}/special-packages?${cancelParams.toString()}`;
+  const cancelUrl = isPublic
+    ? `${baseUrl}/shop?payment=cancelled`
+    : `${baseUrl}/special-packages?${cancelParams.toString()}`;
   const metadata = {
     app: APP_STRIPE_METADATA_MARKER,
     kind: "commerce_purchase",
     purchaseId,
-    reservationId: reservation.id,
+    reservationId: purchaseReservationId,
+    channel: purchaseChannel,
   };
 
   try {
@@ -189,6 +226,9 @@ export async function POST(req: Request) {
         metadata,
         payment_intent_data: { metadata },
         customer_email: customerEmail || undefined,
+        // Public buyers have no reservation on file, so collect a phone number
+        // in case the team needs to coordinate the order.
+        phone_number_collection: isPublic ? { enabled: true } : undefined,
         line_items: items.map((item) => ({
           quantity: item.quantity,
           price_data: {
@@ -211,18 +251,10 @@ export async function POST(req: Request) {
 
     if (!session.url) {
       await saveCommercePurchase({
-        id: purchaseId,
-        reservation_id: reservation.id,
-        customer_name: customerName,
-        stay_location: cabin,
+        ...basePurchase,
         status: "cancelled",
-        amount_cents: amountCents,
-        items,
         stripe_checkout_session_id: session.id,
         stripe_payment_intent_id: null,
-        customer_email: customerEmail,
-        customer_phone: customerPhone,
-        created_at: now,
         updated_at: new Date().toISOString(),
       });
       return NextResponse.json(
@@ -232,21 +264,13 @@ export async function POST(req: Request) {
     }
 
     await saveCommercePurchase({
-      id: purchaseId,
-      reservation_id: reservation.id,
-      customer_name: customerName,
-      stay_location: cabin,
+      ...basePurchase,
       status: "pending",
-      amount_cents: amountCents,
-      items,
       stripe_checkout_session_id: session.id,
       stripe_payment_intent_id:
         typeof session.payment_intent === "string"
           ? session.payment_intent
           : session.payment_intent?.id ?? null,
-      customer_email: customerEmail,
-      customer_phone: customerPhone,
-      created_at: now,
       updated_at: new Date().toISOString(),
     });
 
@@ -258,18 +282,10 @@ export async function POST(req: Request) {
     });
   } catch (err) {
     await saveCommercePurchase({
-      id: purchaseId,
-      reservation_id: reservation.id,
-      customer_name: customerName,
-      stay_location: cabin,
+      ...basePurchase,
       status: "cancelled",
-      amount_cents: amountCents,
-      items,
       stripe_checkout_session_id: null,
       stripe_payment_intent_id: null,
-      customer_email: customerEmail,
-      customer_phone: customerPhone,
-      created_at: now,
       updated_at: new Date().toISOString(),
     });
     return NextResponse.json(

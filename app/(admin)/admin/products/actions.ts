@@ -30,6 +30,7 @@ function parseProductFields(formData: FormData) {
   const priceDollars = Number(formData.get("price"));
   const displayOrder = Number(formData.get("display_order") || 0);
   const isActive = formData.get("is_active") === "on";
+  const isPublic = formData.get("is_public") === "on";
 
   if (!title) throw new Error("Title is required.");
   if (!Number.isFinite(priceDollars) || priceDollars < 0) {
@@ -47,6 +48,7 @@ function parseProductFields(formData: FormData) {
     sku: commerceSku(title, priceCents),
     display_order: Math.round(displayOrder),
     is_active: isActive,
+    is_public: isPublic,
   };
 }
 
@@ -140,6 +142,7 @@ async function resolveImages(formData: FormData) {
 function revalidateCommerce() {
   revalidatePath("/admin/products");
   revalidatePath("/special-packages");
+  revalidatePath("/shop");
 }
 
 export async function createProduct(formData: FormData) {
