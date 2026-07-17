@@ -370,6 +370,12 @@ export default function OneOffPromotionsPanel({ onComplete }) {
                 <p className="text-sm text-forest/55 mt-1">
                   {result?.status || "Result"} from the latest promotion action.
                 </p>
+                {result?.summary ? (
+                  <p className="text-sm font-medium text-forest/80 mt-1">
+                    Sent {result.summary.sent} · Skipped {result.summary.skipped} · Failed{" "}
+                    {result.summary.failed}
+                  </p>
+                ) : null}
               </div>
               <button
                 type="button"

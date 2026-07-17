@@ -12,7 +12,7 @@ export async function POST(request) {
     const body = await request.json();
     const config = await getConfig();
 
-    const logs = await runOneOffPromotion({
+    const { logs, summary } = await runOneOffPromotion({
       config,
       mode: body?.mode,
       segments: body?.segments,
@@ -31,13 +31,18 @@ export async function POST(request) {
 
     await appendLogs(logs);
 
+    // PARTIAL: messages went out but something failed along the way. FAILED is
+    // reserved for runs where nothing was delivered.
     const hasFailed = logs.some((log) => log.status === "failed");
-    await writeLastRunStatus(hasFailed ? "FAILED" : "SUCCESS");
+    const sentCount = summary?.sent ?? 0;
+    const status = hasFailed ? (sentCount > 0 ? "PARTIAL" : "FAILED") : "SUCCESS";
+    await writeLastRunStatus(status);
 
     return NextResponse.json({
-      status: hasFailed ? "FAILED" : "SUCCESS",
+      status,
       timestamp: new Date().toISOString(),
       logs,
+      summary,
     });
   } catch (err) {
     return NextResponse.json(

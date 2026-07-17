@@ -28,7 +28,12 @@ export default function Header({
   showCron = true,
   onOpenMenu = null,
 }) {
-  const isSuccess = lastRunStatus === "SUCCESS";
+  const statusChipColor =
+    lastRunStatus === "SUCCESS"
+      ? "bg-[var(--color-accent)]"
+      : lastRunStatus === "PARTIAL"
+        ? "bg-amber-500"
+        : "bg-red-500";
 
   return (
     <header className="w-full px-4 pt-4 md:px-8 md:pt-6">
@@ -83,9 +88,7 @@ export default function Header({
               </div>
               {lastRunStatus && (
                 <span
-                  className={`rounded-full px-3 py-1.5 text-xs font-semibold text-white ${
-                    isSuccess ? "bg-[var(--color-accent)]" : "bg-red-500"
-                  }`}
+                  className={`rounded-full px-3 py-1.5 text-xs font-semibold text-white ${statusChipColor}`}
                 >
                   {lastRunStatus}
                 </span>
