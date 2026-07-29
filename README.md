@@ -100,6 +100,9 @@ Uses the **SendGrid contact list** (from Settings). Checks Lodgify availability 
 3. **Cross-reference** → For each Lodgify guest: if they've submitted the waiver (booking ID in Jotform), skip. If not, send the reminder email to the Lodgify guest email.
 4. Recipients come from Lodgify guest emails only — **not** the SendGrid contact list (that’s for vacancy promos).
 
+### Add-On Purchases → Lodgify Booking Notes
+When a guest pays for add-ons / special packages (during booking or after confirmation), the purchase — item names, quantities, and details — is automatically appended to the reservation's **Booking Notes** in Lodgify, in English **and** Spanish, alongside the existing Owner message + team/customer emails. See [docs/addon-booking-notes.md](docs/addon-booking-notes.md).
+
 ## Notes
 
 - All API keys are server-side only (never exposed to client)

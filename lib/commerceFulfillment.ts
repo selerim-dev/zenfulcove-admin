@@ -1,13 +1,20 @@
 import type Stripe from "stripe";
+import { packageProductIdentity } from "@/lib/commerce";
 import {
   claimCommerceFulfillment,
   getCommercePurchase,
   getConfig,
+  listCommerceProducts,
   saveCommercePurchase,
 } from "@/lib/kv";
-import { sendBookingMessage } from "@/lib/lodgify";
+import { appendBookingNote, sendBookingMessage } from "@/lib/lodgify";
 import { sendPlainEmail } from "@/lib/sendgrid";
-import { formatMoney, type CommercePurchase } from "@/lib/types";
+import {
+  formatMoney,
+  type CommerceProduct,
+  type CommercePurchase,
+  type CommercePurchaseItem,
+} from "@/lib/types";
 
 const TEAM_PURCHASE_EMAIL = "contact@zenfulcove.com";
 const FROM_NAME = "Zenfulcove Glamping";
@@ -22,12 +29,19 @@ const sendLodgifyBookingMessage = sendBookingMessage as (
   }
 ) => Promise<unknown>;
 
+const appendLodgifyBookingNote = appendBookingNote as (
+  bookingId: string,
+  block: string,
+  options?: { marker?: string }
+) => Promise<{ appended: boolean; reason?: string }>;
+
 type FulfillmentPatch = Partial<
   Pick<
     CommercePurchase,
     | "customer_confirmation_sent_at"
     | "team_notification_sent_at"
     | "lodgify_note_sent_at"
+    | "lodgify_booking_note_added_at"
     | "fulfillment_error"
   >
 >;
@@ -93,6 +107,100 @@ function isPublicPurchase(purchase: CommercePurchase) {
   return purchase.channel === "public";
 }
 
+// Spanish copy for the launch packages, keyed by packageProductIdentity so it
+// survives title/SKU edits in the admin catalog. Custom products fall back to
+// their English title/description inside the Spanish section.
+const PACKAGE_SPANISH: Record<string, { title: string; description: string }> =
+  {
+    birthday: {
+      title: "Paquete de Cumpleaños",
+      description:
+        "Incluye un pastel pequeño de cumpleaños, un ramo de rosas, un letrero de \"Happy Birthday\" en caballete y un ramo de globos.",
+    },
+    anniversary: {
+      title: "Paquete de Aniversario",
+      description:
+        "Incluye: pastel pequeño, rosas, globos, letrero de feliz aniversario y pétalos en forma de corazón sobre la cama.",
+    },
+    "wood-1-day": {
+      title: "Paquete de Leña — 1 día",
+      description:
+        "Un paquete de leña suficiente para una estancia de 1 noche.",
+    },
+    "wood-2-day": {
+      title: "Paquete de Leña — 2 días",
+      description:
+        "Un paquete de leña suficiente para una estancia de 2 noches.",
+    },
+    "wood-3-day": {
+      title: "Paquete de Leña — 3 días",
+      description:
+        "Un paquete de leña suficiente para una estancia de 3 noches.",
+    },
+  };
+
+function spanishFor(item: CommercePurchaseItem) {
+  const identity = packageProductIdentity({
+    id: item.product_id,
+    title: item.title,
+    sku: item.sku,
+  } as CommerceProduct);
+  return PACKAGE_SPANISH[identity] || null;
+}
+
+function noteItemLines(
+  items: CommercePurchaseItem[],
+  descriptionsById: Map<string, string>,
+  language: "en" | "es"
+) {
+  return items.flatMap((item) => {
+    const spanish = language === "es" ? spanishFor(item) : null;
+    const title = spanish?.title || item.title;
+    const description =
+      spanish?.description || descriptionsById.get(item.product_id) || "";
+    const lines = [`- ${item.quantity} x ${title}`];
+    if (description) lines.push(`  ${description}`);
+    return lines;
+  });
+}
+
+/**
+ * Bilingual (EN + ES) summary of the purchased add-ons for the reservation's
+ * Booking Notes panel in Lodgify. The purchase id doubles as the idempotency
+ * marker appendBookingNote checks before appending.
+ */
+async function buildBookingNotesBlock(purchase: CommercePurchase) {
+  const products = (await listCommerceProducts({
+    includeInactive: true,
+  })) as CommerceProduct[];
+  const descriptionsById = new Map(
+    products.map((product) => [product.id, clean(product.description)])
+  );
+  const paidDate = clean(purchase.updated_at || purchase.created_at).slice(
+    0,
+    10
+  );
+
+  return [
+    "==============================",
+    "ADD-ONS PURCHASED / COMPLEMENTOS COMPRADOS",
+    `Paid / Pagado: ${formatMoney(purchase.amount_cents)}${
+      paidDate ? ` (${paidDate})` : ""
+    }`,
+    "",
+    "[EN]",
+    ...noteItemLines(purchase.items, descriptionsById, "en"),
+    "Please have all purchased items ready for this reservation.",
+    "",
+    "[ES]",
+    ...noteItemLines(purchase.items, descriptionsById, "es"),
+    "Por favor tengan listos todos los artículos comprados para esta reservación.",
+    "",
+    `Purchase / Compra: ${purchase.id}`,
+    "==============================",
+  ].join("\n");
+}
+
 function buildCustomerEmail(purchase: CommercePurchase) {
   const isPublic = isPublicPurchase(purchase);
   return [
@@ -117,7 +225,8 @@ function buildCustomerEmail(purchase: CommercePurchase) {
 
 function buildTeamEmail(
   purchase: CommercePurchase,
-  lodgifyResult: { sent: boolean; reason?: string }
+  lodgifyResult: { sent: boolean; reason?: string },
+  bookingNotesResult: { sent: boolean; reason?: string }
 ) {
   const isPublic = isPublicPurchase(purchase);
   return [
@@ -141,6 +250,13 @@ function buildTeamEmail(
       ? ""
       : `Lodgify note: ${
           lodgifyResult.sent ? "added" : `not added (${lodgifyResult.reason || "unknown"})`
+        }`,
+    isPublic
+      ? ""
+      : `Lodgify booking notes: ${
+          bookingNotesResult.sent
+            ? "updated"
+            : `not updated (${bookingNotesResult.reason || "unknown"})`
         }`,
     purchase.stripe_checkout_session_id
       ? `Stripe checkout session: ${purchase.stripe_checkout_session_id}`
@@ -210,6 +326,43 @@ async function addLodgifySetupNote(purchase: CommercePurchase) {
   }
 }
 
+// Appends the bilingual add-on summary to the reservation's Booking Notes in
+// Lodgify (separate from the Owner message above, which lands in the thread).
+async function addLodgifyBookingNotesEntry(purchase: CommercePurchase) {
+  const latest = (await getCommercePurchase(purchase.id)) as CommercePurchase | null;
+  if (!latest) return { sent: false, reason: "purchase missing" };
+  if (isPublicPurchase(latest)) {
+    return { sent: false, reason: "public purchase (no reservation)" };
+  }
+  if (latest.lodgify_booking_note_added_at) {
+    return { sent: true, reason: "already added" };
+  }
+  if (!latest.reservation_id) return { sent: false, reason: "missing reservation id" };
+
+  try {
+    const block = await buildBookingNotesBlock(latest);
+    // The purchase id inside the block is the marker: if a previous attempt
+    // wrote the note but crashed before persisting the timestamp, the retry
+    // finds the marker and skips the duplicate append.
+    await appendLodgifyBookingNote(latest.reservation_id, block, {
+      marker: latest.id,
+    });
+    await patchPurchase(latest.id, {
+      lodgify_booking_note_added_at: new Date().toISOString(),
+      fulfillment_error: null,
+    });
+    return { sent: true };
+  } catch (err) {
+    const message = `Lodgify booking note failed: ${errorSummary(err)}`;
+    console.error(
+      `Could not update Lodgify booking notes for purchase ${latest.id}:`,
+      err
+    );
+    await patchPurchase(latest.id, { fulfillment_error: message });
+    return { sent: false, reason: message };
+  }
+}
+
 async function sendCustomerConfirmation(purchase: CommercePurchase, from: { email: string; name: string }) {
   const latest = (await getCommercePurchase(purchase.id)) as CommercePurchase | null;
   if (!latest) return { sent: false, reason: "purchase missing" };
@@ -244,7 +397,8 @@ async function sendCustomerConfirmation(purchase: CommercePurchase, from: { emai
 async function sendTeamNotification(
   purchase: CommercePurchase,
   from: { email: string; name: string },
-  lodgifyResult: { sent: boolean; reason?: string }
+  lodgifyResult: { sent: boolean; reason?: string },
+  bookingNotesResult: { sent: boolean; reason?: string }
 ) {
   const latest = (await getCommercePurchase(purchase.id)) as CommercePurchase | null;
   if (!latest) return { sent: false, reason: "purchase missing" };
@@ -269,7 +423,7 @@ async function sendTeamNotification(
           subject: isPublicPurchase(latest)
             ? "[Zenfulcove Glamping] Paid package purchase (public shop)"
             : `[Zenfulcove Glamping] Paid package purchase for reservation ${latest.reservation_id}`,
-          text: buildTeamEmail(latest, lodgifyResult),
+          text: buildTeamEmail(latest, lodgifyResult, bookingNotesResult),
         })
       )
     );
@@ -293,9 +447,10 @@ export async function fulfillCommercePurchase(purchase: CommercePurchase) {
     name: clean(config?.sendgrid?.fromName || FROM_NAME),
   };
   const lodgify = await addLodgifySetupNote(purchase);
+  const bookingNotes = await addLodgifyBookingNotesEntry(purchase);
   const customer = await sendCustomerConfirmation(purchase, from);
-  const team = await sendTeamNotification(purchase, from, lodgify);
-  return { lodgify, customer, team };
+  const team = await sendTeamNotification(purchase, from, lodgify, bookingNotes);
+  return { lodgify, bookingNotes, customer, team };
 }
 
 export async function confirmAndFulfillCommercePurchase(

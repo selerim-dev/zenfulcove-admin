@@ -159,6 +159,9 @@ export type CommercePurchase = {
   customer_confirmation_sent_at: string | null;
   team_notification_sent_at: string | null;
   lodgify_note_sent_at: string | null;
+  // When the add-on summary was appended to the reservation's Booking Notes
+  // (the Lodgify admin `note` field), as opposed to the message thread above.
+  lodgify_booking_note_added_at: string | null;
   fulfillment_error: string | null;
   created_at: string;
   updated_at: string;
