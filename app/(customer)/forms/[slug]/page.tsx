@@ -1,5 +1,5 @@
-import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
+import { hasAdminSessionCookie } from "@/lib/adminAuth";
 import LocalForm from "@/components/customer/LocalForm";
 import { hasSupabaseAdminEnv } from "@/lib/supabaseEnv";
 import {
@@ -62,9 +62,8 @@ export default async function LocalFormPage({
   }
 
   const form = await getLocalFormBySlug(slug);
-  const cookieStore = await cookies();
   const isAdminPreview =
-    query?.preview === "1" && cookieStore.get("zc_admin_auth")?.value === "true";
+    query?.preview === "1" && (await hasAdminSessionCookie());
 
   if (!form || (form.is_active === false && !isAdminPreview)) notFound();
   const schema = (form.schema || {}) as LocalFormSchema;

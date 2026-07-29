@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { cookies } from "next/headers";
+import { hasAdminSessionCookie } from "@/lib/adminAuth";
 import { LOCAL_FORM_STAY_UNIT_OPTIONS } from "@/lib/local-form-options";
 import { createSupabaseAdminClient } from "@/lib/supabaseAdmin";
 
@@ -25,8 +25,7 @@ const FIELD_TYPES = new Set([
 const OPTION_SOURCES = new Set(["stayUnits"]);
 
 async function requireAdminCookie() {
-  const cookieStore = await cookies();
-  if (cookieStore.get("zc_admin_auth")?.value !== "true") {
+  if (!(await hasAdminSessionCookie())) {
     throw new Error("Unauthorized.");
   }
 }

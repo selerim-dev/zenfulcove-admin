@@ -22,7 +22,6 @@ export default function LoginScreen({ onAuthenticated }) {
       });
 
       if (res.ok) {
-        sessionStorage.setItem("zc_admin_auth", "true");
         if (onAuthenticated) onAuthenticated();
         router.refresh();
       } else {

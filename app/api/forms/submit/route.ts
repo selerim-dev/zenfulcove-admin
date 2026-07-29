@@ -1,5 +1,5 @@
 import { after, NextResponse } from "next/server";
-import { cookies } from "next/headers";
+import { hasAdminSessionCookie } from "@/lib/adminAuth";
 import { appendLogs } from "@/lib/activity-log";
 import { notifyAutomationFailure } from "@/lib/automation-alerts";
 import { hasSupabaseAdminEnv } from "@/lib/supabaseEnv";
@@ -294,10 +294,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Form slug is required." }, { status: 400 });
   }
 
-  const cookieStore = await cookies();
   const isTrustedPreview =
-    parsed.preview === true &&
-    cookieStore.get("zc_admin_auth")?.value === "true";
+    parsed.preview === true && (await hasAdminSessionCookie());
 
   const form = await getLocalFormBySlug(formSlug);
   if (!form || (form.is_active === false && !isTrustedPreview)) {

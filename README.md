@@ -106,6 +106,6 @@ When a guest pays for add-ons / special packages (during booking or after confir
 ## Notes
 
 - All API keys are server-side only (never exposed to client)
-- Dashboard is an internal tool — no auth required
+- Admin dashboard/API access requires the `ADMIN_PASSWORD` login, which sets a signed, expiring `zc_admin_auth` session cookie (HMAC key derived from `ADMIN_PASSWORD` + `CRON_SECRET`, or `ADMIN_SESSION_SECRET` if set — no extra env var required). API routes alternatively accept `Authorization: Bearer $CRON_SECRET`.
 - Config updates are written directly to `config/automations.js`
 - Logs are stored in `logs/activity.json` (append-only)

@@ -1,9 +1,8 @@
-import { cookies } from "next/headers";
+import { hasAdminSessionCookie } from "@/lib/adminAuth";
 import LoginScreen from "@/components/LoginScreen";
 
 export default async function AdminLayout({ children }) {
-  const cookieStore = await cookies();
-  const authenticated = cookieStore.get("zc_admin_auth")?.value === "true";
+  const authenticated = await hasAdminSessionCookie();
 
   if (!authenticated) {
     return <LoginScreen />;

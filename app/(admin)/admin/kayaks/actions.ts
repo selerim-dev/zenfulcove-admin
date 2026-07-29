@@ -2,7 +2,7 @@
 
 import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
-import { cookies } from "next/headers";
+import { hasAdminSessionCookie } from "@/lib/adminAuth";
 import { createSupabaseAdminClient } from "@/lib/supabaseAdmin";
 import { COLOR_OPTIONS } from "@/lib/types";
 
@@ -12,8 +12,7 @@ const KAYAK_IMAGE_BUCKET = "kayak-images";
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 5MB
 
 async function requireAdminCookie() {
-  const cookieStore = await cookies();
-  if (cookieStore.get("zc_admin_auth")?.value !== "true") {
+  if (!(await hasAdminSessionCookie())) {
     throw new Error("Unauthorized.");
   }
 }

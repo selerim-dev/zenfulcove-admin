@@ -2,7 +2,7 @@
 
 import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
-import { cookies } from "next/headers";
+import { hasAdminSessionCookie } from "@/lib/adminAuth";
 import { commerceSku } from "@/lib/commerce";
 import { createSupabaseAdminClient } from "@/lib/supabaseAdmin";
 import {
@@ -18,8 +18,7 @@ const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const IMAGE_SLOTS = 3;
 
 async function requireAdminCookie() {
-  const cookieStore = await cookies();
-  if (cookieStore.get("zc_admin_auth")?.value !== "true") {
+  if (!(await hasAdminSessionCookie())) {
     throw new Error("Unauthorized.");
   }
 }

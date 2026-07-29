@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { cookies } from "next/headers";
+import { hasAdminSessionCookie } from "@/lib/adminAuth";
 import { getConfig, setConfig } from "@/lib/kv";
 import {
   createService,
@@ -17,8 +17,7 @@ import { refundMassagePayment } from "@/lib/spaPayments";
 import type { WeeklyHours } from "@/lib/types";
 
 async function requireAdminCookie() {
-  const cookieStore = await cookies();
-  if (cookieStore.get("zc_admin_auth")?.value !== "true") {
+  if (!(await hasAdminSessionCookie())) {
     throw new Error("Unauthorized.");
   }
 }
