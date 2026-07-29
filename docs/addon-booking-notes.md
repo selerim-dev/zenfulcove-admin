@@ -59,3 +59,11 @@ The older `addLodgifySetupNote` step still sends an **Owner message** into the b
 - `GET ?list=1&from=YYYY-MM-DD&to=YYYY-MM-DD` — list booking ids in a stay range (to pick an old test booking).
 - `GET ?bookingId=…` — snapshot of the booking incl. current note.
 - `POST {"bookingId": "…"}` — appends a clearly-marked test block, re-reads the booking, reports `fieldDrift` (any non-note field that changed — must be empty), then **restores the original note**. Pass `"keep": true` to leave the test note in place.
+- `POST {"mode": "set", "bookingId": "…", "value": "…"}` — overwrite the note verbatim (cleanup helper).
+
+### Verified in production (2026-07-28, booking 21275565)
+
+- Appending with `PUT {note}` only: works, and `fieldDrift` was empty both runs — status, dates, guest, people, rooms/key codes, and amounts were untouched by the partial PUT.
+- Appending below an existing note preserves the prior content exactly.
+- Restoring a previous non-empty note works verbatim.
+- **Caveat:** Lodgify *ignores* empty/blank `note` values on this PUT — a note can be replaced but not cleared to `""` via the API. Irrelevant for this feature (we only append non-empty blocks), but the reason the `set` cleanup mode writes `" "` to blank a note.

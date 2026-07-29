@@ -94,6 +94,8 @@ export async function GET(request) {
 
 // POST { bookingId, text?, keep? } → append a test block to Booking Notes,
 // verify nothing else changed, then restore the original note unless keep.
+// POST { mode: "set", bookingId, value } → overwrite the note verbatim
+// (cleanup helper; Lodgify ignores empty values, so blanking needs " ").
 export async function POST(request) {
   const unauthorized = await requireAdminRequest(request);
   if (unauthorized) return unauthorized;
@@ -102,6 +104,20 @@ export async function POST(request) {
   const bookingId = String(body.bookingId || "").trim();
   if (!bookingId) {
     return NextResponse.json({ error: "Missing bookingId." }, { status: 400 });
+  }
+
+  if (body.mode === "set") {
+    const before = await getBookingV1(bookingId);
+    if (!before?.id) {
+      return NextResponse.json({ error: "Booking not found." }, { status: 404 });
+    }
+    await setBookingNote(before.id, body.value ?? "");
+    const after = await getBookingV1(before.id);
+    return NextResponse.json({
+      ok: true,
+      noteBefore: before?.note ?? null,
+      noteAfter: after?.note ?? null,
+    });
   }
   const keep = Boolean(body.keep);
   const text =
