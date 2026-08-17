@@ -10,6 +10,7 @@
     "test:lodgify-delivery": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/test-lodgify-delivery.mjs",
     "test:cron": "node --env-file=.env.local scripts/test-cron.js",
     "test:jotform-sync": "node --env-file=.env.local scripts/test-jotform-sync.js",
+    "test:lodgify-sync": "node --env-file=.env.local scripts/test-lodgify-sync.js",
     "run:jotform-sync": "node --env-file=.env.local scripts/run-jotform-sync-live.js",
     "test:popup-sms": "node --env-file=.env.local scripts/test-popup-sms.js",
     "test:promotion": "node --env-file=.env.local scripts/test-promotion.js",

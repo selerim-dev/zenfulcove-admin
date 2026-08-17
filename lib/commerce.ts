@@ -14,13 +14,15 @@ const PACKAGE_FALLBACK_IMAGES = {
 const ANNIVERSARY_DETAILS =
   "Includes: small cake, roses, balloons, happy anniversary sign, and petals in a heart shape on the bed.";
 
+export const BIRTHDAY_PACKAGE_DESCRIPTION =
+  "Includes a small birthday cake, 12 roses, a Happy Birthday sign on an easel, and 6 colorful balloons.";
+
 export const DEFAULT_PACKAGE_PRODUCTS: CommerceProduct[] = [
   {
     id: "default-birthday-package",
     title: "Birthday Package",
     sku: "birthday-package-150",
-    description:
-      "Includes a small birthday cake, bundle of roses, Happy Birthday sign on an easel, and a bouquet of balloons.",
+    description: BIRTHDAY_PACKAGE_DESCRIPTION,
     price_cents: 15000,
     image_urls: [PACKAGE_FALLBACK_IMAGES.birthday],
     is_active: true,

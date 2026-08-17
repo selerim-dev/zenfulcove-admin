@@ -16,7 +16,13 @@ export default function VacancyPanel({ config, onChange }) {
   function addWindow() {
     const windows = [
       ...config.windows,
-      { daysBeforeCheckin: 7, templateId: "" },
+      {
+        daysBeforeCheckin: 7,
+        templateId: "",
+        expiresDaysBeforeCheckin: 1,
+        expiresAtLocalTime: "11:59 PM",
+        expirationTimezone: "America/Chicago",
+      },
     ];
     onChange({ ...config, windows });
   }
@@ -106,6 +112,55 @@ export default function VacancyPanel({ config, onChange }) {
                   placeholder="d-xxxxxxxx"
                   className="border border-sand rounded-lg px-3 py-2 text-sm w-full font-mono focus:outline-none focus:ring-2 focus:ring-grove/30"
                 />
+              </div>
+              <div>
+                <label className="block text-xs text-forest/60 uppercase tracking-wider mb-1">
+                  Expires Days Before Check-in
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  value={w.expiresDaysBeforeCheckin ?? 1}
+                  onChange={(e) =>
+                    updateWindow(
+                      idx,
+                      "expiresDaysBeforeCheckin",
+                      Math.max(0, parseInt(e.target.value, 10) || 0)
+                    )
+                  }
+                  className="border border-sand rounded-lg px-3 py-2 text-sm w-full focus:outline-none focus:ring-2 focus:ring-grove/30"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-forest/60 uppercase tracking-wider mb-1">
+                  Expiration Time
+                </label>
+                <input
+                  type="text"
+                  value={w.expiresAtLocalTime || "11:59 PM"}
+                  onChange={(e) =>
+                    updateWindow(idx, "expiresAtLocalTime", e.target.value)
+                  }
+                  placeholder="11:59 PM"
+                  className="border border-sand rounded-lg px-3 py-2 text-sm w-full focus:outline-none focus:ring-2 focus:ring-grove/30"
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="block text-xs text-forest/60 uppercase tracking-wider mb-1">
+                  Expiration Timezone
+                </label>
+                <input
+                  type="text"
+                  value={w.expirationTimezone || "America/Chicago"}
+                  onChange={(e) =>
+                    updateWindow(idx, "expirationTimezone", e.target.value)
+                  }
+                  placeholder="America/Chicago"
+                  className="border border-sand rounded-lg px-3 py-2 text-sm w-full font-mono focus:outline-none focus:ring-2 focus:ring-grove/30"
+                />
+                <p className="mt-1 text-xs text-forest/50">
+                  Template variables: promoEndsAt, promoEndDate, promoEndDateLabel, promoEndTime, and promoTimezone.
+                </p>
               </div>
             </div>
           </div>

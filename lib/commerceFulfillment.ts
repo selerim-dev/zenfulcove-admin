@@ -115,7 +115,7 @@ const PACKAGE_SPANISH: Record<string, { title: string; description: string }> =
     birthday: {
       title: "Paquete de Cumpleaños",
       description:
-        "Incluye un pastel pequeño de cumpleaños, un ramo de rosas, un letrero de \"Happy Birthday\" en caballete y un ramo de globos.",
+        "Incluye un pastel pequeño de cumpleaños, 12 rosas, un letrero de \"Happy Birthday\" en caballete y 6 globos de colores.",
     },
     anniversary: {
       title: "Paquete de Aniversario",
