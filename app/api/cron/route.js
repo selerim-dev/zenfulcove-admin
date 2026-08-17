@@ -3342,7 +3342,8 @@ async function runLodgifyClientSync(automationConfig, dryRunOverride) {
 // ─── Automation: Salesmate Form Sync ────────────────────────────────────────
 // Always-on. Mirrors a SINGLE master SendGrid list into Salesmate. For each
 // contact in that source list, derives Salesmate tags from the *other*
-// SendGrid lists the contact also belongs to (using `contact.list_ids`).
+// SendGrid lists the contact also belongs to. Contact exports do not reliably
+// include `list_ids`, so membership is indexed from each non-empty tag list.
 // One Salesmate write per contact carries every form-source tag at once.
 // Re-syncs only when the derived tag set changes for a given contact.
 
@@ -3454,6 +3455,46 @@ export async function runSalesmateFormSync(automationConfig, dryRunOverride) {
     status: "info",
   });
 
+  const tagLists = allLists.filter(
+    (list) =>
+      list.id !== sourceListId &&
+      String(list.name || "").trim() &&
+      Number(list.contactCount || 0) > 0
+  );
+  const tagsByContactKey = new Map();
+
+  for (const list of tagLists) {
+    let members = [];
+    try {
+      members = await getContactsFromListDetailed(list.id);
+    } catch (err) {
+      logs.push({
+        timestamp: new Date().toISOString(),
+        automation,
+        property: list.name || list.id,
+        action: `Failed to load SendGrid tag-list membership: ${err.message}`,
+        status: "failed",
+      });
+      return logs;
+    }
+
+    for (const member of members) {
+      const memberKey = salesmateSyncContactKey(member);
+      if (!memberKey) continue;
+      const memberTags = tagsByContactKey.get(memberKey) || new Set();
+      memberTags.add(String(list.name).trim());
+      tagsByContactKey.set(memberKey, memberTags);
+    }
+
+    logs.push({
+      timestamp: new Date().toISOString(),
+      automation,
+      property: list.name,
+      action: `Loaded ${members.length} contact membership(s) from SendGrid tag list ${list.name}`,
+      status: "info",
+    });
+  }
+
   let created = 0;
   let updated = 0;
   let unchanged = 0;
@@ -3469,12 +3510,12 @@ export async function runSalesmateFormSync(automationConfig, dryRunOverride) {
     }
 
     const memberListIds = Array.isArray(contact?.list_ids) ? contact.list_ids : [];
-    const tags = memberListIds
+    const embeddedTags = memberListIds
       .filter((id) => id && id !== sourceListId)
       .map((id) => String(listIndex.get(id)?.name || "").trim())
       .filter(Boolean);
-
-    const uniqueTags = [...new Set(tags)];
+    const indexedTags = Array.from(tagsByContactKey.get(contactKey) || []);
+    const uniqueTags = [...new Set([...embeddedTags, ...indexedTags])];
     const signature = tagsSignature(uniqueTags);
 
     if (uniqueTags.length === 0) {
