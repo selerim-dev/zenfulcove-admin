@@ -106,7 +106,7 @@ function buildMessage(
     "",
     `Total paid: ${formatMoney(total)}.`,
     "",
-    `Please use only the rental kayaks listed above for this paid rental and return them by 5:00 PM on ${rentalDateLabel(
+    `Please use only the rental kayaks listed above for this paid rental and return them to the rack and lock them by end of the day on ${rentalDateLabel(
       first.ends_at
     )}.`,
   ].join("\n");
