@@ -53,7 +53,11 @@ import {
 } from "@/lib/access-code-messages";
 import { hasSupabaseAdminEnv } from "@/lib/supabaseEnv";
 import { appendLogs, writeLastRunStatus } from "@/lib/activity-log";
-import { createSalesmateContact, validateSalesmateConfig } from "@/lib/salesmate";
+import {
+  createSalesmateContact,
+  upsertSalesmateContact,
+  validateSalesmateConfig,
+} from "@/lib/salesmate";
 import {
   sendTemplateEmail,
   getContactsFromList,
@@ -514,6 +518,32 @@ function formatPropertyList(items) {
   return `${list.slice(0, -1).join(", ")}, and ${list[list.length - 1]}`;
 }
 
+function formatPromoExpiration(window, checkinDate) {
+  const daysBeforeCheckin = Math.max(
+    0,
+    Number(window?.expiresDaysBeforeCheckin ?? 1) || 0
+  );
+  const date = addDays(checkinDate, -daysBeforeCheckin);
+  const time = String(window?.expiresAtLocalTime || "11:59 PM").trim();
+  const timezone = String(
+    window?.expirationTimezone || "America/Chicago"
+  ).trim();
+  const dateLabel = new Intl.DateTimeFormat("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(`${date}T12:00:00Z`));
+
+  return {
+    date,
+    dateLabel,
+    time,
+    timezone,
+    label: `${dateLabel} at ${time} (${timezone})`,
+  };
+}
+
 async function runVacancyEmails(automationConfig, dryRunOverride) {
   const isDryRun = dryRunOverride !== undefined ? dryRunOverride : DRY_RUN_ENV;
   const logs = [];
@@ -631,6 +661,7 @@ async function runVacancyEmails(automationConfig, dryRunOverride) {
       const { window, startDate, propertyNames } = entry;
       propertyNames.sort();
       const propertyNamesList = formatPropertyList(propertyNames);
+      const promoExpiration = formatPromoExpiration(window, startDate);
 
       for (const contact of recipients) {
         const email = String(contact?.email || "").trim();
@@ -645,6 +676,8 @@ async function runVacancyEmails(automationConfig, dryRunOverride) {
               to: email,
               templateId: window.templateId,
               from,
+              unsubscribeGroupId:
+                automationConfig.sendgrid?.marketingUnsubscribeGroupId,
               data: {
                 first_name: firstName,
                 last_name: lastName,
@@ -655,6 +688,11 @@ async function runVacancyEmails(automationConfig, dryRunOverride) {
                 propertyCount: propertyNames.length,
                 checkinDate: startDate,
                 daysUntilAvailable: window.daysBeforeCheckin,
+                promoEndsAt: promoExpiration.label,
+                promoEndDate: promoExpiration.date,
+                promoEndDateLabel: promoExpiration.dateLabel,
+                promoEndTime: promoExpiration.time,
+                promoTimezone: promoExpiration.timezone,
               },
             });
           }
@@ -665,7 +703,7 @@ async function runVacancyEmails(automationConfig, dryRunOverride) {
             automation: "Vacancy Promo Emails",
             property: propertyNamesList,
             action: isDryRun
-              ? `[DRY RUN] Would have sent ${window.daysBeforeCheckin}-day promo to ${email} for ${propertyNames.length} ${propertyLabel}`
+              ? `[DRY RUN] Would have sent ${window.daysBeforeCheckin}-day promo to ${email} for ${propertyNames.length} ${propertyLabel} | expires ${promoExpiration.label}`
               : `Sent ${window.daysBeforeCheckin}-day promo to ${email} (${window.templateId}) for ${propertyNames.length} ${propertyLabel}`,
             status: "success",
           });
@@ -1684,6 +1722,57 @@ export async function runPopupFollowups(automationConfig, dryRunOverride, popupC
     return logs;
   }
 
+  const excludeBookedGuests = config.excludeBookedGuests !== false;
+  const bookedGuestsListId = String(
+    config.bookedGuestsListId || automationConfig.sendgrid?.sendgridContactListId || ""
+  ).trim();
+  if (excludeBookedGuests) {
+    if (!bookedGuestsListId) {
+      logs.push({
+        timestamp: new Date().toISOString(),
+        automation: "Popup Follow Ups",
+        property: "—",
+        action: "Skipped: booked-guest suppression is enabled but no booked-guests list is configured",
+        status: "failed",
+      });
+      return logs;
+    }
+
+    try {
+      const bookedGuests = await getContactsFromListDetailed(bookedGuestsListId);
+      const bookedEmails = new Set(
+        bookedGuests.map((contact) => normalizeEmail(contact?.email)).filter(Boolean)
+      );
+      const bookedPhones = new Set(
+        bookedGuests
+          .map((contact) => normalizePhoneNumber(contact?.phone_number || contact?.phone || ""))
+          .filter(Boolean)
+      );
+      const beforeSuppression = contacts.length;
+      contacts = contacts.filter((contact) => {
+        const email = normalizeEmail(contact?.email);
+        const phone = normalizePhoneNumber(contact?.phone_number || contact?.phone || "");
+        return !(email && bookedEmails.has(email)) && !(phone && bookedPhones.has(phone));
+      });
+      logs.push({
+        timestamp: new Date().toISOString(),
+        automation: "Popup Follow Ups",
+        property: "—",
+        action: `Booked-guest suppression excluded ${beforeSuppression - contacts.length} contact(s) using list ${bookedGuestsListId}`,
+        status: "info",
+      });
+    } catch (err) {
+      logs.push({
+        timestamp: new Date().toISOString(),
+        automation: "Popup Follow Ups",
+        property: "—",
+        action: `Stopped: booked-guest suppression list could not be loaded (${err.message})`,
+        status: "failed",
+      });
+      return logs;
+    }
+  }
+
   const todayStr = todayCentral();
   const maxConfiguredDay = Math.max(
     0,
@@ -1819,7 +1908,23 @@ export async function runPopupFollowups(automationConfig, dryRunOverride, popupC
       (item) => Number(item.daysAfterTrigger) === daysSinceTriggered
     );
 
-    if (shouldRunSms && !phone && matchedSms.length > 0 && email) {
+    const smsConsentFieldId = String(config.popupSmsConsentFieldId || "").trim();
+    const consentValue = smsConsentFieldId
+      ? String(customFields[smsConsentFieldId] || "").trim().toLowerCase()
+      : "";
+    let hasSmsConsent = ["yes", "true", "1", "opted_in", "opted-in"].includes(
+      consentValue
+    );
+    const hasExplicitSmsOptOut = ["no", "false", "0", "opted_out", "opted-out"].includes(
+      consentValue
+    );
+
+    if (
+      shouldRunSms &&
+      matchedSms.length > 0 &&
+      email &&
+      (!phone || (smsConsentFieldId && !hasSmsConsent && !hasExplicitSmsOptOut))
+    ) {
       try {
         let hydrated = contactHydrationCache.get(email);
         if (hydrated === undefined) {
@@ -1839,6 +1944,16 @@ export async function runPopupFollowups(automationConfig, dryRunOverride, popupC
             action: `Hydrated missing phone for ${email} via direct SendGrid contact lookup`,
             status: "info",
           });
+        }
+        if (smsConsentFieldId) {
+          const hydratedConsent = String(
+            hydrated?.custom_fields?.[smsConsentFieldId] || ""
+          )
+            .trim()
+            .toLowerCase();
+          hasSmsConsent = ["yes", "true", "1", "opted_in", "opted-in"].includes(
+            hydratedConsent
+          );
         }
       } catch (err) {
         logs.push({
@@ -1910,6 +2025,8 @@ export async function runPopupFollowups(automationConfig, dryRunOverride, popupC
             to: emailDestination,
             templateId,
             from,
+            unsubscribeGroupId:
+              automationConfig.sendgrid?.marketingUnsubscribeGroupId,
             data: {
               first_name: contact?.first_name || contact?.firstName || "",
               last_name: contact?.last_name || contact?.lastName || "",
@@ -1990,6 +2107,17 @@ export async function runPopupFollowups(automationConfig, dryRunOverride, popupC
       const sendTo = isOneOffTest ? normalizePhoneNumber(testDestination) : phone;
       const isTestSend = !isDryRun && isOneOffTest;
       const smsLedgerKey = messageKey ? `sms:${messageKey}` : "";
+
+      if (!isOneOffTest && (!smsConsentFieldId || !hasSmsConsent)) {
+        logs.push({
+          timestamp: new Date().toISOString(),
+          automation: "Popup Follow Ups",
+          property: "—",
+          action: `SKIP ${phone || email} | no explicit SMS consent${smsConsentFieldId ? ` in ${smsConsentFieldId}` : " field configured"}`,
+          status: "skipped",
+        });
+        continue;
+      }
 
       if (!messageKey) {
         logs.push({
@@ -3357,7 +3485,7 @@ export async function runSalesmateFormSync(automationConfig, dryRunOverride) {
     const email = normalizeEmail(contact?.email);
     const phone = normalizePhoneNumber(contact?.phone_number || contact?.phone || "");
 
-    const existing = isDryRun ? null : await getSalesmateFormSyncState(sourceListId, contactKey);
+    const existing = await getSalesmateFormSyncState(sourceListId, contactKey);
     if (existing?.salesmateSynced && existing?.tagsSignature === signature) {
       unchanged += 1;
       continue;
@@ -3379,7 +3507,7 @@ export async function runSalesmateFormSync(automationConfig, dryRunOverride) {
     }
 
     try {
-      const result = await createSalesmateContact({
+      const result = await upsertSalesmateContact({
         contact: {
           email,
           phone,
@@ -3388,6 +3516,7 @@ export async function runSalesmateFormSync(automationConfig, dryRunOverride) {
         },
         leadSource,
         tags: uniqueTags,
+        contactId: existing?.salesmateContactId || "",
       });
       await setSalesmateFormSyncState(sourceListId, contactKey, {
         salesmateContactId: result.id || existing?.salesmateContactId || "",
@@ -3396,13 +3525,14 @@ export async function runSalesmateFormSync(automationConfig, dryRunOverride) {
         tagsSignature: signature,
         syncedAt: new Date().toISOString(),
       });
-      if (isUpdate) updated += 1;
+      const didUpdate = result.action === "updated";
+      if (didUpdate) updated += 1;
       else created += 1;
       logs.push({
         timestamp: new Date().toISOString(),
         automation,
         property: email || phone || contactKey,
-        action: `${isUpdate ? "Updated" : "Created"} Salesmate contact for ${email || phone} | tags: ${uniqueTags.join(", ")}${result.id ? ` | id: ${result.id}` : ""}`,
+        action: `${didUpdate ? "Updated" : "Created"} Salesmate contact for ${email || phone} | tags: ${uniqueTags.join(", ")}${result.id ? ` | id: ${result.id}` : ""}`,
         status: "success",
       });
     } catch (err) {

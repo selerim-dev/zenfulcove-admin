@@ -9,16 +9,15 @@ if (!secret) {
 }
 
 async function main() {
-  console.log("Triggering Jotform Client Sync (DRY RUN) at", baseUrl + "/api/cron");
-  console.log("No SendGrid contacts will be written. Console output is count-only.");
-  console.log("");
+  console.log("Triggering Lodgify Client Sync (DRY RUN) at", baseUrl + "/api/cron");
+  console.log("No SendGrid contacts will be written.");
 
   const res = await fetch(baseUrl + "/api/cron", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${secret}`,
       "X-Dry-Run": "true",
-      "X-Automation": "jotform-sync",
+      "X-Automation": "lodgify-sync",
     },
   });
 
@@ -28,22 +27,19 @@ async function main() {
     process.exit(1);
   }
 
-  const logs = Array.isArray(data.logs) ? data.logs : [];
-  const syncLogs = logs.filter((log) => log.automation === "Jotform Client Sync");
+  const logs = Array.isArray(data.logs)
+    ? data.logs.filter((log) => log.automation === "Lodgify Client Sync")
+    : [];
+  const summary = logs.filter(
+    (log) =>
+      log.status === "failed" ||
+      /Loaded |Prepared |No eligible|Skipped/.test(String(log.action || ""))
+  );
 
-  console.log("Status:", data.status);
-  console.log("Timestamp:", data.timestamp);
-  console.log("");
-  console.log("══════ Jotform Client Sync Dry Run ══════");
-  syncLogs
-    .filter(
-      (log) =>
-        log.status === "failed" ||
-        /Loaded |Prepared |No eligible|Skipped/.test(String(log.action || ""))
-    )
-    .forEach((log) => {
-      console.log(`[${log.status.toUpperCase()}] ${log.action}`);
-    });
+  console.log("══════ Lodgify Client Sync Dry Run ══════");
+  summary.forEach((log) => {
+    console.log(`[${String(log.status || "info").toUpperCase()}] ${log.action}`);
+  });
   console.log("Detailed recipient rows are intentionally omitted from console output.");
   console.log("═════════════════════════════════════════");
 }

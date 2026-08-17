@@ -11,6 +11,9 @@ export const automationConfig = {
     fromEmail: "contact@zenfulcove.com",
     fromName: "Zenfulcove Glamping",
     sendgridContactListId: "65075b7e-7fd3-4357-9953-6ff3ce2ff59b", // "Lodgify Booked Guests" — shared by all automations
+    // Numeric Advanced Suppression Manager group for promotional emails.
+    // Transactional waiver/access-code messages intentionally do not use it.
+    marketingUnsubscribeGroupId: "",
   },
   vacancyEmails: {
     enabled: true,
@@ -18,10 +21,16 @@ export const automationConfig = {
       {
         daysBeforeCheckin: 7,
         templateId: "d-REPLACE_ME_7DAY", // SendGrid dynamic template for 7-day promo
+        expiresDaysBeforeCheckin: 1,
+        expiresAtLocalTime: "11:59 PM",
+        expirationTimezone: "America/Chicago",
       },
       {
         daysBeforeCheckin: 4,
         templateId: "d-REPLACE_ME_4DAY", // SendGrid dynamic template for 4-day promo
+        expiresDaysBeforeCheckin: 1,
+        expiresAtLocalTime: "11:59 PM",
+        expirationTimezone: "America/Chicago",
       },
     ],
   },
@@ -100,9 +109,15 @@ export const automationConfig = {
     enabled: false,
     channelMode: "email",
     sendgridContactListId: "44b5b3f5-d03d-4552-997f-8715a906d5b8",
+    excludeBookedGuests: true,
+    // Blank falls back to sendgrid.sendgridContactListId (Lodgify Booked Guests).
+    bookedGuestsListId: "",
     popupTriggeredFieldId: "popup_triggered_at",
     popupSentTemplatesFieldId: "popup_sent_templates",
     popupSentSmsFieldId: "popup_sent_sms",
+    // Must match SENDGRID_POPUP_SMS_CONSENT_FIELD_ID in zenfulcove-site.
+    // Real-contact SMS is fail-closed until this field is configured and says yes.
+    popupSmsConsentFieldId: "",
     testDestinations: {
       email: "",
       sms: "",

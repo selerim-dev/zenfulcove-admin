@@ -21,14 +21,14 @@ Paid / Pagado: $185.00 (2026-07-28)
 
 [EN]
 - 1 x Birthday Package
-  Includes a small birthday cake, bundle of roses, Happy Birthday sign on an easel, and a bouquet of balloons.
+  Includes a small birthday cake, 12 roses, a Happy Birthday sign on an easel, and 6 colorful balloons.
 - 1 x Wood 2 Day Package
   A bundle of wood that will last for a 2-night stay.
 Please have all purchased items ready for this reservation.
 
 [ES]
 - 1 x Paquete de Cumpleaños
-  Incluye un pastel pequeño de cumpleaños, un ramo de rosas, un letrero de "Happy Birthday" en caballete y un ramo de globos.
+  Incluye un pastel pequeño de cumpleaños, 12 rosas, un letrero de "Happy Birthday" en caballete y 6 globos de colores.
 - 1 x Paquete de Leña — 2 días
   Un paquete de leña suficiente para una estancia de 2 noches.
 Por favor tengan listos todos los artículos comprados para esta reservación.

@@ -231,7 +231,7 @@ export default function PopupFollowupsPanel({ config, sendgridConfig, onChange }
       </div>
 
       <p className="text-sm text-forest/70">
-        The popup trigger date is shared by email and SMS. Sender details for SMS now come only from env vars.
+        The popup trigger date is shared by email and SMS. Booked guests are suppressed, and real-contact SMS requires explicit consent.
       </p>
 
       <div className="bg-white rounded-xl shadow-sm border border-sand p-5 space-y-4">
@@ -270,6 +270,25 @@ export default function PopupFollowupsPanel({ config, sendgridConfig, onChange }
               <Toggle enabled={smsEnabled} onChange={toggleSms} />
             </div>
           </div>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t border-sand pt-4">
+          <div className="rounded-xl border border-sand bg-cream/60 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="text-sm font-medium text-forest">Exclude Booked Guests</div>
+                <div className="text-xs text-forest/50 mt-1">Fail closed if the suppression list cannot be loaded.</div>
+              </div>
+              <Toggle
+                enabled={safeConfig.excludeBookedGuests !== false}
+                onChange={(value) => updateField("excludeBookedGuests", value)}
+              />
+            </div>
+          </div>
+          <SendGridListPicker
+            label="Booked Guests Suppression List"
+            value={safeConfig.bookedGuestsListId || sendgridConfig?.sendgridContactListId || ""}
+            onChange={(value) => updateField("bookedGuestsListId", value)}
+          />
         </div>
       </div>
 
@@ -377,6 +396,21 @@ export default function PopupFollowupsPanel({ config, sendgridConfig, onChange }
         }
       >
         <div className="grid grid-cols-1 gap-4">
+          <div>
+            <label className="block text-xs text-forest/60 uppercase tracking-wider mb-1">
+              SMS Consent Field Key
+            </label>
+            <input
+              type="text"
+              value={safeConfig.popupSmsConsentFieldId || ""}
+              onChange={(e) => updateField("popupSmsConsentFieldId", e.target.value)}
+              placeholder="sms_consent"
+              className="border border-sand rounded-lg px-3 py-2 text-sm w-full font-mono focus:outline-none focus:ring-2 focus:ring-grove/30"
+            />
+            <p className="mt-1 text-xs text-forest/50">
+              Must match the SendGrid custom field written by the website. SMS is skipped unless it explicitly says yes.
+            </p>
+          </div>
           <div>
             <label className="block text-xs text-forest/60 uppercase tracking-wider mb-1">
               Sent SMS Field Key

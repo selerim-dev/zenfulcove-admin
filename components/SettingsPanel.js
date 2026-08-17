@@ -114,6 +114,22 @@ export default function SettingsPanel({
           onChange={(value) => update("sendgridContactListId", value)}
           helperText="Shared contact list used by vacancy promo emails and other automations."
         />
+        <div>
+          <label className="block text-xs text-forest/60 uppercase tracking-wider mb-1">
+            Marketing Unsubscribe Group ID
+          </label>
+          <input
+            type="number"
+            min={1}
+            value={sg.marketingUnsubscribeGroupId || ""}
+            onChange={(e) => update("marketingUnsubscribeGroupId", e.target.value)}
+            placeholder="SendGrid ASM group ID"
+            className="border border-sand rounded-lg px-3 py-2 text-sm w-full focus:outline-none focus:ring-2 focus:ring-grove/30"
+          />
+          <p className="mt-1 text-xs text-forest/50">
+            Applied only to promotional sends for group suppression and one-click unsubscribe. Add the matching unsubscribe module to each marketing template.
+          </p>
+        </div>
       </div>
 
       <PropertyVariablesSettings
